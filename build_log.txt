@@ -1,0 +1,4 @@
+Node.js version v25.2.1 detected.
+Odd numbered Node.js versions will not enter LTS status and should not be used for production. For more information, please see https://nodejs.org/en/about/previous-releases/.
+An unhandled exception occurred: Port 5174 is already in use. Use '--port' to specify a different port.
+See "C:\Users\Max\AppData\Local\Temp\ng-pohjAa\angular-errors.log" for further details.

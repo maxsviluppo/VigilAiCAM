@@ -1,0 +1,15 @@
+src/components/checklists/operative.component.ts(520,18): error TS2554: Expected 2 arguments, but got 1.
+src/components/checklists/post-operative.component.ts(476,20): error TS2339: Property 'saveRecord' does not exist on type 'AppStateService'.
+src/components/checklists/post-operative.component.ts(498,20): error TS2339: Property 'saveRecord' does not exist on type 'AppStateService'.
+src/components/checklists/post-operative.component.ts(593,20): error TS2554: Expected 2 arguments, but got 1.
+src/components/checklists/pre-operative.component.ts(837,20): error TS2554: Expected 2 arguments, but got 1.
+src/components/cleaning-maintenance-view.component.ts(337,20): error TS2339: Property 'saveRecord' does not exist on type 'AppStateService'.
+src/components/documentation-view.component.ts(387,36): error TS2339: Property 'name' does not exist on type 'unknown'.
+src/components/documentation-view.component.ts(388,36): error TS2339: Property 'type' does not exist on type 'unknown'.
+src/components/documentation-view.component.ts(393,34): error TS2345: Argument of type 'unknown' is not assignable to parameter of type 'Blob'.
+  Type '{}' is missing the following properties from type 'Blob': size, type, arrayBuffer, bytes, and 3 more.
+src/components/microbio-monitor-view.component.ts(215,20): error TS2339: Property 'saveRecord' does not exist on type 'AppStateService'.
+src/components/non-compliance-view.component.ts(218,20): error TS2339: Property 'saveRecord' does not exist on type 'AppStateService'.
+src/components/staff-training-checklist.component.ts(149,16): error TS2339: Property 'saveRecord' does not exist on type 'AppStateService'.
+src/components/suppliers-view.component.ts(282,16): error TS2339: Property 'saveRecord' does not exist on type 'AppStateService'.
+src/components/temperatures-view.component.ts(215,20): error TS2339: Property 'saveRecord' does not exist on type 'AppStateService'.
