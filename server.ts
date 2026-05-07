@@ -126,18 +126,21 @@ async function startServer() {
 
   app.get("/api/snapshot", (req, res) => {
     const rtsp = req.query.rtsp as string;
+    const clientIp = req.ip || req.socket.remoteAddress;
+    
     if (!rtsp) return res.status(400).json({ error: "Missing rtsp parameter" });
 
     if (!activeStreams.has(rtsp)) {
+      console.log(`[Camera Manager] Request from ${clientIp} for: ${rtsp}. Initializing...`);
       startStream(rtsp);
-      return res.status(503).json({ error: "Warming up..." });
+      return res.status(503).json({ error: "Initializing stream..." });
     }
 
     const stream = activeStreams.get(rtsp)!;
     stream.lastAccessed = Date.now();
 
     if (!stream.latestFrame) {
-      return res.status(503).json({ error: "Warming up..." });
+      return res.status(503).json({ error: "Waiting for first frame..." });
     }
 
     res.setHeader('Content-Type', 'image/jpeg');

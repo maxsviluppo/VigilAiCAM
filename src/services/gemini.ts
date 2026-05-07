@@ -12,7 +12,8 @@ export const analyzeFrame = async (
   base64Image: string, 
   triggers: AlertTrigger[] = ["intrusion", "violence"],
   location: string = "Area monitorata",
-  modelId: string = "gemini-3-flash-preview"
+  modelId: string = "gemini-3-flash-preview",
+  zones: any[] = []
 ): Promise<DetectionResult> => {
   try {
     let rawKey = localStorage.getItem("vigilai_gemini_key") || "";
@@ -29,6 +30,9 @@ export const analyzeFrame = async (
     if (!apiKey) {
       throw new Error("API Key mancante.");
     }
+
+    // Diagnostic log: check if the key is actually changing
+    console.log(`[AI Core] Inizializzazione con chiave: ${apiKey.substring(0, 4)}...${apiKey.substring(apiKey.length - 4)}`);
 
     // Inizializzazione con v1beta per supportare i modelli preview di generazione 3
     const ai = new GoogleGenAI({ apiKey });
@@ -47,23 +51,29 @@ export const analyzeFrame = async (
 
     const activePrompts = triggers.map((t) => triggerDescriptions[t] || t).join(" ");
 
+    const zoneInfo = zones.length > 0 
+      ? `\nZONE DEFINITE (Coordinate 0-1, 0,0 è top-left):\n${zones.map(z => `- NOME: "${z.label}", TIPO: "${z.type}", COORDINATE: ${JSON.stringify(z.points)}`).join('\n')}`
+      : "";
+
     const prompt = `Analizza questa immagine di sicurezza (${location}).
     OBIETTIVI: ${activePrompts}
+    ${zoneInfo}
     
-    Se sono presenti ZONE DI SICUREZZA, valuta se eventuali minacce avvengono all'interno o in prossimità dei poligoni definiti.
-    - Se un pericolo o un VEICOLO è in una zona 'restricted' o 'alert': segnali un'allerta immediata specificando il nome della zona nella descrizione.
+    Se sono presenti ZONE DI SICUREZZA sopra definite:
+    - Valuta se eventuali minacce (persone sospette, armi, veicoli) avvengono all'INTERNO dei poligoni definiti dalle COORDINATE.
+    - Se un pericolo o un VEICOLO è in una zona 'restricted' o 'alert': segnali un'allerta immediata (isEmergency: true) specificando il nome della zona nella 'description'.
     - Per ogni veicolo rilevato nelle zone di sicurezza (restricted/alert), riporta obbligatoriamente nella 'description': MARCA, COLORE e TARGA (se leggibile).
-    - Se un'area è 'privacy', ignora qualsiasi attività al suo interno.
+    - Se un'area è 'privacy', ignora QUALSIASI attività al suo interno (non segnalare nulla).
 
     Rispondi SOLO in formato JSON:
     {
       "threatLevel": "low" | "medium" | "high",
       "detectedEvents": string[],
-      "description": "breve descrizione tecnica in italiano (includi dettagli veicolo MARCA/COLORE/TARGA se presente)",
+      "description": "descrizione tecnica in italiano (includi dettagli veicolo e riferimento alla ZONA se rilevata)",
       "isEmergency": boolean
     }
     
-    CRITERIO EMERGENZA (isEmergency=true): Rapina (volto coperto e armi), violenza in corso, fiamme, o QUALSIASI presenza/intrusione di persone o veicoli rilevata all'interno delle zone 'restricted' o 'alert'.`;
+    CRITERIO EMERGENZA (isEmergency=true): Rapina (volto coperto e armi), violenza, fiamme, o QUALSIASI intrusione di persone o veicoli nelle zone 'restricted' o 'alert'.`;
 
     // Prova i modelli della nuova generazione 3 e 2
     const modelsToTry = [modelId, "gemini-3-flash-preview", "gemini-2.0-flash", "gemini-1.5-flash"];
@@ -114,7 +124,7 @@ export const analyzeFrame = async (
     
     // Se l'errore è una stringa JSON (come spesso accade con gli errori 429), estraiamo solo il messaggio
     if (cleanErrorMessage.includes("RESOURCE_EXHAUSTED") || cleanErrorMessage.includes("quota")) {
-      cleanErrorMessage = "Quota API Gemini superata (Free Tier: max 5 analisi/min). Attendi il ripristino automatico.";
+      cleanErrorMessage = `Quota API Gemini superata per il modello ${modelId} (Free Tier). Attendi 60s o prova un modello diverso.`;
     } else if (cleanErrorMessage.includes("404")) {
       cleanErrorMessage = "Modello non trovato. Verifica le impostazioni API Gemini.";
     } else if (cleanErrorMessage.startsWith("{")) {

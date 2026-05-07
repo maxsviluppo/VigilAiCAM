@@ -40,24 +40,40 @@ const IPCameraPlayer = ({ url, isAlertActive, isNightMode, imgRefCallback }: { u
   
   useEffect(() => {
     let active = true;
-    let timeoutId: NodeJS.Timeout;
+    let timeoutId: any;
+    let retryCount = 0;
+
     const fetchFrame = () => {
       if (!active) return;
+      
       const snapshotUrl = `/api/snapshot?rtsp=${encodeURIComponent(url)}&t=${Date.now()}`;
       const img = new Image();
+      
       img.onload = () => {
         if (!active) return;
         setDisplayUrl(snapshotUrl);
+        retryCount = 0; // Reset retry count on success
         timeoutId = setTimeout(fetchFrame, 200);
       };
+      
       img.onerror = () => {
         if (!active) return;
-        timeoutId = setTimeout(fetchFrame, 2000);
+        retryCount++;
+        if (retryCount % 5 === 0) {
+           console.warn(`[Camera] Connection issue with ${url}. Retry attempt: ${retryCount}`);
+        }
+        // If it's a 503 (Warming up), retry faster. Otherwise, wait more.
+        timeoutId = setTimeout(fetchFrame, retryCount > 10 ? 5000 : 2000);
       };
+      
       img.src = snapshotUrl;
     };
+
     fetchFrame();
-    return () => { active = false; clearTimeout(timeoutId); };
+    return () => { 
+      active = false; 
+      if (timeoutId) clearTimeout(timeoutId); 
+    };
   }, [url]);
 
   return displayUrl ? (
@@ -520,7 +536,7 @@ export default function App() {
 
       setIsAnalyzing(true);
       try {
-        const result = await analyzeFrame(base64Image, cam.enabledTriggers, cam.location, aiModel);
+        const result = await analyzeFrame(base64Image, cam.enabledTriggers, cam.location, aiModel, cam.zones);
         if (cam.id === activeCameraId || result.isEmergency) {
           setLastAnalysis(result);
         }
@@ -1094,16 +1110,16 @@ export default function App() {
                     {alertingCameraIds.includes(cam.id) && isMonitoring && (
                       <motion.div 
                         initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                        className="absolute inset-0 z-40 pointer-events-none border-[12px] border-red-500/40 animate-pulse bg-red-950/20"
+                        className="absolute inset-0 z-40 pointer-events-none border-[6px] lg:border-[12px] border-red-500/40 animate-pulse bg-red-950/20"
                       >
-                        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 flex flex-col items-center">
-                          <div className="p-10 rounded-full bg-red-600 shadow-[0_0_100px_rgba(239,68,68,0.8)] animate-bounce mb-6">
-                            <AlertTriangle size={60} className="text-white" />
+                        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 flex flex-col items-center w-full px-4 text-center">
+                          <div className="p-5 lg:p-10 rounded-full bg-red-600 shadow-[0_0_50px_rgba(239,68,68,0.6)] lg:shadow-[0_0_100px_rgba(239,68,68,0.8)] animate-bounce mb-4 lg:mb-6">
+                            <AlertTriangle className="text-white w-8 h-8 lg:w-16 lg:h-16" />
                           </div>
-                          <h2 className="text-5xl font-black text-white uppercase tracking-tighter drop-shadow-2xl">MINACCIA RILEVATA</h2>
+                          <h2 className="text-xl sm:text-2xl lg:text-5xl font-black text-white uppercase tracking-tighter drop-shadow-2xl">MINACCIA RILEVATA</h2>
                           <button 
-                            onClick={() => stopActiveAlert(cam.id)}
-                            className="mt-10 pointer-events-auto px-10 py-5 bg-white text-red-600 rounded-full font-black uppercase tracking-widest text-xs shadow-2xl hover:scale-110 active:scale-95 transition-all"
+                            onClick={(e) => { e.stopPropagation(); stopActiveAlert(cam.id); }}
+                            className="mt-6 lg:mt-10 pointer-events-auto px-6 py-3 lg:px-10 lg:py-5 bg-white text-red-600 rounded-full font-black uppercase tracking-widest text-[9px] lg:text-xs shadow-2xl hover:scale-110 active:scale-95 transition-all"
                           >
                             Silenzia Allarme
                           </button>
@@ -1120,7 +1136,7 @@ export default function App() {
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
               
               {/* AI Real-time Output */}
-              <div id="ai-engine" className="lg:col-span-2 glass rounded-[40px] p-10 space-y-8 border-white/5 relative overflow-hidden">
+              <div id="ai-engine" className="lg:col-span-2 glass rounded-[32px] lg:rounded-[40px] p-6 lg:p-10 space-y-6 lg:space-y-8 border-white/5 relative overflow-hidden">
                 <div className="absolute top-0 right-0 w-64 h-64 bg-blue-500/5 rounded-full blur-[100px] pointer-events-none" />
                 
                 <div className="flex justify-between items-center relative z-10">
@@ -1202,10 +1218,10 @@ export default function App() {
               </div>
 
               {/* Event Log Sidebar */}
-              <div id="event-log" className="glass rounded-[40px] p-10 space-y-8 border-white/5 flex flex-col max-h-[500px] lg:max-h-none">
+              <div id="event-log" className="glass rounded-[32px] lg:rounded-[40px] p-6 lg:p-10 space-y-6 lg:space-y-8 border-white/5 flex flex-col max-h-[500px] lg:max-h-none">
                 <div className="flex items-center gap-4">
-                  <div className="w-12 h-12 glass rounded-2xl flex items-center justify-center bg-orange-500/10 border-orange-500/20">
-                    <History size={24} className="text-orange-400" />
+                  <div className="w-10 h-10 lg:w-12 lg:h-12 glass rounded-2xl flex items-center justify-center bg-orange-500/10 border-orange-500/20">
+                    <History size={20} className="text-orange-400 lg:size-[24px]" />
                   </div>
                   <div className="flex items-center justify-between w-full">
                     <div>
@@ -1279,15 +1295,15 @@ export default function App() {
           >
             <motion.div 
               initial={{ scale: 0.9, y: 20, opacity: 0 }} animate={{ scale: 1, y: 0, opacity: 1 }} exit={{ scale: 0.9, y: 20, opacity: 0 }}
-              className="glass bg-slate-900/90 lg:bg-slate-900/60 rounded-[32px] lg:rounded-[40px] w-full max-w-lg max-h-[90vh] lg:max-h-[85vh] overflow-y-auto custom-scrollbar shadow-2xl border-white/5"
+              className="glass bg-slate-900/95 lg:bg-slate-900/60 rounded-[32px] lg:rounded-[40px] w-full max-w-lg max-h-[90vh] overflow-y-auto custom-scrollbar shadow-2xl border-white/5"
             >
               <div className="p-6 lg:p-10 space-y-6 lg:space-y-8">
                 <div>
-                  <h2 className="text-2xl font-black text-white uppercase tracking-tight">Setup Camera</h2>
-                  <p className="text-[10px] font-black uppercase tracking-[0.3em] text-blue-500 mt-1">Configura parametri e profilo AI</p>
+                  <h2 className="text-xl lg:text-2xl font-black text-white uppercase tracking-tight">Setup Camera</h2>
+                  <p className="text-[9px] lg:text-[10px] font-black uppercase tracking-[0.3em] text-blue-500 mt-1">Configura parametri e profilo AI</p>
                 </div>
 
-                <div className="space-y-6">
+                <div className="space-y-5 lg:space-y-6">
                   <div className="space-y-2">
                     <label className="text-[9px] font-black uppercase tracking-widest text-slate-500 px-1">Nome Identificativo</label>
                     <input 
@@ -1308,7 +1324,7 @@ export default function App() {
                     />
                   </div>
 
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <label className="text-[9px] font-black uppercase tracking-widest text-slate-500 px-1">Tipo Segnale</label>
                       <select 
@@ -1330,7 +1346,7 @@ export default function App() {
                           disabled={editingCamera.type === 'webcam'}
                           value={editingCamera.type === 'webcam' ? 'Default System' : editingCamera.url}
                           onChange={(e) => setEditingCamera({...editingCamera, url: e.target.value})}
-                          placeholder="rtsp://admin:password@IP:554/..."
+                          placeholder="rtsp://..."
                           className="w-full bg-white/5 border border-white/10 px-4 py-3 text-[10px] rounded-xl focus:border-white/30 outline-none transition-all text-white/60 font-mono disabled:opacity-30"
                         />
                       </div>
@@ -1338,14 +1354,14 @@ export default function App() {
                   </div>
 
                   {editingCamera.type === 'onvif' && (
-                    <div className="p-6 bg-blue-500/5 rounded-2xl border border-blue-500/10 space-y-4 col-span-2 mt-4">
+                    <div className="p-5 lg:p-6 bg-blue-500/5 rounded-2xl border border-blue-500/10 space-y-4 mt-2">
                       <div className="flex items-center gap-2 mb-2">
                         <Zap size={14} className="text-blue-400" />
-                        <h4 className="text-xs font-black text-blue-400 uppercase tracking-widest">Configurazione Rete ONVIF</h4>
+                        <h4 className="text-[10px] font-black text-blue-400 uppercase tracking-widest">Configurazione ONVIF</h4>
                       </div>
-                      <div className="grid grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                          <label className="text-[9px] font-black uppercase tracking-widest text-slate-500 px-1">Indirizzo IP</label>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div className="space-y-1">
+                          <label className="text-[8px] font-black uppercase tracking-widest text-slate-500 px-1">Indirizzo IP</label>
                           <input 
                             type="text" value={editingCamera.ip || ''}
                             onChange={(e) => setEditingCamera({...editingCamera, ip: e.target.value})}
@@ -1353,49 +1369,37 @@ export default function App() {
                             className="w-full bg-slate-900/50 border border-white/10 px-4 py-3 text-xs rounded-xl outline-none text-white font-mono"
                           />
                         </div>
-                        <div className="space-y-2">
-                          <label className="text-[9px] font-black uppercase tracking-widest text-slate-500 px-1">Porta RTSP</label>
+                        <div className="space-y-1">
+                          <label className="text-[8px] font-black uppercase tracking-widest text-slate-500 px-1">Porta RTSP</label>
                           <input 
                             type="number" value={editingCamera.port || 554}
                             onChange={(e) => setEditingCamera({...editingCamera, port: Number(e.target.value)})}
                             className="w-full bg-slate-900/50 border border-white/10 px-4 py-3 text-xs rounded-xl outline-none text-white font-mono"
                           />
                         </div>
-                        <div className="space-y-2">
-                          <label className="text-[9px] font-black uppercase tracking-widest text-slate-500 px-1">Username</label>
+                        <div className="space-y-1">
+                          <label className="text-[8px] font-black uppercase tracking-widest text-slate-500 px-1">Username</label>
                           <input 
                             type="text" value={editingCamera.username || ''}
                             onChange={(e) => setEditingCamera({...editingCamera, username: e.target.value})}
                             className="w-full bg-slate-900/50 border border-white/10 px-4 py-3 text-xs rounded-xl outline-none text-white font-mono"
                           />
                         </div>
-                        <div className="space-y-2">
-                          <label className="text-[9px] font-black uppercase tracking-widest text-slate-500 px-1">Password</label>
+                        <div className="space-y-1">
+                          <label className="text-[8px] font-black uppercase tracking-widest text-slate-500 px-1">Password</label>
                           <input 
                             type="password" value={editingCamera.password || ''}
                             onChange={(e) => setEditingCamera({...editingCamera, password: e.target.value})}
                             className="w-full bg-slate-900/50 border border-white/10 px-4 py-3 text-xs rounded-xl outline-none text-white font-mono"
                           />
                         </div>
-                        <div className="space-y-2 col-span-2">
-                          <label className="text-[9px] font-black uppercase tracking-widest text-slate-500 px-1">Percorso Flusso (Path)</label>
+                        <div className="space-y-1 col-span-1 sm:col-span-2">
+                          <label className="text-[8px] font-black uppercase tracking-widest text-slate-500 px-1">Percorso (Path)</label>
                           <input 
                             type="text" value={editingCamera.rtspPath || '/stream1'}
                             onChange={(e) => setEditingCamera({...editingCamera, rtspPath: e.target.value})}
-                            placeholder="/stream1"
                             className="w-full bg-slate-900/50 border border-white/10 px-4 py-3 text-xs rounded-xl outline-none text-white font-mono"
                           />
-                          <div className="flex flex-wrap gap-2 pt-2">
-                            {['/stream1', '/live/ch0', '/11', '/onvif1', '/h264Preview_01_main'].map(path => (
-                              <button 
-                                key={path}
-                                onClick={() => setEditingCamera({...editingCamera, rtspPath: path})}
-                                className="text-[8px] font-mono bg-white/5 hover:bg-white/10 px-2 py-1 rounded border border-white/5 text-slate-400"
-                              >
-                                {path}
-                              </button>
-                            ))}
-                          </div>
                         </div>
                       </div>
                     </div>
@@ -1406,11 +1410,11 @@ export default function App() {
                     <div className="grid grid-cols-2 gap-2">
                       {[
                         { id: 'intrusion', label: 'Intrusione', icon: <Eye size={12} />, color: 'text-blue-400' },
-                        { id: 'violence', label: 'Violenza/Armi', icon: <ShieldAlert size={12} />, color: 'text-red-500' },
+                        { id: 'violence', label: 'Violenza', icon: <ShieldAlert size={12} />, color: 'text-red-500' },
                         { id: 'fire', label: 'Incendio', icon: <Flame size={12} />, color: 'text-orange-500' },
-                        { id: 'smoke', label: 'Fumo Denso', icon: <Wind size={12} />, color: 'text-slate-300' },
-                        { id: 'safety_gear', label: 'DPI/Sicurezza', icon: <UserCheck size={12} />, color: 'text-green-400' },
-                        { id: 'fall', label: 'Cadute/MV', icon: <Activity size={12} />, color: 'text-purple-400' },
+                        { id: 'smoke', label: 'Fumo', icon: <Wind size={12} />, color: 'text-slate-300' },
+                        { id: 'safety_gear', label: 'DPI', icon: <UserCheck size={12} />, color: 'text-green-400' },
+                        { id: 'fall', label: 'Cadute', icon: <Activity size={12} />, color: 'text-purple-400' },
                       ].map(trigger => {
                         const isActive = editingCamera.enabledTriggers.includes(trigger.id as AlertTrigger);
                         return (
@@ -1421,7 +1425,7 @@ export default function App() {
                               const updated = isActive ? current.filter(t => t !== trigger.id) : [...current, trigger.id as AlertTrigger];
                               setEditingCamera({...editingCamera, enabledTriggers: updated});
                             }}
-                            className={`flex items-center gap-3 px-4 py-3 rounded-2xl text-[10px] font-black uppercase tracking-tight transition-all border ${isActive ? 'bg-white/10 border-white/30 text-white shadow-lg' : 'bg-transparent border-white/5 text-slate-500 hover:border-white/20'}`}
+                            className={`flex items-center gap-2 lg:gap-3 px-3 py-2.5 lg:px-4 lg:py-3 rounded-xl lg:rounded-2xl text-[9px] lg:text-[10px] font-black uppercase tracking-tight transition-all border ${isActive ? 'bg-white/10 border-white/30 text-white shadow-lg' : 'bg-transparent border-white/5 text-slate-500 hover:border-white/20'}`}
                           >
                             <span className={isActive ? trigger.color : 'opacity-40'}>{trigger.icon}</span>
                             {trigger.label}
@@ -1432,9 +1436,9 @@ export default function App() {
                   </div>
                 </div>
 
-                <div className="flex gap-3 pt-4">
-                  <button onClick={() => setShowCameraModal(false)} className="flex-1 py-4 glass rounded-2xl text-[10px] font-black uppercase tracking-widest text-slate-500 hover:text-white transition-all">Annulla</button>
-                  <button onClick={() => saveCamera(editingCamera)} className="flex-[2] py-4 bg-blue-600 rounded-2xl text-[10px] font-black uppercase tracking-widest text-white shadow-xl hover:bg-blue-500">Salva Configurazione</button>
+                <div className="flex flex-col sm:flex-row gap-3 pt-4">
+                  <button onClick={() => setShowCameraModal(false)} className="flex-1 py-4 glass rounded-2xl text-[10px] font-black uppercase tracking-widest text-slate-500 hover:text-white transition-all order-2 sm:order-1">Annulla</button>
+                  <button onClick={() => saveCamera(editingCamera)} className="flex-[2] py-4 bg-blue-600 rounded-2xl text-[10px] font-black uppercase tracking-widest text-white shadow-xl hover:bg-blue-500 order-1 sm:order-2">Salva Configurazione</button>
                 </div>
               </div>
             </motion.div>
@@ -1451,7 +1455,7 @@ export default function App() {
           >
             <motion.div 
               initial={{ scale: 0.9, y: 20 }} animate={{ scale: 1, y: 0 }}
-              className="glass bg-slate-900 rounded-[40px] w-full max-w-lg p-10 space-y-8 max-h-[90vh] overflow-y-auto"
+              className="glass bg-slate-900/95 lg:bg-slate-900/60 rounded-[32px] lg:rounded-[40px] w-full max-w-lg p-6 lg:p-10 space-y-6 lg:space-y-8 max-h-[90vh] overflow-y-auto custom-scrollbar shadow-2xl border-white/5"
             >
               <h2 className="text-2xl font-black text-white uppercase">Impostazioni Sistema</h2>
               
@@ -1463,12 +1467,23 @@ export default function App() {
                     <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noreferrer" className="text-[8px] text-blue-400 hover:text-blue-300 uppercase font-black tracking-widest flex items-center gap-1">Ottieni API Key <ChevronRight size={10}/></a>
                   </div>
                   <div className="bg-blue-500/5 border border-blue-500/10 p-4 rounded-2xl space-y-4">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <div className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse shadow-[0_0_8px_#3b82f6]" />
-                        <span className="text-[10px] font-black text-white uppercase tracking-widest">Gemini 3 Flash Preview</span>
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <div className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse shadow-[0_0_8px_#3b82f6]" />
+                          <span className="text-[10px] font-black text-white uppercase tracking-widest">Seleziona Motore AI</span>
+                        </div>
                       </div>
-                      <span className="text-[8px] font-bold text-blue-400 bg-blue-400/10 px-2 py-0.5 rounded uppercase">Default Engine</span>
+                      
+                      <select 
+                        value={aiModel}
+                        onChange={(e) => setAiModel(e.target.value)}
+                        className="w-full bg-black/40 border border-white/10 px-4 py-3 rounded-xl text-xs text-white outline-none focus:border-blue-500/50 transition-all font-bold appearance-none cursor-pointer"
+                      >
+                        <option value="gemini-3-flash-preview" className="bg-[#0f172a]">Gemini 3.0 Flash (Top Performance)</option>
+                        <option value="gemini-2.0-flash" className="bg-[#0f172a]">Gemini 2.0 Flash (Fast & Modern)</option>
+                        <option value="gemini-1.5-flash" className="bg-[#0f172a]">Gemini 1.5 Flash (High Quota/Stable)</option>
+                      </select>
                     </div>
                     
                     <input 
@@ -1489,20 +1504,20 @@ export default function App() {
                     <label className="text-[9px] font-black uppercase tracking-widest text-slate-500">Mittente Notifiche Email</label>
                     <a href="https://myaccount.google.com/apppasswords" target="_blank" rel="noreferrer" className="text-[8px] text-blue-400 hover:text-blue-300 uppercase font-black tracking-widest flex items-center gap-1">Password App Gmail <ChevronRight size={10}/></a>
                   </div>
-                  <div className="flex gap-2">
+                  <div className="flex flex-col sm:flex-row gap-3">
                     <input 
                       type="email" 
                       value={appSettings.emailUser} 
                       onChange={(e) => setAppSettings({...appSettings, emailUser: e.target.value})}
                       placeholder="tua.email@gmail.com"
-                      className="flex-1 bg-white/5 border border-white/10 px-4 py-3 rounded-xl text-xs text-white outline-none focus:border-blue-500 transition-colors"
+                      className="w-full sm:flex-1 bg-white/5 border border-white/10 px-4 py-3 rounded-xl text-xs text-white outline-none focus:border-blue-500 transition-colors"
                     />
                     <input 
                       type="password" 
                       value={appSettings.emailPass} 
                       onChange={(e) => setAppSettings({...appSettings, emailPass: e.target.value})}
                       placeholder="Password App (16 car.)"
-                      className="flex-1 bg-white/5 border border-white/10 px-4 py-3 rounded-xl text-xs text-white outline-none focus:border-blue-500 transition-colors"
+                      className="w-full sm:flex-1 bg-white/5 border border-white/10 px-4 py-3 rounded-xl text-xs text-white outline-none focus:border-blue-500 transition-colors"
                     />
                   </div>
                   <p className="text-[8px] text-slate-500 uppercase tracking-widest">Usa una "Password per le app" se utilizzi Gmail per inviare gli allarmi.</p>
@@ -1581,27 +1596,27 @@ export default function App() {
               initial={{ scale: 0.9, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.9, opacity: 0 }}
-              className="glass max-w-md w-full p-10 rounded-[48px] border-white/10 text-center space-y-8 shadow-[0_0_100px_rgba(239,68,68,0.2)]"
+              className="glass max-w-md w-full p-6 lg:p-10 rounded-[32px] lg:rounded-[48px] border-white/10 text-center space-y-6 lg:space-y-8 shadow-[0_0_100px_rgba(239,68,68,0.2)]"
             >
-              <div className="w-24 h-24 bg-red-600/20 rounded-full flex items-center justify-center mx-auto border border-red-500/30">
-                <Trash2 size={40} className="text-red-500" />
+              <div className="w-16 h-16 lg:w-24 lg:h-24 bg-red-600/20 rounded-full flex items-center justify-center mx-auto border border-red-500/30">
+                <Trash2 size={32} className="text-red-500 lg:size-[40px]" />
               </div>
               <div className="space-y-3">
-                <h3 className="text-2xl font-black text-white uppercase tracking-tighter">Conferma Eliminazione</h3>
-                <p className="text-slate-400 text-sm leading-relaxed">
+                <h3 className="text-xl lg:text-2xl font-black text-white uppercase tracking-tighter">Conferma Eliminazione</h3>
+                <p className="text-slate-400 text-xs lg:text-sm leading-relaxed">
                   Sei sicuro di voler rimuovere questa telecamera dal sistema? L'azione è irreversibile e interromperà il monitoraggio attivo.
                 </p>
               </div>
               <div className="flex gap-4">
                 <button 
                   onClick={() => setCameraToDelete(null)}
-                  className="flex-1 py-5 rounded-3xl text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-white transition-all bg-white/5"
+                  className="flex-1 py-4 lg:py-5 rounded-2xl lg:rounded-3xl text-[9px] lg:text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-white transition-all bg-white/5"
                 >
                   Annulla
                 </button>
                 <button 
                   onClick={confirmDelete}
-                  className="flex-1 py-5 rounded-3xl text-[10px] font-black uppercase tracking-widest text-white bg-red-600 shadow-xl shadow-red-500/20 hover:bg-red-500 transition-all"
+                  className="flex-1 py-4 lg:py-5 rounded-2xl lg:rounded-3xl text-[9px] lg:text-[10px] font-black uppercase tracking-widest text-white bg-red-600 shadow-xl shadow-red-500/20 hover:bg-red-500 transition-all"
                 >
                   Elimina Ora
                 </button>
@@ -1620,18 +1635,18 @@ export default function App() {
           >
             <motion.div 
               initial={{ scale: 0.95, y: 50 }} animate={{ scale: 1, y: 0 }}
-              className="w-full max-w-6xl max-h-[90vh] overflow-y-auto custom-scrollbar glass bg-slate-900/40 rounded-[40px] p-14 relative shadow-2xl border-white/5"
+              className="w-full max-w-6xl max-h-[90vh] overflow-y-auto custom-scrollbar glass bg-slate-900/95 lg:bg-slate-900/40 rounded-[32px] lg:rounded-[40px] p-6 lg:p-14 relative shadow-2xl border-white/5"
             >
-              <button onClick={() => setShowPlans(false)} className="absolute right-8 top-8 p-3 glass rounded-full hover:bg-white/10 transition-all text-slate-500 hover:text-white"><Plus size={24} className="rotate-45" /></button>
+              <button onClick={() => setShowPlans(false)} className="absolute right-4 top-4 lg:right-8 lg:top-8 p-2 lg:p-3 glass rounded-full hover:bg-white/10 transition-all text-slate-500 hover:text-white z-50"><Plus size={20} className="rotate-45" /></button>
               
               <div className="flex flex-col gap-10">
-                <div className="text-center max-w-4xl mx-auto space-y-6 mb-16">
-                  <h2 className="text-6xl font-black text-white uppercase tracking-tighter leading-tight">La Nuova Era della <span className="text-blue-500">Sicurezza Attiva</span></h2>
-                  <p className="text-lg text-slate-400 font-medium leading-relaxed">
-                    VigilAI non è un semplice sistema di registrazione. È un'intelligenza artificiale avanzata che <span className="text-white">vede, comprende e reagisce</span> in tempo reale, superando i limiti dei sistemi di sorveglianza tradizionali.
+                <div className="text-center max-w-4xl mx-auto space-y-4 lg:space-y-6 mb-8 lg:mb-16">
+                  <h2 className="text-3xl lg:text-6xl font-black text-white uppercase tracking-tighter leading-tight">La Nuova Era della <span className="text-blue-500">Sicurezza Attiva</span></h2>
+                  <p className="text-sm lg:text-lg text-slate-400 font-medium leading-relaxed">
+                    VigilAI non è un semplice sistema di sorveglianza. È un'intelligenza artificiale avanzata che <span className="text-white">vede, comprende e reagisce</span> in tempo reale.
                   </p>
                   
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-10 text-left">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-6 lg:pt-10 text-left">
                     <div className="space-y-3">
                       <div className="w-10 h-10 rounded-2xl bg-blue-600/20 flex items-center justify-center text-blue-400 border border-blue-500/20">
                         <Zap size={20} />
@@ -1656,20 +1671,20 @@ export default function App() {
                   </div>
                 </div>
 
-                <div className="h-px w-full bg-gradient-to-r from-transparent via-white/10 to-transparent mb-16" />
+                <div className="h-px w-full bg-gradient-to-r from-transparent via-white/10 to-transparent mb-8 lg:mb-16" />
 
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-10">
                   {/* VigilAI Platform & Features */}
-                  <div className="glass bg-blue-600/10 border-blue-500/30 p-12 rounded-[48px] space-y-10 relative overflow-hidden group">
+                  <div className="glass bg-blue-600/10 border-blue-500/30 p-8 lg:p-12 rounded-[32px] lg:rounded-[48px] space-y-8 lg:space-y-10 relative overflow-hidden group">
                     <div className="absolute top-0 right-0 p-8 opacity-10 group-hover:opacity-20 transition-opacity">
                       <ShieldCheck size={120} />
                     </div>
                     
                     <div>
                       <span className="px-4 py-1.5 bg-blue-600 rounded-full text-[9px] font-black uppercase tracking-widest text-white shadow-lg shadow-blue-500/20">Licenza Software</span>
-                      <h3 className="text-3xl font-black text-white uppercase mt-6 tracking-tighter">Piattaforma VigilAI Pro</h3>
-                      <div className="flex items-baseline gap-2 mt-4">
-                        <span className="text-6xl font-black text-white tracking-tighter">€49</span>
+                      <h3 className="text-2xl lg:text-3xl font-black text-white uppercase mt-4 lg:mt-6 tracking-tighter">Piattaforma VigilAI Pro</h3>
+                      <div className="flex items-baseline gap-2 mt-2 lg:mt-4">
+                        <span className="text-4xl lg:text-6xl font-black text-white tracking-tighter">€49</span>
                         <span className="text-slate-500 text-sm font-bold uppercase tracking-widest">/mese</span>
                       </div>
                     </div>
@@ -1697,7 +1712,7 @@ export default function App() {
                   </div>
 
                   {/* AI Scenarios & Customization */}
-                  <div className="glass bg-slate-900/40 border-white/5 p-12 rounded-[48px] space-y-10">
+                  <div className="glass bg-slate-900/40 border-white/5 p-8 lg:p-12 rounded-[32px] lg:rounded-[48px] space-y-8 lg:space-y-10">
                     <div className="space-y-6">
                       <h4 className="text-[10px] font-black text-orange-400 uppercase tracking-widest border-b border-orange-500/20 pb-2">6 Scenari AI Programmati</h4>
                       <div className="grid grid-cols-2 gap-6">
@@ -1733,7 +1748,7 @@ export default function App() {
                 </div>
 
                 {/* AI Cost Table */}
-                <div className="glass bg-black/40 border-white/5 p-12 rounded-[48px] space-y-8">
+                <div className="glass bg-black/40 border-white/5 p-8 lg:p-12 rounded-[32px] lg:rounded-[48px] space-y-6 lg:space-y-8">
                   <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
                     <div>
                       <h3 className="text-2xl font-black text-white uppercase tracking-tighter">Tabella Costi API (Google Gemini)</h3>
