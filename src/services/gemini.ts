@@ -110,17 +110,24 @@ export const analyzeFrame = async (
 
     throw new Error(lastError);
   } catch (error: any) {
-    console.error("AI Analysis Error:", error.message);
+    let cleanErrorMessage = error.message || "Errore sconosciuto durante l'analisi.";
     
-    let userFriendlyError = `Errore analisi: ${error.message}`;
-    if (error.message.includes("404")) {
-      userFriendlyError = "Modello non trovato (404). Verifica se l'API Gemini 1.5 è abilitata nel tuo account.";
+    // Se l'errore è una stringa JSON (come spesso accade con gli errori 429), estraiamo solo il messaggio
+    if (cleanErrorMessage.includes("RESOURCE_EXHAUSTED") || cleanErrorMessage.includes("quota")) {
+      cleanErrorMessage = "Quota API Gemini superata (Free Tier: max 5 analisi/min). Attendi il ripristino automatico.";
+    } else if (cleanErrorMessage.includes("404")) {
+      cleanErrorMessage = "Modello non trovato. Verifica le impostazioni API Gemini.";
+    } else if (cleanErrorMessage.startsWith("{")) {
+      try {
+        const parsed = JSON.parse(cleanErrorMessage);
+        cleanErrorMessage = parsed.error?.message || cleanErrorMessage;
+      } catch (e) {}
     }
 
     return {
       threatLevel: "low",
       detectedEvents: [],
-      description: userFriendlyError,
+      description: cleanErrorMessage,
       isEmergency: false,
     };
   }

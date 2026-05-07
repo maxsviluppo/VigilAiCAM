@@ -77,7 +77,7 @@ const IPCameraPlayer = ({ url, isAlertActive, isNightMode, imgRefCallback }: { u
 };
 
 export default function App() {
-  const [connectMethod, setConnectMethod] = useState<'direct' | 'cloud' | 'advanced' | 'browser'>('direct');
+  const [connectMethod, setConnectMethod] = useState<'direct' | 'advanced' | 'browser'>('direct');
   const [cameras, setCameras] = useState<Camera[]>([
     { 
       id: "cam-1", 
@@ -95,12 +95,34 @@ export default function App() {
       url: "rtsp://Testcamera:12345678@192.168.1.17:554/stream1",
       status: "online",
       enabledTriggers: ["intrusion", "violence"]
+    },
+    {
+      id: "cam-onvif-gen",
+      name: "IP Camera ONVIF",
+      location: "Esterno",
+      type: "onvif",
+      ip: "192.168.1.100",
+      port: 554,
+      username: "admin",
+      password: "password",
+      rtspPath: "/stream1",
+      status: "online",
+      enabledTriggers: ["intrusion", "violence"]
     }
   ]);
   const [activeCameraId, setActiveCameraId] = useState<string>("cam-1");
   const [incidents, setIncidents] = useState<Incident[]>([]);
   const [isMonitoring, setIsMonitoring] = useState(false);
-  const [isAlertActive, setIsAlertActive] = useState(false);
+  const [isAiEnabled, setIsAiEnabled] = useState(true);
+  
+  useEffect(() => {
+    if (!isAiEnabled) {
+      setLastAnalysis(null);
+      setIsAnalyzing(false);
+    }
+  }, [isAiEnabled]);
+
+  const [alertingCameraIds, setAlertingCameraIds] = useState<string[]>([]);
   const [lastAnalysis, setLastAnalysis] = useState<DetectionResult | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
@@ -229,7 +251,7 @@ export default function App() {
   const toggleMonitoring = () => {
     if (isMonitoring) {
       setIsMonitoring(false);
-      setIsAlertActive(false);
+      setAlertingCameraIds([]);
       setLastAnalysis(null);
       alertSequenceCountRef.current = 0;
       lastNotificationTimeRef.current = 0;
@@ -240,6 +262,12 @@ export default function App() {
       const initialStatuses: Record<string, boolean> = {};
       cameras.forEach(c => initialStatuses[c.id] = true);
       setActiveCamStatuses(initialStatuses);
+      setLastAnalysis({
+        description: "🚀 Sincronizzazione motore AI in corso...",
+        isEmergency: false,
+        threatLevel: "low",
+        detectedEvents: []
+      });
     }
   };
 
@@ -291,13 +319,6 @@ export default function App() {
     });
     
     setCameraToDelete(null);
-  };
-
-  const stopActiveAlert = () => {
-    setIsAlertActive(false);
-    setIsSimulating(false);
-    alertSequenceCountRef.current = 0;
-    lastNotificationTimeRef.current = 0;
   };
 
   const sendManualTestAlarm = async () => {
@@ -395,7 +416,7 @@ export default function App() {
   };
 
   const handleDetectionAlert = (cam: Camera, result: any, canvas: HTMLCanvasElement) => {
-    setIsAlertActive(true);
+    setAlertingCameraIds(prev => prev.includes(cam.id) ? prev : [...prev, cam.id]);
     playAlertSound();
     const desc = result.description;
     const now = Date.now();
@@ -410,8 +431,9 @@ export default function App() {
       shouldNotify = true;
     }
 
+    const screenshot = canvas.toDataURL("image/jpeg", 0.6).split(",")[1];
+    
     if (shouldNotify) {
-      const screenshot = canvas.toDataURL("image/jpeg", 0.6).split(",")[1];
       sendNotification(desc, screenshot);
       lastNotificationTimeRef.current = now;
       alertSequenceCountRef.current += 1;
@@ -419,13 +441,22 @@ export default function App() {
     
     setIncidents(prev => [{
       id: Math.random().toString(36).substr(2, 9),
-      timestamp: new Date(),
       cameraId: cam.id,
       cameraName: cam.name,
+      timestamp: new Date(),
       description: desc,
-      threatLevel: "high",
-      screenshot: canvas.toDataURL("image/jpeg", 0.8)
+      threatLevel: result.threatLevel || "high",
+      screenshot: screenshot
     }, ...prev]);
+  };
+
+  const stopActiveAlert = (camId?: string) => {
+    if (camId) {
+      setAlertingCameraIds(prev => prev.filter(id => id !== camId));
+    } else {
+      setAlertingCameraIds([]);
+    }
+    alertSequenceCountRef.current = 0;
   };
 
   const captureAndAnalyze = useCallback(async () => {
@@ -434,9 +465,20 @@ export default function App() {
     const context = canvas.getContext("2d");
     if (!context) return;
 
-    const camIndex = camRotationIndexRef.current % cameras.length;
-    const cam = cameras[camIndex];
-    camRotationIndexRef.current += 1;
+    // Logic: If we are in single view, prioritize the active camera. 
+    // In multi-view or if no active cam, use rotation.
+    let cam;
+    if (!isMultiView && activeCameraId) {
+      cam = cameras.find(c => c.id === activeCameraId);
+    } 
+    
+    if (!cam) {
+      const camIndex = camRotationIndexRef.current % cameras.length;
+      cam = cameras[camIndex];
+      camRotationIndexRef.current += 1;
+    }
+
+    if (!cam) return;
 
     const img = imgRefs.current.get(cam.id);
     const video = videoRefs.current.get(cam.id);
@@ -461,25 +503,44 @@ export default function App() {
     }
 
     if (success && base64Image) {
+      if (!isAiEnabled && !isSimulating) return; // Skip analysis if AI is disabled
+
+      setLastAnalysis(prev => ({
+        description: `🔄 Analisi in corso: ${cam.name}...`,
+        isEmergency: prev?.isEmergency || false,
+        threatLevel: prev?.threatLevel || "low"
+      }));
 
       if (isSimulating) {
-        setIsAlertActive(true);
+        setAlertingCameraIds(prev => prev.includes(cam.id) ? prev : [...prev, cam.id]);
         playAlertSound();
         handleDetectionAlert(cam, { description: `[CAMERA: ${cam.name}] SIMULAZIONE: Rapina` }, canvas);
         return;
       }
 
       setIsAnalyzing(true);
-      const result = await analyzeFrame(base64Image, cam.enabledTriggers, cam.location, aiModel);
-      if (cam.id === activeCameraId || result.isEmergency) {
-        setLastAnalysis(result);
-      }
-      setIsAnalyzing(false);
-      if (result.isEmergency) {
-        handleDetectionAlert(cam, result, canvas);
+      try {
+        const result = await analyzeFrame(base64Image, cam.enabledTriggers, cam.location, aiModel);
+        if (cam.id === activeCameraId || result.isEmergency) {
+          setLastAnalysis(result);
+        }
+        if (result.isEmergency) {
+          handleDetectionAlert(cam, result, canvas);
+        }
+      } catch (err: any) {
+        console.error("AI Analysis failed:", err);
+        if (err.message?.includes("quota") || err.message?.includes("RESOURCE_EXHAUSTED")) {
+          setLastAnalysis({
+            description: "⚠️ Limite API raggiunto. Il sistema sta attendendo il ripristino della quota (solitamente 60s). Il monitoraggio continua...",
+            isEmergency: false,
+            threatLevel: "low"
+          });
+        }
+      } finally {
+        setIsAnalyzing(false);
       }
     }
-  }, [cameras, activeCameraId, isAnalyzing, isSimulating]);
+  }, [cameras, activeCameraId, isAnalyzing, isSimulating, isMultiView, isAiEnabled]);
 
   useEffect(() => {
     if (isMonitoring) {
@@ -492,16 +553,23 @@ export default function App() {
     };
   }, [isMonitoring, cameras]);
 
+  // Stable reference to analysis function to prevent interval jitter
+  const analysisFnRef = useRef(captureAndAnalyze);
+  useEffect(() => { analysisFnRef.current = captureAndAnalyze; }, [captureAndAnalyze]);
+
   useEffect(() => {
     if (isMonitoring) {
-      analysisIntervalRef.current = setInterval(captureAndAnalyze, 6000); 
+      // 15s interval ensures we stay within the 5 RPM limit of Gemini Free Tier
+      analysisIntervalRef.current = setInterval(() => {
+        analysisFnRef.current();
+      }, 15000); 
     } else {
       if (analysisIntervalRef.current) clearInterval(analysisIntervalRef.current);
     }
     return () => {
       if (analysisIntervalRef.current) clearInterval(analysisIntervalRef.current);
     };
-  }, [isMonitoring, captureAndAnalyze]);
+  }, [isMonitoring]);
 
   // ── SMART ZONE DRAWING HANDLERS ──────────────────────────────────────────
 
@@ -519,14 +587,13 @@ export default function App() {
 
   const handleZoneStart = (e: MouseEvent | TouchEvent, camId: string) => {
     if (!isEditingZones) return;
-    if ((e.target as HTMLElement).closest('.zone-control-btn')) return;
     if (activeCameraId !== camId) setActiveCameraId(camId);
     const pos = getRelativePos(e, camId);
     if (!pos) return;
     const { x, y } = pos;
     const cam = cameras.find(c => c.id === camId);
     for (const zone of [...(cam?.zones || [])].reverse()) {
-      const hs = 0.07;
+      const hs = 0.05; // Balanced sensitivity
       for (let i = 0; i < zone.points.length; i++) {
         if (Math.abs(x - zone.points[i].x) < hs && Math.abs(y - zone.points[i].y) < hs) {
           if (e.cancelable) e.preventDefault();
@@ -556,15 +623,31 @@ export default function App() {
     const pos = getRelativePos(e as any, activeCameraId);
     if (!pos) return;
     const { x: cx, y: cy } = pos;
+    
     if (draggingZoneId && dragStart) {
-      const dx = cx - dragStart.x, dy = cy - dragStart.y;
+      let dx = cx - dragStart.x;
+      let dy = cy - dragStart.y;
+      
       setCameras(prev => prev.map(c => c.id !== activeCameraId ? c : {
         ...c,
         zones: (c.zones || []).map(z => z.id !== draggingZoneId ? z : {
           ...z,
           points: typeof dragType === 'number'
             ? z.points.map((p, i) => i === dragType ? { x: Math.max(0, Math.min(1, cx)), y: Math.max(0, Math.min(1, cy)) } : p)
-            : dragStart.initialPoints.map(p => ({ x: Math.max(0, Math.min(1, p.x + dx)), y: Math.max(0, Math.min(1, p.y + dy)) }))
+            : (() => {
+                // Precise area move: avoid distortion at boundaries
+                const initialPoints = dragStart.initialPoints as Point[];
+                const minX = Math.min(...initialPoints.map(p => p.x));
+                const maxX = Math.max(...initialPoints.map(p => p.x));
+                const minY = Math.min(...initialPoints.map(p => p.y));
+                const maxY = Math.max(...initialPoints.map(p => p.y));
+                
+                // Clamp delta so the WHOLE box stays within [0,1]
+                const clampedDx = Math.max(-minX, Math.min(1 - maxX, dx));
+                const clampedDy = Math.max(-minY, Math.min(1 - maxY, dy));
+                
+                return initialPoints.map(p => ({ x: p.x + clampedDx, y: p.y + clampedDy }));
+              })()
         })
       }));
     } else if (currentDrawingZone?.points) {
@@ -642,92 +725,118 @@ export default function App() {
       {/* Main Content Area */}
       <main className="flex-1 flex flex-col min-w-0 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 pb-20 lg:pb-0 overflow-y-auto">
         
-        {/* Top Navbar */}
-        <header className="min-h-[70px] lg:min-h-[90px] border-b border-white/5 px-4 lg:px-10 py-3 lg:py-4 flex flex-row items-center justify-between gap-4 backdrop-blur-md bg-slate-950/20 sticky top-0 z-50">
-          <div className="flex items-center gap-4">
-            <div className="w-12 h-12 bg-blue-500/10 rounded-2xl flex items-center justify-center border border-blue-500/20 shadow-[0_0_20px_rgba(59,130,246,0.15)]">
-              <ShieldCheck size={28} className="text-blue-400" />
+        <header className="glass m-4 lg:m-8 p-4 lg:p-6 rounded-[32px] lg:rounded-[40px] flex flex-col md:flex-row items-center justify-between gap-6 lg:gap-0 sticky top-4 lg:top-8 z-[100] border-white/5 shadow-2xl">
+          
+          {/* TOP ROW / IDENTITY */}
+          <div className="flex items-center justify-between w-full md:w-auto gap-4 lg:gap-6">
+            <div className="flex items-center gap-4">
+              <div className="w-10 h-10 lg:w-14 lg:h-14 glass rounded-2xl lg:rounded-3xl flex items-center justify-center bg-blue-600/10 border-blue-500/20 group hover:scale-110 transition-all duration-500">
+                <ShieldCheck size={28} className="text-blue-400 drop-shadow-[0_0_8px_rgba(96,165,250,0.5)]" />
+              </div>
+              <div className="flex flex-col">
+                <h2 className="text-xl lg:text-2xl font-black text-white uppercase tracking-tighter flex items-center gap-1">
+                  VIGIL.<span className="text-blue-400 drop-shadow-[0_0_10px_rgba(96,165,250,0.8)]">AI</span>
+                </h2>
+                <div className="hidden md:flex items-center gap-3 lg:gap-4 mt-0.5">
+                  <div className="flex items-center gap-2 text-[8px] lg:text-[9px] font-bold text-slate-500 uppercase tracking-widest">
+                    <span className={`w-1.5 h-1.5 rounded-full ${isMonitoring ? 'bg-green-500 shadow-[0_0_10px_#22c55e]' : 'bg-slate-700'}`} />
+                    {isMonitoring ? 'Sistema Attivo' : 'In Attesa'}
+                  </div>
+                  <div className="w-px h-2.5 bg-white/10" />
+                  <div className="flex items-center gap-2 text-[8px] lg:text-[9px] font-bold text-slate-500 uppercase tracking-widest">
+                    <LayoutGrid size={10} /> {cameras.length} Camere
+                  </div>
+                </div>
+              </div>
             </div>
-            <div className="flex flex-col">
-              <h2 className="text-xl lg:text-2xl font-black text-white uppercase tracking-tighter flex items-center gap-1">
-                VIGIL.<span className="text-blue-400 drop-shadow-[0_0_10px_rgba(96,165,250,0.8)]">AI</span>
-              </h2>
-              <div className="flex items-center gap-3 lg:gap-4 mt-0.5">
-                <div className="flex items-center gap-2 text-[8px] lg:text-[9px] font-bold text-slate-500 uppercase tracking-widest">
-                  <span className={`w-1.5 h-1.5 rounded-full ${isMonitoring ? 'bg-green-500 shadow-[0_0_10px_#22c55e]' : 'bg-slate-700'}`} />
-                  {isMonitoring ? 'Sistema Attivo' : 'In Attesa'}
-                </div>
-                <div className="w-px h-2.5 bg-white/10" />
-                <div className="flex items-center gap-2 text-[8px] lg:text-[9px] font-bold text-slate-500 uppercase tracking-widest">
-                  <LayoutGrid size={10} /> {cameras.length} Camere
-                </div>
+
+            {/* Mobile-only status badge */}
+            <div className="flex md:hidden items-center gap-3 bg-white/5 px-4 py-2 rounded-2xl border border-white/5">
+              <div className="flex items-center gap-2 text-[9px] font-black text-slate-400 uppercase tracking-widest">
+                <span className={`w-2 h-2 rounded-full ${isMonitoring ? 'bg-green-500 shadow-[0_0_8px_#22c55e]' : 'bg-slate-700'}`} />
+                {isMonitoring ? 'Attivo' : 'Attesa'}
+              </div>
+              <div className="w-px h-3 bg-white/10" />
+              <div className="flex items-center gap-1 text-[9px] font-black text-blue-400 uppercase tracking-widest">
+                {cameras.length} CAM
               </div>
             </div>
           </div>
 
-          <div className="flex items-center gap-2 lg:gap-4 w-full md:w-auto justify-center">
-            <button 
-              onClick={() => setIsMultiView(!isMultiView)}
-              className={`p-3 rounded-xl lg:rounded-2xl transition-all border ${isMultiView ? 'bg-white/10 border-white/20 text-white' : 'glass border-white/5 text-slate-500 hover:text-white'}`}
-              title="Vista Griglia"
-            >
-              <LayoutGrid size={18} />
-            </button>
+          {/* ACTION BUTTONS / TOOLBAR */}
+          <div className="flex items-center gap-2 lg:gap-4 w-full md:w-auto justify-between md:justify-end overflow-x-auto pb-2 md:pb-0 custom-scrollbar">
+            <div className="flex items-center gap-2">
+              <button 
+                onClick={() => setIsMultiView(!isMultiView)}
+                className={`p-3 rounded-xl lg:rounded-2xl transition-all border ${isMultiView ? 'bg-white/10 border-white/20 text-white' : 'glass border-white/5 text-slate-500 hover:text-white'}`}
+                title="Vista Griglia"
+              >
+                <LayoutGrid size={18} />
+              </button>
 
-            <button 
-              onClick={() => openCameraConfig()}
-              className="p-3 glass border-white/5 text-slate-500 hover:text-white rounded-xl lg:rounded-2xl transition-all"
-              title="Aggiungi Camera"
-            >
-              <Plus size={18} />
-            </button>
+              <button 
+                onClick={() => openCameraConfig()}
+                className="p-3 glass border-white/5 text-slate-500 hover:text-white rounded-xl lg:rounded-2xl transition-all"
+                title="Aggiungi Camera"
+              >
+                <Plus size={18} />
+              </button>
 
-            <button 
-              onClick={() => setShowSettings(true)}
-              className="p-3 glass border-white/5 text-slate-500 hover:text-white rounded-xl lg:rounded-2xl transition-all"
-              title="Impostazioni"
-            >
-              <Settings size={18} />
-            </button>
+              <button 
+                onClick={() => setShowSettings(true)}
+                className="p-3 glass border-white/5 text-slate-500 hover:text-white rounded-xl lg:rounded-2xl transition-all"
+                title="Impostazioni"
+              >
+                <Settings size={18} />
+              </button>
 
-            <button 
-              onClick={() => setShowPlans(true)}
-              className="p-3 glass border-white/5 text-slate-500 hover:text-white rounded-xl lg:rounded-2xl transition-all"
-              title="Piani e Costi"
-            >
-              <Gem size={18} />
-            </button>
+              <button 
+                onClick={() => setShowPlans(true)}
+                className="p-3 glass border-white/5 text-slate-500 hover:text-white rounded-xl lg:rounded-2xl transition-all"
+                title="Piani e Costi"
+              >
+                <Gem size={18} />
+              </button>
 
-            <div className="h-8 w-px bg-white/10 mx-1 hidden lg:block" />
+              <button
+                onClick={() => setIsEditingZones(!isEditingZones)}
+                className={`flex items-center gap-2 px-4 py-3 rounded-xl lg:rounded-2xl font-black uppercase tracking-widest text-[10px] transition-all border ${
+                  isEditingZones
+                    ? 'bg-amber-500/20 border-amber-500/40 text-amber-400 shadow-[0_0_20px_rgba(245,158,11,0.2)]'
+                    : 'glass border-white/5 text-slate-500 hover:text-white'
+                }`}
+              >
+                <Scan size={14} className={isEditingZones ? 'animate-pulse' : ''} />
+                <span className="hidden lg:inline">{isEditingZones ? 'Salva Zone' : 'Zone'}</span>
+              </button>
 
-            <button 
-              onClick={() => openCameraConfig()}
-              className="p-3 glass border-white/5 text-slate-500 hover:text-white rounded-xl lg:rounded-2xl transition-all flex items-center gap-2 group"
-              title="Aggiungi Camera"
-            >
-              <Plus size={18} className="group-hover:rotate-90 transition-transform" />
-              <span className="hidden xl:inline text-[10px] font-black uppercase tracking-widest">Camera</span>
-            </button>
+              <button
+                onClick={() => setIsAiEnabled(!isAiEnabled)}
+                className={`flex items-center gap-2 px-4 py-3 rounded-xl lg:rounded-2xl font-black uppercase tracking-widest text-[10px] transition-all border ${
+                  isAiEnabled
+                    ? 'bg-blue-500/20 border-blue-500/40 text-blue-400 shadow-[0_0_20px_rgba(59,130,246,0.2)]'
+                    : 'glass border-white/5 text-slate-500 hover:text-white'
+                }`}
+                title={isAiEnabled ? 'Disattiva AI' : 'Attiva AI'}
+              >
+                <Cpu size={14} className={isAiEnabled && isMonitoring ? 'animate-pulse' : ''} />
+                <span className="hidden lg:inline">{isAiEnabled ? 'AI Core ON' : 'AI Core OFF'}</span>
+              </button>
+            </div>
 
-            <button
-              onClick={() => setIsEditingZones(!isEditingZones)}
-              className={`flex items-center gap-2 px-3 py-2 rounded-xl lg:rounded-2xl font-black uppercase tracking-widest text-[8px] lg:text-[10px] transition-all border ${
-                isEditingZones
-                  ? 'bg-amber-500/20 border-amber-500/40 text-amber-400 shadow-[0_0_20px_rgba(245,158,11,0.2)]'
-                  : 'glass border-white/5 text-slate-500 hover:text-white'
-              }`}
-            >
-              <Scan size={14} className={isEditingZones ? 'animate-pulse' : ''} />
-              <span className="hidden sm:inline">{isEditingZones ? 'Salva Zone' : 'Zone'}</span>
-            </button>
-            
-            <button 
+            <motion.button 
+              whileHover={{ 
+                backgroundColor: isMonitoring ? 'rgba(255,255,255,0.15)' : '#f59e0b',
+                color: isMonitoring ? '#fff' : '#000',
+                boxShadow: isMonitoring ? 'none' : '0 0 30px rgba(245,158,11,0.4)'
+              }}
+              whileTap={{ scale: 0.98 }}
               onClick={toggleMonitoring}
-              className={`flex-1 md:flex-none flex items-center justify-center gap-2 px-4 lg:px-8 h-[44px] lg:h-[52px] rounded-xl lg:rounded-2xl font-black uppercase tracking-widest text-[8px] lg:text-[10px] transition-all shadow-2xl ${isMonitoring ? 'bg-white/10 text-white border border-white/20' : 'bg-blue-600 text-white shadow-blue-500/20 hover:bg-blue-500 hover:scale-[1.02] active:scale-95'}`}
+              className={`flex items-center justify-center gap-3 px-6 lg:px-10 h-[44px] lg:h-[54px] rounded-xl lg:rounded-2xl font-black uppercase tracking-widest text-[10px] transition-all shadow-2xl ${isMonitoring ? 'bg-white/10 text-white border border-white/20' : 'bg-blue-600 text-white shadow-blue-500/20'}`}
             >
-              {isMonitoring ? <VideoOff size={16} /> : <Video size={16} />}
+              {isMonitoring ? <VideoOff size={18} /> : <Video size={18} />}
               <span>{isMonitoring ? 'OFF' : 'VIGILA'}</span>
-            </button>
+            </motion.button>
           </div>
         </header>
 
@@ -752,13 +861,20 @@ export default function App() {
                   ref={(el) => { if (el) cardRefs.current.set(cam.id, el as HTMLDivElement); }}
                   onMouseDown={(e) => handleZoneStart(e as any, cam.id)}
                   onTouchStart={(e) => handleZoneStart(e as any, cam.id)}
-                  onClick={() => { if (!isEditingZones) { setActiveCameraId(cam.id); setIsMultiView(false); } }}
+                  onClick={() => { 
+                    if (isEditingZones) {
+                      setActiveCameraId(cam.id);
+                    } else {
+                      setActiveCameraId(cam.id); 
+                      setIsMultiView(false); 
+                    }
+                  }}
                   className={`relative glass rounded-[48px] overflow-hidden group shadow-2xl transition-all duration-700 cursor-pointer ${
                     !isMultiView && cam.id !== activeCameraId ? 'hidden' : ''
-                  } aspect-video ${
+                  } aspect-[16/10] ${
                     isEditingZones && activeCameraId === cam.id
-                      ? 'ring-2 ring-amber-500/60 ring-inset touch-none'
-                      : 'border-white/5'
+                      ? 'ring-4 ring-amber-500/60 ring-inset touch-none'
+                      : 'border-white/5 opacity-80 hover:opacity-100'
                   }`}
                 >
                   <div className="absolute inset-0 bg-slate-900/40 z-0 animate-pulse" />
@@ -767,7 +883,7 @@ export default function App() {
                     (cam.type === 'ip' || cam.type === 'onvif') ? (
                       <IPCameraPlayer 
                         url={cam.url || ''} 
-                        isAlertActive={isAlertActive} 
+                        isAlertActive={alertingCameraIds.includes(cam.id)} 
                         isNightMode={isNightMode} 
                         imgRefCallback={(el) => { if (el) imgRefs.current.set(cam.id, el); else imgRefs.current.delete(cam.id); }} 
                       />
@@ -778,7 +894,7 @@ export default function App() {
                         muted 
                         crossOrigin="anonymous"
                         playsInline 
-                        className={`w-full h-full object-cover transition-all duration-1000 ${isAlertActive ? 'opacity-40 saturate-150' : 'opacity-100'}`}
+                        className={`w-full h-full object-cover transition-all duration-1000 ${alertingCameraIds.includes(cam.id) ? 'opacity-40 saturate-150' : 'opacity-100'}`}
                         style={isNightMode ? { filter: 'grayscale(1) brightness(1.2) contrast(1.1) sepia(0.2) hue-rotate(180deg)' } : {}}
                       />
                     )
@@ -792,70 +908,30 @@ export default function App() {
                     </div>
                   )}
 
-                  {/* UI Overlays for Video */}
-                  <div className="absolute inset-0 p-4 lg:p-10 pointer-events-none flex flex-col justify-between z-30">
-                    <div className="flex justify-between items-start">
-                      <div className="flex flex-col gap-2">
-                        <div className="glass px-3 py-1.5 lg:px-4 lg:py-2 rounded-xl bg-slate-950/40 border-white/20 backdrop-blur-md flex items-center gap-2 lg:gap-3">
-                          <div className={`w-1.5 h-1.5 lg:w-2 lg:h-2 rounded-full ${isMonitoring ? 'bg-red-500 animate-pulse' : 'bg-slate-500'}`} />
-                          <span className="text-[9px] lg:text-[10px] font-black text-white uppercase tracking-widest">{cam.name}</span>
-                        </div>
-                        <div className="glass px-3 py-1 rounded-lg bg-slate-950/20 text-[8px] lg:text-[9px] font-bold text-slate-400 uppercase tracking-widest w-fit">
-                          {cam.location || 'Settore Default'}
-                        </div>
-                      </div>
-                      {isMonitoring && (
-                        <div className="flex flex-col items-end gap-2">
-                          <div className="glass px-3 py-1.5 lg:px-4 lg:py-2 rounded-xl bg-blue-600/20 border-blue-500/30 backdrop-blur-md flex items-center gap-2">
-                            <Cpu size={10} className="text-blue-400" />
-                            <span className="text-[8px] lg:text-[9px] font-black text-blue-400 uppercase tracking-widest">AI Core</span>
+                  {/* UI Overlays for Video (MONITORING MODE) */}
+                  {!isEditingZones && (
+                    <div className="absolute inset-0 p-4 lg:p-10 pointer-events-none flex flex-col justify-between z-30">
+                      <div className="flex justify-between items-start">
+                        <div className="flex flex-col gap-2">
+                          <div className="glass px-3 py-1.5 lg:px-4 lg:py-2 rounded-xl bg-slate-950/40 border-white/20 backdrop-blur-md flex items-center gap-2 lg:gap-3">
+                            <div className={`w-1.5 h-1.5 lg:w-2 lg:h-2 rounded-full ${isMonitoring ? 'bg-red-500 animate-pulse' : 'bg-slate-500'}`} />
+                            <span className="text-[9px] lg:text-[10px] font-black text-white uppercase tracking-widest">{cam.name}</span>
+                          </div>
+                          <div className="glass px-3 py-1 rounded-lg bg-slate-950/20 text-[8px] lg:text-[9px] font-bold text-slate-400 uppercase tracking-widest w-fit">
+                            {cam.location || 'Settore Default'}
                           </div>
                         </div>
-                      )}
-                    </div>
-
-                    {/* Zone Selector Menu - Center Top (High Visibility) */}
-                    {isEditingZones && activeCameraId === cam.id && (
-                      <div className="absolute top-4 left-1/2 -translate-x-1/2 z-50 pointer-events-auto">
-                        <motion.div 
-                          initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }}
-                          className="glass p-2 rounded-2xl bg-slate-950/80 backdrop-blur-2xl border-amber-500/40 shadow-[0_0_50px_rgba(245,158,11,0.2)] flex items-center gap-2"
-                        >
-                          <div className="px-3 py-1.5 border-r border-white/10 mr-1">
-                            <span className="text-[10px] font-black text-white uppercase tracking-[0.2em]">Smart Zones</span>
+                        {isMonitoring && isAiEnabled && (
+                          <div className="flex flex-col items-end gap-2">
+                            <div className="glass px-3 py-1.5 lg:px-4 lg:py-2 rounded-xl bg-blue-600/20 border-blue-500/30 backdrop-blur-md flex items-center gap-2">
+                              <Cpu size={10} className="text-blue-400" />
+                              <span className="text-[8px] lg:text-[9px] font-black text-blue-400 uppercase tracking-widest">AI Core</span>
+                            </div>
                           </div>
-                          
-                          {(['restricted', 'alert', 'privacy', 'excluded'] as ZoneType[]).map(t => (
-                            <button
-                              key={t}
-                              onClick={() => selectedZoneId && updateZoneType(selectedZoneId, t)}
-                              className={`px-4 py-2 rounded-xl border text-[9px] font-black uppercase tracking-wider transition-all flex items-center gap-2 ${
-                                (selectedZoneId ? cameras.find(c => c.id === cam.id)?.zones?.find(z => z.id === selectedZoneId)?.type === t : false)
-                                ? (t === 'restricted' ? 'bg-red-500 border-red-400 text-white' : t === 'alert' ? 'bg-amber-500 border-amber-400 text-white' : t === 'privacy' ? 'bg-slate-800 border-slate-600 text-white' : 'bg-slate-500 border-slate-400 text-white')
-                                : 'bg-white/5 border-white/5 text-slate-400 hover:text-white hover:bg-white/10'
-                              }`}
-                            >
-                              <div className={`w-2 h-2 rounded-full ${t === 'restricted' ? 'bg-red-500' : t === 'alert' ? 'bg-amber-500' : t === 'privacy' ? 'bg-black' : 'bg-slate-400'}`} />
-                              {t === 'restricted' ? 'Vietata' : t === 'alert' ? 'Allerta' : t === 'privacy' ? 'Privacy' : 'Esclusa'}
-                            </button>
-                          ))}
-                          
-                          {selectedZoneId && (
-                            <button 
-                              onClick={() => { deleteZone(selectedZoneId); setSelectedZoneId(null); }}
-                              className="ml-2 p-2 bg-red-600/20 hover:bg-red-600 text-red-400 hover:text-white rounded-xl border border-red-500/20 transition-all"
-                              title="Elimina Zona"
-                            >
-                              <Trash2 size={16} />
-                            </button>
-                          )}
-                          
-                          <button onClick={() => setSelectedZoneId(null)} className="ml-1 p-2 text-slate-500 hover:text-white transition-colors"><X size={16}/></button>
-                        </motion.div>
+                        )}
                       </div>
-                    )}
 
-                    <div className="flex justify-between items-end">
+                      <div className="flex justify-between items-end">
                         <div className="flex gap-2 pointer-events-auto">
                           <button 
                             onClick={(e) => toggleSingleCamera(cam.id, e)}
@@ -885,13 +961,61 @@ export default function App() {
                           </button>
                         </div>
                       
-                      <div className="flex flex-col items-end gap-3">
-                        <div className="text-[8px] lg:text-[10px] font-mono font-bold text-white/40 bg-black/40 px-3 py-1 rounded-full backdrop-blur-sm">
-                          {new Date().toLocaleTimeString('it-IT')}
+                        <div className="flex flex-col items-end gap-3">
+                          <div className="text-[8px] lg:text-[10px] font-mono font-bold text-white/40 bg-black/40 px-3 py-1 rounded-full backdrop-blur-sm">
+                            {new Date().toLocaleTimeString('it-IT')}
+                          </div>
                         </div>
                       </div>
                     </div>
-                  </div>
+                  )}
+
+                  {/* UI Overlays for Video (DRAWING MODE) */}
+                  {isEditingZones && activeCameraId === cam.id && (
+                    <div className="absolute top-4 left-1/2 -translate-x-1/2 z-50 pointer-events-auto w-[95%] sm:w-auto">
+                      <motion.div 
+                        initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }}
+                        className="glass p-1.5 lg:p-2 rounded-2xl bg-slate-950/90 backdrop-blur-3xl border-amber-500/30 shadow-[0_0_50px_rgba(245,158,11,0.3)] flex items-center justify-center gap-1.5"
+                      >
+                        {(['restricted', 'alert', 'privacy', 'excluded'] as ZoneType[]).map(t => {
+                          const isSelected = selectedZoneId ? cameras.find(c => c.id === cam.id)?.zones?.find(z => z.id === selectedZoneId)?.type === t : false;
+                          return (
+                            <button
+                              key={t}
+                              onClick={() => selectedZoneId && updateZoneType(selectedZoneId, t)}
+                              className={`flex-1 sm:flex-none h-10 px-3 sm:px-4 rounded-xl border text-[9px] font-black uppercase tracking-wider transition-all flex items-center justify-center gap-2 ${
+                                isSelected
+                                ? (t === 'restricted' ? 'bg-red-500 border-red-400 text-white' : t === 'alert' ? 'bg-amber-500 border-amber-400 text-white' : t === 'privacy' ? 'bg-slate-800 border-slate-600 text-white' : 'bg-slate-500 border-slate-400 text-white')
+                                : 'bg-white/5 border-white/5 text-slate-400 hover:text-white hover:bg-white/10'
+                              }`}
+                              title={t}
+                            >
+                              <div className={`w-2.5 h-2.5 rounded-full shadow-[0_0_8px_rgba(255,255,255,0.2)] ${t === 'restricted' ? 'bg-red-500' : t === 'alert' ? 'bg-amber-500' : t === 'privacy' ? 'bg-black' : 'bg-slate-400'}`} />
+                              <span className="hidden sm:inline">{t === 'restricted' ? 'Vietata' : t === 'alert' ? 'Allerta' : t === 'privacy' ? 'Privacy' : 'Esclusa'}</span>
+                            </button>
+                          );
+                        })}
+                        
+                        {selectedZoneId && (
+                          <button 
+                            onClick={() => { deleteZone(selectedZoneId); setSelectedZoneId(null); }}
+                            className="p-2 bg-red-600/20 hover:bg-red-600 text-red-400 hover:text-white rounded-xl border border-red-500/20 transition-all"
+                            title="Elimina Zona"
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        )}
+                        
+                        <button 
+                          onClick={() => { setIsEditingZones(false); setSelectedZoneId(null); }} 
+                          className="p-2 bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white rounded-xl border border-white/5 transition-all"
+                          title="Chiudi Configurazione"
+                        >
+                          <X size={18}/>
+                        </button>
+                      </motion.div>
+                    </div>
+                  )}
 
                   {/* ── SMART ZONE SVG OVERLAY ── */}
                   <div className="absolute inset-0 pointer-events-none z-20">
@@ -913,17 +1037,32 @@ export default function App() {
                         const LABELS: Record<string, string> = { restricted: '🚫 VIETATA', alert: '⚠️ ALLERTA', privacy: '🔒 PRIVACY', excluded: '⬛ ESCLUSA' };
                         return (
                           <g key={zone.id}>
-                            {/* Filled polygon */}
+                            {/* Filled polygon with move cursor */}
                             <polygon
                               points={zone.points.map(p => `${(p.x*100).toFixed(2)},${(p.y*100).toFixed(2)}`).join(' ')}
                               fill={col.fill}
                               stroke={col.stroke}
                               strokeWidth="0.6"
                               strokeDasharray={zone.type === 'excluded' ? '2,1' : undefined}
+                              style={{ pointerEvents: 'auto', cursor: isEditingZones ? 'grab' : 'default' }}
+                              className="transition-colors duration-300"
                             />
-                            {/* Corner handles (editing mode) */}
+                            {/* Corner handles (editing mode) - Premium Circular Handles */}
                             {isEditingZones && activeCameraId === cam.id && zone.points.map((p, i) => (
-                              <circle key={i} cx={p.x*100} cy={p.y*100} r="1.8" fill="white" stroke={col.stroke} strokeWidth="0.5" className="zone-control-btn" style={{pointerEvents:'auto',cursor:'grab'}} />
+                              <g key={i} className="zone-control-btn group/handle" style={{pointerEvents:'auto',cursor:'pointer'}}>
+                                {/* Large invisible hit area for easy grabbing */}
+                                <circle cx={p.x*100} cy={p.y*100} r="6" fill="transparent" />
+                                
+                                {/* Visible Handle Circle */}
+                                <circle 
+                                  cx={p.x*100} cy={p.y*100} r="2.5" 
+                                  fill="white" 
+                                  stroke={col.stroke} 
+                                  strokeWidth="1" 
+                                  className="transition-all duration-300 shadow-[0_0_15px_rgba(255,255,255,0.5)]" 
+                                  style={{ filter: 'drop-shadow(0 0 4px rgba(255,255,255,0.8))' }}
+                                />
+                              </g>
                             ))}
                             {/* Zone label badge */}
                             <foreignObject x={Number(cx)-8} y={Number(labelY)} width="16" height="5" className="overflow-visible" style={{pointerEvents:'none'}}>
@@ -952,7 +1091,7 @@ export default function App() {
 
                   {/* Alert Overlay */}
                   <AnimatePresence>
-                    {isAlertActive && isMonitoring && (
+                    {alertingCameraIds.includes(cam.id) && isMonitoring && (
                       <motion.div 
                         initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
                         className="absolute inset-0 z-40 pointer-events-none border-[12px] border-red-500/40 animate-pulse bg-red-950/20"
@@ -963,7 +1102,7 @@ export default function App() {
                           </div>
                           <h2 className="text-5xl font-black text-white uppercase tracking-tighter drop-shadow-2xl">MINACCIA RILEVATA</h2>
                           <button 
-                            onClick={stopActiveAlert}
+                            onClick={() => stopActiveAlert(cam.id)}
                             className="mt-10 pointer-events-auto px-10 py-5 bg-white text-red-600 rounded-full font-black uppercase tracking-widest text-xs shadow-2xl hover:scale-110 active:scale-95 transition-all"
                           >
                             Silenzia Allarme
@@ -1003,10 +1142,15 @@ export default function App() {
                   <div className="space-y-4">
                     <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest px-1">Descrizione Scena</label>
                     <div className="glass bg-slate-900/40 rounded-3xl p-6 min-h-[140px] border-white/5 flex items-center justify-center">
-                      {isMonitoring ? (
-                        <p className="text-xl font-bold text-white leading-relaxed italic text-center">
+                      {isMonitoring && isAiEnabled ? (
+                        <p className="text-[11px] font-bold text-white leading-relaxed italic text-center">
                           {isAnalyzing ? "Elaborazione fotogramma in corso..." : (lastAnalysis?.description || "In attesa di dati dalla telecamera attiva...")}
                         </p>
+                      ) : !isAiEnabled && isMonitoring ? (
+                        <div className="text-center opacity-40">
+                          <Cpu size={24} className="mx-auto mb-3 text-slate-500" />
+                          <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">AI Core Pausato</p>
+                        </div>
                       ) : (
                         <div className="text-center opacity-20">
                           <Lock size={24} className="mx-auto mb-3" />
@@ -1045,9 +1189,12 @@ export default function App() {
                         <div className="w-2 h-2 rounded-full bg-blue-500 animate-ping" />
                       </div>
                       <div className="flex flex-wrap gap-2">
-                        {lastAnalysis?.detectedEvents.map((event, i) => (
+                        {(lastAnalysis?.detectedEvents || []).map((event, i) => (
                           <span key={i} className="px-4 py-1.5 glass rounded-full text-[10px] font-bold text-white uppercase bg-white/5 border-white/10">{event}</span>
-                        )) || <span className="text-[10px] font-bold text-slate-700 italic">Nessun evento attivo</span>}
+                        ))}
+                        {(!lastAnalysis?.detectedEvents || lastAnalysis.detectedEvents.length === 0) && (
+                          <span className="text-[10px] font-bold text-slate-700 italic">Nessun evento attivo</span>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -1060,9 +1207,18 @@ export default function App() {
                   <div className="w-12 h-12 glass rounded-2xl flex items-center justify-center bg-orange-500/10 border-orange-500/20">
                     <History size={24} className="text-orange-400" />
                   </div>
-                  <div>
-                    <h3 className="text-lg font-black text-white uppercase tracking-tight">Registro Log</h3>
-                    <p className="text-[9px] font-bold text-slate-500 uppercase tracking-widest">Ultime 24 ore</p>
+                  <div className="flex items-center justify-between w-full">
+                    <div>
+                      <h3 className="text-lg font-black text-white uppercase tracking-tight">Registro Log</h3>
+                      <p className="text-[9px] font-bold text-slate-500 uppercase tracking-widest">Ultime 24 ore</p>
+                    </div>
+                    <button 
+                      onClick={() => setIncidents([])}
+                      className="p-3 glass border-white/5 text-slate-500 hover:text-red-400 hover:border-red-500/20 rounded-xl transition-all"
+                      title="Svuota Log"
+                    >
+                      <Trash2 size={14} />
+                    </button>
                   </div>
                 </div>
 
@@ -1070,8 +1226,10 @@ export default function App() {
                   {incidents.length > 0 ? incidents.map(incident => (
                     <div key={incident.id} className="glass bg-white/5 rounded-2xl p-5 border-l-4 border-l-blue-600 group hover:bg-white/10 transition-all cursor-pointer">
                       <div className="flex justify-between items-center mb-2">
-                        <span className="text-[10px] font-black text-white uppercase tracking-tighter">{incident.cameraName}</span>
-                        <span className="text-[10px] font-mono text-slate-500">{incident.timestamp.toLocaleTimeString()}</span>
+                        <span className="text-[10px] font-black text-white uppercase tracking-tighter">{incident.cameraName || 'Camera Sconosciuta'}</span>
+                        <span className="text-[10px] font-mono text-slate-500">
+                          {incident.timestamp instanceof Date ? incident.timestamp.toLocaleTimeString() : '--:--'}
+                        </span>
                       </div>
                       <p className="text-sm font-bold text-slate-200 leading-snug mb-3">{incident.description}</p>
                       {incident.screenshot && (
@@ -1130,271 +1288,118 @@ export default function App() {
                 </div>
 
                 <div className="space-y-6">
-                <div className="flex p-1 bg-white/5 rounded-2xl border border-white/5">
-                  <button 
-                    onClick={() => setConnectMethod('direct')}
-                    className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${connectMethod === 'direct' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-500 hover:text-white'}`}
-                  >
-                    Direct
-                  </button>
-                  <button 
-                    onClick={() => setConnectMethod('cloud')}
-                    className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${connectMethod === 'cloud' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-500 hover:text-white'}`}
-                  >
-                    Tuya QR
-                  </button>
-                  <button 
-                    onClick={() => setConnectMethod('advanced')}
-                    className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${connectMethod === 'advanced' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-500 hover:text-white'}`}
-                  >
-                    Local Key
-                  </button>
-                  <button 
-                    onClick={() => setConnectMethod('browser')}
-                    className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${connectMethod === 'browser' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-500 hover:text-white'}`}
-                  >
-                    Browser Source
-                  </button>
-                </div>
+                  <div className="space-y-2">
+                    <label className="text-[9px] font-black uppercase tracking-widest text-slate-500 px-1">Nome Identificativo</label>
+                    <input 
+                      type="text" value={editingCamera.name}
+                      onChange={(e) => setEditingCamera({...editingCamera, name: e.target.value})}
+                      placeholder="es. Ingresso Sud"
+                      className="w-full bg-white/5 border border-white/10 px-4 py-3 text-xs rounded-xl focus:border-white/30 outline-none transition-all text-white font-bold"
+                    />
+                  </div>
 
-                {connectMethod === 'direct' ? (
-                  <div className="space-y-6">
+                  <div className="space-y-2">
+                    <label className="text-[9px] font-black uppercase tracking-widest text-slate-500 px-1">Posizione Fisica</label>
+                    <input 
+                      type="text" value={editingCamera.location}
+                      onChange={(e) => setEditingCamera({...editingCamera, location: e.target.value})}
+                      placeholder="es. Primo Piano, Ala Est"
+                      className="w-full bg-white/5 border border-white/10 px-4 py-3 text-xs rounded-xl focus:border-white/30 outline-none transition-all text-white font-bold"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
-                      <label className="text-[9px] font-black uppercase tracking-widest text-slate-500 px-1">Nome Identificativo</label>
-                      <input 
-                        type="text" value={editingCamera.name}
-                        onChange={(e) => setEditingCamera({...editingCamera, name: e.target.value})}
-                        placeholder="es. Ingresso Sud"
-                        className="w-full bg-white/5 border border-white/10 px-4 py-3 text-xs rounded-xl focus:border-white/30 outline-none transition-all text-white font-bold"
-                      />
+                      <label className="text-[9px] font-black uppercase tracking-widest text-slate-500 px-1">Tipo Segnale</label>
+                      <select 
+                        value={editingCamera.type}
+                        onChange={(e) => setEditingCamera({...editingCamera, type: e.target.value as any})}
+                        className="w-full bg-white/5 border border-white/10 px-4 py-3 text-xs rounded-xl outline-none transition-all text-white font-bold appearance-none"
+                      >
+                        <option value="webcam" className="bg-[#0f172a]">Webcam Locale</option>
+                        <option value="onvif" className="bg-[#0f172a]">ONVIF / Tapo / IP Cam</option>
+                        <option value="ip" className="bg-[#0f172a]">Stream (URL Diretto)</option>
+                      </select>
                     </div>
-
-                    <div className="space-y-2">
-                      <label className="text-[9px] font-black uppercase tracking-widest text-slate-500 px-1">Posizione Fisica</label>
-                      <input 
-                        type="text" value={editingCamera.location}
-                        onChange={(e) => setEditingCamera({...editingCamera, location: e.target.value})}
-                        placeholder="es. Primo Piano, Ala Est"
-                        className="w-full bg-white/5 border border-white/10 px-4 py-3 text-xs rounded-xl focus:border-white/30 outline-none transition-all text-white font-bold"
-                      />
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-4">
+                    
+                    {editingCamera.type !== 'onvif' && (
                       <div className="space-y-2">
-                        <label className="text-[9px] font-black uppercase tracking-widest text-slate-500 px-1">Tipo Segnale</label>
-                        <select 
-                          value={editingCamera.type}
-                          onChange={(e) => setEditingCamera({...editingCamera, type: e.target.value as any})}
-                          className="w-full bg-white/5 border border-white/10 px-4 py-3 text-xs rounded-xl outline-none transition-all text-white font-bold appearance-none"
-                        >
-                          <option value="webcam" className="bg-[#0f172a]">Webcam Locale</option>
-                          <option value="onvif" className="bg-[#0f172a]">ONVIF / Tapo / IP Cam</option>
-                          <option value="ip" className="bg-[#0f172a]">Stream (URL Diretto)</option>
-                        </select>
-                      </div>
-                      
-                      {editingCamera.type !== 'onvif' && (
-                        <div className="space-y-2">
-                          <label className="text-[9px] font-black uppercase tracking-widest text-slate-500 px-1">Sorgente Video</label>
-                          <input 
-                            type="text" 
-                            disabled={editingCamera.type === 'webcam'}
-                            value={editingCamera.type === 'webcam' ? 'Default System' : editingCamera.url}
-                            onChange={(e) => setEditingCamera({...editingCamera, url: e.target.value})}
-                            placeholder="rtsp://admin:password@IP:554/..."
-                            className="w-full bg-white/5 border border-white/10 px-4 py-3 text-[10px] rounded-xl focus:border-white/30 outline-none transition-all text-white/60 font-mono disabled:opacity-30"
-                          />
-                        </div>
-                      )}
-                    </div>
-
-                    {editingCamera.type === 'onvif' && (
-                      <div className="p-6 bg-blue-500/5 rounded-2xl border border-blue-500/10 space-y-4 col-span-2 mt-4">
-                        <div className="flex items-center gap-2 mb-2">
-                          <Zap size={14} className="text-blue-400" />
-                          <h4 className="text-xs font-black text-blue-400 uppercase tracking-widest">Configurazione Rete ONVIF</h4>
-                        </div>
-                        <div className="grid grid-cols-2 gap-4">
-                          <div className="space-y-2">
-                            <label className="text-[9px] font-black uppercase tracking-widest text-slate-500 px-1">Indirizzo IP</label>
-                            <input 
-                              type="text" value={editingCamera.ip || ''}
-                              onChange={(e) => setEditingCamera({...editingCamera, ip: e.target.value})}
-                              placeholder="es. 192.168.1.17"
-                              className="w-full bg-slate-900/50 border border-white/10 px-4 py-3 text-xs rounded-xl outline-none text-white font-mono"
-                            />
-                          </div>
-                          <div className="space-y-2">
-                            <label className="text-[9px] font-black uppercase tracking-widest text-slate-500 px-1">Porta RTSP</label>
-                            <input 
-                              type="number" value={editingCamera.port || 554}
-                              onChange={(e) => setEditingCamera({...editingCamera, port: Number(e.target.value)})}
-                              className="w-full bg-slate-900/50 border border-white/10 px-4 py-3 text-xs rounded-xl outline-none text-white font-mono"
-                            />
-                          </div>
-                          <div className="space-y-2">
-                            <label className="text-[9px] font-black uppercase tracking-widest text-slate-500 px-1">Username</label>
-                            <input 
-                              type="text" value={editingCamera.username || ''}
-                              onChange={(e) => setEditingCamera({...editingCamera, username: e.target.value})}
-                              className="w-full bg-slate-900/50 border border-white/10 px-4 py-3 text-xs rounded-xl outline-none text-white font-mono"
-                            />
-                          </div>
-                          <div className="space-y-2">
-                            <label className="text-[9px] font-black uppercase tracking-widest text-slate-500 px-1">Password</label>
-                            <input 
-                              type="password" value={editingCamera.password || ''}
-                              onChange={(e) => setEditingCamera({...editingCamera, password: e.target.value})}
-                              className="w-full bg-slate-900/50 border border-white/10 px-4 py-3 text-xs rounded-xl outline-none text-white font-mono"
-                            />
-                          </div>
-                          <div className="space-y-2 col-span-2">
-                            <label className="text-[9px] font-black uppercase tracking-widest text-slate-500 px-1">Percorso Flusso (Path)</label>
-                            <input 
-                              type="text" value={editingCamera.rtspPath || '/stream1'}
-                              onChange={(e) => setEditingCamera({...editingCamera, rtspPath: e.target.value})}
-                              placeholder="/stream1"
-                              className="w-full bg-slate-900/50 border border-white/10 px-4 py-3 text-xs rounded-xl outline-none text-white font-mono"
-                            />
-                            <div className="flex flex-wrap gap-2 pt-2">
-                              {['/stream1', '/live/ch0', '/11', '/onvif1', '/h264Preview_01_main'].map(path => (
-                                <button 
-                                  key={path}
-                                  onClick={() => setEditingCamera({...editingCamera, rtspPath: path})}
-                                  className="text-[8px] font-mono bg-white/5 hover:bg-white/10 px-2 py-1 rounded border border-white/5 text-slate-400"
-                                >
-                                  {path}
-                                </button>
-                              ))}
-                            </div>
-                          </div>
-                        </div>
+                        <label className="text-[9px] font-black uppercase tracking-widest text-slate-500 px-1">Sorgente Video</label>
+                        <input 
+                          type="text" 
+                          disabled={editingCamera.type === 'webcam'}
+                          value={editingCamera.type === 'webcam' ? 'Default System' : editingCamera.url}
+                          onChange={(e) => setEditingCamera({...editingCamera, url: e.target.value})}
+                          placeholder="rtsp://admin:password@IP:554/..."
+                          className="w-full bg-white/5 border border-white/10 px-4 py-3 text-[10px] rounded-xl focus:border-white/30 outline-none transition-all text-white/60 font-mono disabled:opacity-30"
+                        />
                       </div>
                     )}
-
                   </div>
-                ) : (
-                  <div className="space-y-6 text-center py-4">
-                    <div className="bg-white p-6 rounded-[40px] inline-block shadow-2xl shadow-blue-500/40 border-8 border-blue-500/10">
-                      <QRCodeCanvas 
-                        value={`tuya_auth_session_${Math.random().toString(36).substr(2, 9)}`} 
-                        size={220}
-                        level={"Q"}
-                        includeMargin={true}
-                        imageSettings={{
-                          src: "https://www.gstatic.com/images/branding/product/2x/googleg_96dp.png",
-                          x: undefined,
-                          y: undefined,
-                          height: 32,
-                          width: 32,
-                          excavate: true,
-                        }}
-                      />
-                    </div>
-                    <div className="space-y-4">
-                      <div className="bg-orange-500/10 border border-orange-500/20 rounded-2xl p-4 text-left max-w-[320px] mx-auto">
-                        <div className="flex items-center gap-2 mb-2">
-                          <AlertTriangle size={14} className="text-orange-400" />
-                          <span className="text-[10px] font-black text-orange-400 uppercase">Nota Tecnica</span>
+
+                  {editingCamera.type === 'onvif' && (
+                    <div className="p-6 bg-blue-500/5 rounded-2xl border border-blue-500/10 space-y-4 col-span-2 mt-4">
+                      <div className="flex items-center gap-2 mb-2">
+                        <Zap size={14} className="text-blue-400" />
+                        <h4 className="text-xs font-black text-blue-400 uppercase tracking-widest">Configurazione Rete ONVIF</h4>
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <label className="text-[9px] font-black uppercase tracking-widest text-slate-500 px-1">Indirizzo IP</label>
+                          <input 
+                            type="text" value={editingCamera.ip || ''}
+                            onChange={(e) => setEditingCamera({...editingCamera, ip: e.target.value})}
+                            placeholder="es. 192.168.1.17"
+                            className="w-full bg-slate-900/50 border border-white/10 px-4 py-3 text-xs rounded-xl outline-none text-white font-mono"
+                          />
                         </div>
-                        <p className="text-[9px] text-slate-400 leading-tight">
-                          Questo QR è una simulazione dell'interfaccia **Smart Life**. Per l'integrazione reale è necessario un account **Tuya IoT Developer** per generare token di streaming validi.
-                        </p>
-                      </div>
-
-                      <div className="flex flex-col gap-2 max-w-[280px] mx-auto">
-                        <div className="flex items-start gap-3 text-left">
-                          <div className="w-5 h-5 rounded-full bg-blue-600/20 text-blue-400 flex items-center justify-center text-[10px] font-bold shrink-0">1</div>
-                          <p className="text-[10px] text-slate-400">Apri l'app <span className="text-white font-bold">Smart Life</span>.</p>
+                        <div className="space-y-2">
+                          <label className="text-[9px] font-black uppercase tracking-widest text-slate-500 px-1">Porta RTSP</label>
+                          <input 
+                            type="number" value={editingCamera.port || 554}
+                            onChange={(e) => setEditingCamera({...editingCamera, port: Number(e.target.value)})}
+                            className="w-full bg-slate-900/50 border border-white/10 px-4 py-3 text-xs rounded-xl outline-none text-white font-mono"
+                          />
                         </div>
-                        <div className="flex items-start gap-3 text-left">
-                          <div className="w-5 h-5 rounded-full bg-blue-600/20 text-blue-400 flex items-center justify-center text-[10px] font-bold shrink-0">2</div>
-                          <p className="text-[10px] text-slate-400">Usa lo **Scanner** per inquadrare il codice.</p>
+                        <div className="space-y-2">
+                          <label className="text-[9px] font-black uppercase tracking-widest text-slate-500 px-1">Username</label>
+                          <input 
+                            type="text" value={editingCamera.username || ''}
+                            onChange={(e) => setEditingCamera({...editingCamera, username: e.target.value})}
+                            className="w-full bg-slate-900/50 border border-white/10 px-4 py-3 text-xs rounded-xl outline-none text-white font-mono"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <label className="text-[9px] font-black uppercase tracking-widest text-slate-500 px-1">Password</label>
+                          <input 
+                            type="password" value={editingCamera.password || ''}
+                            onChange={(e) => setEditingCamera({...editingCamera, password: e.target.value})}
+                            className="w-full bg-slate-900/50 border border-white/10 px-4 py-3 text-xs rounded-xl outline-none text-white font-mono"
+                          />
+                        </div>
+                        <div className="space-y-2 col-span-2">
+                          <label className="text-[9px] font-black uppercase tracking-widest text-slate-500 px-1">Percorso Flusso (Path)</label>
+                          <input 
+                            type="text" value={editingCamera.rtspPath || '/stream1'}
+                            onChange={(e) => setEditingCamera({...editingCamera, rtspPath: e.target.value})}
+                            placeholder="/stream1"
+                            className="w-full bg-slate-900/50 border border-white/10 px-4 py-3 text-xs rounded-xl outline-none text-white font-mono"
+                          />
+                          <div className="flex flex-wrap gap-2 pt-2">
+                            {['/stream1', '/live/ch0', '/11', '/onvif1', '/h264Preview_01_main'].map(path => (
+                              <button 
+                                key={path}
+                                onClick={() => setEditingCamera({...editingCamera, rtspPath: path})}
+                                className="text-[8px] font-mono bg-white/5 hover:bg-white/10 px-2 py-1 rounded border border-white/5 text-slate-400"
+                              >
+                                {path}
+                              </button>
+                            ))}
+                          </div>
                         </div>
                       </div>
                     </div>
-                  </div>
-                )}
-
-                {connectMethod === 'advanced' && (
-                  <div className="space-y-4">
-                    <div className="bg-purple-500/10 border border-purple-500/20 rounded-2xl p-4">
-                      <p className="text-[10px] text-purple-300 leading-tight">
-                        <span className="font-black uppercase">Metodo Avanzato:</span> Usa questo metodo se la camera è sulla stessa rete locale. Richiede l'estrazione della Local Key tramite **Tuya IoT Platform**.
-                      </p>
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-[9px] font-black uppercase tracking-widest text-slate-500 px-1">Device ID</label>
-                      <input type="text" placeholder="bf..." className="w-full bg-white/5 border border-white/10 px-4 py-3 text-xs rounded-xl text-white font-mono" />
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-[9px] font-black uppercase tracking-widest text-slate-500 px-1">Local Key</label>
-                      <input type="password" placeholder="********" className="w-full bg-white/5 border border-white/10 px-4 py-3 text-xs rounded-xl text-white font-mono" />
-                    </div>
-                  </div>
-                )}
-
-                {connectMethod === 'browser' && (
-                  <div className="space-y-6 text-center py-4">
-                    <div className="bg-blue-500/10 border border-blue-500/20 rounded-[32px] p-8 space-y-4">
-                      <div className="w-16 h-16 bg-blue-600 rounded-full flex items-center justify-center mx-auto shadow-lg shadow-blue-500/40">
-                        <Monitor size={32} className="text-white" />
-                      </div>
-                      <div className="space-y-2">
-                        <h3 className="text-sm font-black text-white uppercase">Tab Bridge Mode</h3>
-                        <p className="text-[10px] text-slate-400 leading-relaxed">
-                          Questo metodo cattura il video direttamente dalla pagina web di **Tuya Smart Life**. È la soluzione definitiva per le camere WIBY.
-                        </p>
-                      </div>
-                    </div>
-                    
-                    <button 
-                      onClick={async () => {
-                        try {
-                          const stream = await (navigator.mediaDevices as any).getDisplayMedia({ 
-                            video: { 
-                              displaySurface: "browser",
-                              width: { ideal: 1920 },
-                              height: { ideal: 1080 }
-                            },
-                            audio: false 
-                          });
-                          
-                          const camId = editingCamera.id;
-                          streamsRef.current.set(camId, stream);
-                          
-                          // Force a brief state update to trigger video element re-assignment
-                          setCameras(prev => {
-                            const newCam = { ...editingCamera, type: 'browser' as const, status: 'online' as const };
-                            return prev.map(c => c.id === camId ? newCam : c);
-                          });
-
-                          // Ensure video element plays immediately
-                          setTimeout(() => {
-                            const videoEl = videoRefs.current.get(camId);
-                            if (videoEl) {
-                              videoEl.srcObject = stream;
-                              videoEl.play().catch(console.error);
-                            }
-                          }, 500);
-
-                          setShowCameraModal(false);
-                          if (!isMonitoring) setIsMonitoring(true);
-                        } catch (err) {
-                          console.error("Browser capture failed", err);
-                        }
-                      }}
-                      className="w-full py-5 bg-blue-600 rounded-[24px] text-xs font-black uppercase tracking-widest text-white shadow-xl hover:bg-blue-500 transition-all flex items-center justify-center gap-3"
-                    >
-                      <Zap size={16} />
-                      Collega Tab Tuya
-                    </button>
-                    
-                    <p className="text-[9px] text-slate-500 uppercase font-bold tracking-tighter">
-                      Assicurati di avere la pagina Tuya aperta in un'altra scheda
-                    </p>
-                  </div>
-                )}
+                  )}
 
                   <div className="space-y-4">
                     <label className="text-[9px] font-black uppercase tracking-widest text-slate-500 px-1">Trigger Allarmi AI Attivi</label>
@@ -1754,6 +1759,21 @@ export default function App() {
                     ))}
                   </div>
                 </div>
+
+                {/* Developer Credit in Modal */}
+                <div className="pt-10 flex flex-col items-center justify-center gap-2 opacity-30 hover:opacity-100 transition-opacity">
+                  <div className="h-px w-20 bg-gradient-to-r from-transparent via-blue-500 to-transparent mb-4" />
+                  <p className="text-[10px] font-black uppercase tracking-[0.4em] text-slate-500 text-center">
+                    Sviluppo e creazione <span className="text-white">Castro Massimo</span> by <span className="text-blue-500">DEVTOOLS</span>
+                  </p>
+                  <a 
+                    href="mailto:castromassimo@gmail.com" 
+                    className="text-[9px] font-bold text-slate-600 hover:text-blue-400 transition-colors uppercase tracking-widest"
+                  >
+                    castromassimo@gmail.com
+                  </a>
+                </div>
+
               </div>
             </motion.div>
           </motion.div>
