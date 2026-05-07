@@ -35,59 +35,87 @@ import { QRCodeCanvas } from 'qrcode.react';
 import { analyzeFrame, DetectionResult } from "./services/gemini";
 import { Camera, Incident, AlertTrigger, Zone, ZoneType, Point } from "./types";
 
-const IPCameraPlayer = ({ url, isAlertActive, isNightMode, imgRefCallback }: { url: string, isAlertActive: boolean, isNightMode: boolean, imgRefCallback: (el: HTMLImageElement | null) => void }) => {
-  const [displayUrl, setDisplayUrl] = useState<string>('');
-  
-  useEffect(() => {
-    let active = true;
-    let timeoutId: any;
-    let retryCount = 0;
+const IPCameraPlayer = ({ url, isAlertActive, isNightMode, imgRefCallback }: { 
+  url: string; 
+  isAlertActive: boolean; 
+  isNightMode: boolean;
+  imgRefCallback?: (el: HTMLImageElement | null) => void;
+}) => {
+  const [src, setSrc] = useState<string>("");
+  const [isWarmingUp, setIsWarmingUp] = useState(true);
+  const [connectionError, setConnectionError] = useState<string | null>(null);
+  const mountedRef = useRef(true);
 
-    const fetchFrame = () => {
-      if (!active) return;
+  useEffect(() => {
+    mountedRef.current = true;
+    let timeoutId: any;
+
+    const fetchFrame = async () => {
+      if (!mountedRef.current) return;
       
-      const snapshotUrl = `/api/snapshot?rtsp=${encodeURIComponent(url)}&t=${Date.now()}`;
-      const img = new Image();
-      
-      img.onload = () => {
-        if (!active) return;
-        setDisplayUrl(snapshotUrl);
-        retryCount = 0; // Reset retry count on success
-        timeoutId = setTimeout(fetchFrame, 200);
-      };
-      
-      img.onerror = () => {
-        if (!active) return;
-        retryCount++;
-        if (retryCount % 5 === 0) {
-           console.warn(`[Camera] Connection issue with ${url}. Retry attempt: ${retryCount}`);
+      try {
+        const response = await fetch(`/api/snapshot?rtsp=${encodeURIComponent(url)}&t=${Date.now()}`);
+        
+        if (!mountedRef.current) return;
+
+        if (response.ok) {
+          const blob = await response.blob();
+          const newSrc = URL.createObjectURL(blob);
+          setSrc(prev => {
+            if (prev) URL.revokeObjectURL(prev);
+            return newSrc;
+          });
+          setIsWarmingUp(false);
+          setConnectionError(null);
+          timeoutId = setTimeout(fetchFrame, 200);
+        } else if (response.status === 503) {
+          setIsWarmingUp(true);
+          setConnectionError(null);
+          timeoutId = setTimeout(fetchFrame, 1000);
+        } else {
+          setConnectionError(`Errore Server (${response.status})`);
+          timeoutId = setTimeout(fetchFrame, 3000);
         }
-        // If it's a 503 (Warming up), retry faster. Otherwise, wait more.
-        timeoutId = setTimeout(fetchFrame, retryCount > 10 ? 5000 : 2000);
-      };
-      
-      img.src = snapshotUrl;
+      } catch (e: any) {
+        if (!mountedRef.current) return;
+        setConnectionError("Errore di Rete");
+        timeoutId = setTimeout(fetchFrame, 3000);
+      }
     };
 
     fetchFrame();
-    return () => { 
-      active = false; 
-      if (timeoutId) clearTimeout(timeoutId); 
+    return () => {
+      mountedRef.current = false;
+      if (timeoutId) clearTimeout(timeoutId);
+      setSrc(prev => {
+        if (prev) URL.revokeObjectURL(prev);
+        return "";
+      });
     };
   }, [url]);
 
-  return displayUrl ? (
-    <img 
-      ref={imgRefCallback}
-      src={displayUrl} 
-      className={`w-full h-full object-cover transition-all duration-300 ${isAlertActive ? 'opacity-40 saturate-150' : 'opacity-100'}`}
-      style={isNightMode ? { filter: 'grayscale(1) brightness(1.2) contrast(1.1) sepia(0.2) hue-rotate(180deg)' } : {}}
-      crossOrigin="anonymous"
-    />
-  ) : (
-    <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-slate-900">
-      <Activity size={48} className="text-blue-500 animate-pulse" />
-      <p className="text-xs font-black uppercase tracking-widest text-blue-400">Inizializzazione IP Cam...</p>
+  return (
+    <div className="relative w-full h-full bg-slate-950 flex items-center justify-center overflow-hidden">
+      {connectionError ? (
+        <div className="flex flex-col items-center gap-2 p-4 text-center">
+          <AlertTriangle size={24} className="text-red-500 animate-pulse" />
+          <p className="text-[10px] font-black text-red-500 uppercase tracking-widest">{connectionError}</p>
+          <p className="text-[8px] text-slate-500 font-bold uppercase mt-1">Tentativo di riconnessione...</p>
+        </div>
+      ) : isWarmingUp ? (
+        <div className="flex flex-col items-center gap-4">
+          <div className="w-12 h-12 border-4 border-blue-500/20 border-t-blue-500 rounded-full animate-spin" />
+          <p className="text-[10px] font-black text-blue-500 uppercase tracking-widest animate-pulse">Inizializzazione Cam...</p>
+        </div>
+      ) : (
+        <img 
+          ref={imgRefCallback}
+          src={src} 
+          className={`w-full h-full object-cover transition-all duration-300 ${isAlertActive ? 'opacity-40 saturate-150' : 'opacity-100'}`}
+          style={isNightMode ? { filter: 'grayscale(1) brightness(1.2) contrast(1.1) sepia(0.2) hue-rotate(180deg)' } : {}}
+          crossOrigin="anonymous"
+        />
+      )}
     </div>
   );
 };

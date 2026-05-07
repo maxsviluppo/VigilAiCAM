@@ -75,7 +75,7 @@ async function startServer() {
   function startStream(rtspUrl: string) {
     console.log(`[Camera Manager] Starting FFmpeg for: ${rtspUrl}`);
     const args = [
-      '-loglevel', 'quiet',
+      '-loglevel', 'error',
       '-rtsp_transport', 'tcp',
       '-timeout', '10000000',
       '-i', rtspUrl,
@@ -88,7 +88,12 @@ async function startServer() {
     const ff = spawn(FFMPEG_BIN, args);
     let buffer = Buffer.alloc(0);
 
-    const streamData = { latestFrame: null as Buffer | null, lastAccessed: Date.now(), process: ff };
+    const streamData = { 
+      latestFrame: null as Buffer | null, 
+      lastAccessed: Date.now(), 
+      startTime: Date.now(),
+      process: ff 
+    };
     activeStreams.set(rtspUrl, streamData);
 
     ff.stdout.on('data', (chunk: Buffer) => {
@@ -131,7 +136,7 @@ async function startServer() {
     if (!rtsp) return res.status(400).json({ error: "Missing rtsp parameter" });
 
     if (!activeStreams.has(rtsp)) {
-      console.log(`[Camera Manager] Request from ${clientIp} for: ${rtsp}. Initializing...`);
+      console.log(`[API] Snapshot init from ${clientIp} for ${rtsp.substring(0, 30)}...`);
       startStream(rtsp);
       return res.status(503).json({ error: "Initializing stream..." });
     }
@@ -140,6 +145,12 @@ async function startServer() {
     stream.lastAccessed = Date.now();
 
     if (!stream.latestFrame) {
+      // Check if it's taking too long to get the first frame
+      if (Date.now() - stream.startTime > 15000) {
+        console.warn(`[API] Stream timeout for ${rtsp.substring(0, 30)}`);
+        activeStreams.delete(rtsp);
+        return res.status(504).json({ error: "Stream Timeout" });
+      }
       return res.status(503).json({ error: "Waiting for first frame..." });
     }
 
