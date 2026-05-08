@@ -1,0 +1,164 @@
+[2026-05-08T08:58:07.846Z] [192.168.1.17:554/stream1] [rtsp @ 000001d7aef60c00] method DESCRIBE failed: 401 Unauthorized
+[2026-05-08T08:58:07.847Z] [192.168.1.17:554/stream1] [in#0 @ 000001d7aef60ac0] Error opening input: Server returned 401 Unauthorized (authorization failed)
+Error opening input file rtsp://Testcamera:12345678@192.168.1.17:554/stream1.
+Error opening input files: Server returned 401 Unauthorized (authorization failed)
+[2026-05-08T08:58:13.185Z] [192.168.1.17:554/stream1] [rtsp @ 000002996b5f0c00] method DESCRIBE failed: 401 Unauthorized
+[2026-05-08T08:58:13.186Z] [192.168.1.17:554/stream1] [in#0 @ 000002996b5f0ac0] Error opening input: Server returned 401 Unauthorized (authorization failed)
+Error opening input file rtsp://Testcamera:12345678@192.168.1.17:554/stream1.
+Error opening input files: Server returned 401 Unauthorized (authorization failed)
+[2026-05-08T08:58:18.605Z] [192.168.1.17:554/stream1] [rtsp @ 000002046b880c00] method DESCRIBE failed: 401 Unauthorized
+[2026-05-08T08:58:18.606Z] [192.168.1.17:554/stream1] [in#0 @ 000002046b880ac0] Error opening input: Server returned 401 Unauthorized (authorization failed)
+Error opening input file rtsp://Testcamera:12345678@192.168.1.17:554/stream1.
+Error opening input files: Server returned 401 Unauthorized (authorization failed)
+[2026-05-08T08:58:23.951Z] [192.168.1.17:554/stream1] [rtsp @ 000001ee02ad0c00] method DESCRIBE failed: 401 Unauthorized
+[2026-05-08T08:58:23.952Z] [192.168.1.17:554/stream1] [in#0 @ 000001ee02ad0ac0] Error opening input: Server returned 401 Unauthorized (authorization failed)
+Error opening input file rtsp://Testcamera:12345678@192.168.1.17:554/stream1.
+Error opening input files: Server returned 401 Unauthorized (authorization failed)
+[2026-05-08T08:58:29.277Z] [192.168.1.17:554/stream1] [rtsp @ 00000263f7f60c00] method DESCRIBE failed: 401 Unauthorized
+[2026-05-08T08:58:29.278Z] [192.168.1.17:554/stream1] [in#0 @ 00000263f7f60ac0] Error opening input: Server returned 401 Unauthorized (authorization failed)
+Error opening input file rtsp://Testcamera:12345678@192.168.1.17:554/stream1.
+Error opening input files: Server returned 401 Unauthorized (authorization failed)
+[2026-05-08T08:58:34.668Z] [192.168.1.17:554/stream1] [rtsp @ 00000282ddf60c00] method DESCRIBE failed: 401 Unauthorized
+[2026-05-08T08:58:34.669Z] [192.168.1.17:554/stream1] [in#0 @ 00000282ddf60ac0] Error opening input: Server returned 401 Unauthorized (authorization failed)
+Error opening input file rtsp://Testcamera:12345678@192.168.1.17:554/stream1.
+Error opening input files: Server returned 401 Unauthorized (authorization failed)
+[2026-05-08T08:58:39.927Z] [192.168.1.17:554/stream1] [rtsp @ 000002058ab30c00] method DESCRIBE failed: 401 Unauthorized
+[2026-05-08T08:58:39.927Z] [192.168.1.17:554/stream1] [in#0 @ 000002058ab30ac0] Error opening input: Server returned 401 Unauthorized (authorization failed)
+Error opening input file rtsp://Testcamera:12345678@192.168.1.17:554/stream1.
+Error opening input files: Server returned 401 Unauthorized (authorization failed)
+[2026-05-08T08:58:45.258Z] [192.168.1.17:554/stream1] [rtsp @ 0000019cb6e70c00] method DESCRIBE failed: 401 Unauthorized
+[2026-05-08T08:58:45.258Z] [192.168.1.17:554/stream1] [in#0 @ 0000019cb6e70ac0] Error opening input: Server returned 401 Unauthorized (authorization failed)
+Error opening input file rtsp://Testcamera:12345678@192.168.1.17:554/stream1.
+Error opening input files: Server returned 401 Unauthorized (authorization failed)
+[2026-05-08T08:58:50.589Z] [192.168.1.17:554/stream1] [rtsp @ 0000020411420c00] method DESCRIBE failed: 401 Unauthorized
+[2026-05-08T08:58:50.589Z] [192.168.1.17:554/stream1] [in#0 @ 0000020411420ac0] Error opening input: Server returned 401 Unauthorized (authorization failed)
+Error opening input file rtsp://Testcamera:12345678@192.168.1.17:554/stream1.
+Error opening input files: Server returned 401 Unauthorized (authorization failed)
+[2026-05-08T08:58:55.816Z] [192.168.1.17:554/stream1] [rtsp @ 00000204e6f40c00] method DESCRIBE failed: 401 Unauthorized
+[2026-05-08T08:58:55.817Z] [192.168.1.17:554/stream1] [in#0 @ 00000204e6f40ac0] Error opening input: Server returned 401 Unauthorized (authorization failed)
+Error opening input file rtsp://Testcamera:12345678@192.168.1.17:554/stream1.
+Error opening input files: Server returned 401 Unauthorized (authorization failed)
+[2026-05-08T08:59:01.206Z] [192.168.1.17:554/stream1] [rtsp @ 000001cb88220c00] method DESCRIBE failed: 401 Unauthorized
+[2026-05-08T08:59:01.206Z] [192.168.1.17:554/stream1] [in#0 @ 000001cb88220ac0] Error opening input: Server returned 401 Unauthorized (authorization failed)
+Error opening input file rtsp://Testcamera:12345678@192.168.1.17:554/stream1.
+Error opening input files: Server returned 401 Unauthorized (authorization failed)
+[2026-05-08T08:59:06.392Z] [192.168.1.17:554/stream1] [rtsp @ 000001a63a190c00] method DESCRIBE failed: 401 Unauthorized
+[2026-05-08T08:59:06.392Z] [192.168.1.17:554/stream1] [in#0 @ 000001a63a190ac0] Error opening input: Server returned 401 Unauthorized (authorization failed)
+Error opening input file rtsp://Testcamera:12345678@192.168.1.17:554/stream1.
+Error opening input files: Server returned 401 Unauthorized (authorization failed)
+[2026-05-08T08:59:11.624Z] [192.168.1.17:554/stream1] [rtsp @ 000002a6d05b0c00] method DESCRIBE failed: 401 Unauthorized
+[2026-05-08T08:59:11.624Z] [192.168.1.17:554/stream1] [in#0 @ 000002a6d05b0ac0] Error opening input: Server returned 401 Unauthorized (authorization failed)
+Error opening input file rtsp://Testcamera:12345678@192.168.1.17:554/stream1.
+Error opening input files: Server returned 401 Unauthorized (authorization failed)
+[2026-05-08T08:59:16.820Z] [192.168.1.17:554/stream1] [rtsp @ 000001ee53820c00] method DESCRIBE failed: 401 Unauthorized
+[2026-05-08T08:59:16.821Z] [192.168.1.17:554/stream1] [in#0 @ 000001ee53820ac0] Error opening input: Server returned 401 Unauthorized (authorization failed)
+Error opening input file rtsp://Testcamera:12345678@192.168.1.17:554/stream1.
+Error opening input files: Server returned 401 Unauthorized (authorization failed)
+[2026-05-08T08:59:21.972Z] [192.168.1.17:554/stream1] [rtsp @ 0000023c37b60c00] method DESCRIBE failed: 401 Unauthorized
+[2026-05-08T08:59:21.972Z] [192.168.1.17:554/stream1] [in#0 @ 0000023c37b60ac0] Error opening input: Server returned 401 Unauthorized (authorization failed)
+Error opening input file rtsp://Testcamera:12345678@192.168.1.17:554/stream1.
+Error opening input files: Server returned 401 Unauthorized (authorization failed)
+[2026-05-08T08:59:27.524Z] [192.168.1.17:554/stream1] [rtsp @ 0000016148fb0c00] method DESCRIBE failed: 401 Unauthorized
+[2026-05-08T08:59:27.526Z] [192.168.1.17:554/stream1] [in#0 @ 0000016148fb0ac0] Error opening input: Server returned 401 Unauthorized (authorization failed)
+Error opening input file rtsp://Testcamera:12345678@192.168.1.17:554/stream1.
+Error opening input files: Server returned 401 Unauthorized (authorization failed)
+[2026-05-08T08:59:32.876Z] [192.168.1.17:554/stream1] [rtsp @ 00000273a2470c00] method DESCRIBE failed: 401 Unauthorized
+[2026-05-08T08:59:32.876Z] [192.168.1.17:554/stream1] [in#0 @ 00000273a2470ac0] Error opening input: Server returned 401 Unauthorized (authorization failed)
+Error opening input file rtsp://Testcamera:12345678@192.168.1.17:554/stream1.
+Error opening input files: Server returned 401 Unauthorized (authorization failed)
+[2026-05-08T08:59:38.094Z] [192.168.1.17:554/stream1] [rtsp @ 000001c2d7550c00] method DESCRIBE failed: 401 Unauthorized
+[2026-05-08T08:59:38.094Z] [192.168.1.17:554/stream1] [in#0 @ 000001c2d7550ac0] Error opening input: Server returned 401 Unauthorized (authorization failed)
+Error opening input file rtsp://Testcamera:12345678@192.168.1.17:554/stream1.
+Error opening input files: Server returned 401 Unauthorized (authorization failed)
+[2026-05-08T08:59:43.966Z] [192.168.1.17:554/stream1] [rtsp @ 000002d33c7c0c00] method DESCRIBE failed: 401 Unauthorized
+[in#0 @ 000002d33c7c0ac0] Error opening input: Server returned 401 Unauthorized (authorization failed)
+Error opening input file rtsp://Testcamera:12345678@192.168.1.17:554/stream1.
+Error opening input files: Server returned 401 Unauthorized (authorization failed)
+[2026-05-08T08:59:49.224Z] [192.168.1.17:554/stream1] [rtsp @ 00000114cc970c00] method DESCRIBE failed: 401 Unauthorized
+[2026-05-08T08:59:49.225Z] [192.168.1.17:554/stream1] [in#0 @ 00000114cc970ac0] Error opening input: Server returned 401 Unauthorized (authorization failed)
+Error opening input file rtsp://Testcamera:12345678@192.168.1.17:554/stream1.
+Error opening input files: Server returned 401 Unauthorized (authorization failed)
+[2026-05-08T08:59:54.645Z] [192.168.1.17:554/stream1] [rtsp @ 000002e67c3c0c00] method DESCRIBE failed: 401 Unauthorized
+[2026-05-08T08:59:54.645Z] [192.168.1.17:554/stream1] [in#0 @ 000002e67c3c0ac0] Error opening input: Server returned 401 Unauthorized (authorization failed)
+Error opening input file rtsp://Testcamera:12345678@192.168.1.17:554/stream1.
+Error opening input files: Server returned 401 Unauthorized (authorization failed)
+[2026-05-08T08:59:59.958Z] [192.168.1.17:554/stream1] [rtsp @ 000002ba67c60c00] method DESCRIBE failed: 401 Unauthorized
+[2026-05-08T08:59:59.958Z] [192.168.1.17:554/stream1] [in#0 @ 000002ba67c60ac0] Error opening input: Server returned 401 Unauthorized (authorization failed)
+Error opening input file rtsp://Testcamera:12345678@192.168.1.17:554/stream1.
+Error opening input files: Server returned 401 Unauthorized (authorization failed)
+[2026-05-08T09:00:05.748Z] [192.168.1.17:554/stream1] [rtsp @ 000001eaf7bc0c00] method DESCRIBE failed: 401 Unauthorized
+[in#0 @ 000001eaf7bc0ac0] Error opening input: Server returned 401 Unauthorized (authorization failed)
+Error opening input file rtsp://Testcamera:12345678@192.168.1.17:554/stream1.
+Error opening input files: Server returned 401 Unauthorized (authorization failed)
+[2026-05-08T09:00:10.960Z] [192.168.1.17:554/stream1] [rtsp @ 0000014317ca0c00] method DESCRIBE failed: 401 Unauthorized
+[2026-05-08T09:00:10.961Z] [192.168.1.17:554/stream1] [in#0 @ 0000014317ca0ac0] Error opening input: Server returned 401 Unauthorized (authorization failed)
+Error opening input file rtsp://Testcamera:12345678@192.168.1.17:554/stream1.
+Error opening input files: Server returned 401 Unauthorized (authorization failed)
+[2026-05-08T09:00:16.658Z] [192.168.1.17:554/stream1] [rtsp @ 0000027d355d0c00] method DESCRIBE failed: 401 Unauthorized
+[2026-05-08T09:00:16.660Z] [192.168.1.17:554/stream1] [in#0 @ 0000027d355d0ac0] Error opening input: Server returned 401 Unauthorized (authorization failed)
+Error opening input file rtsp://Testcamera:12345678@192.168.1.17:554/stream1.
+Error opening input files: Server returned 401 Unauthorized (authorization failed)
+[2026-05-08T09:00:21.847Z] [192.168.1.17:554/stream1] [rtsp @ 0000027f5c460c00] method DESCRIBE failed: 401 Unauthorized
+[2026-05-08T09:00:21.848Z] [192.168.1.17:554/stream1] [in#0 @ 0000027f5c460ac0] Error opening input: Server returned 401 Unauthorized (authorization failed)
+Error opening input file rtsp://Testcamera:12345678@192.168.1.17:554/stream1.
+Error opening input files: Server returned 401 Unauthorized (authorization failed)
+[2026-05-08T09:00:27.081Z] [192.168.1.17:554/stream1] [rtsp @ 000002b545190c00] method DESCRIBE failed: 401 Unauthorized
+[2026-05-08T09:00:27.082Z] [192.168.1.17:554/stream1] [in#0 @ 000002b545190ac0] Error opening input: Server returned 401 Unauthorized (authorization failed)
+Error opening input file rtsp://Testcamera:12345678@192.168.1.17:554/stream1.
+Error opening input files: Server returned 401 Unauthorized (authorization failed)
+[2026-05-08T09:00:32.738Z] [192.168.1.17:554/stream1] [rtsp @ 0000024251650c00] method DESCRIBE failed: 401 Unauthorized
+[in#0 @ 0000024251650ac0] Error opening input: Server returned 401 Unauthorized (authorization failed)
+Error opening input file rtsp://Testcamera:12345678@192.168.1.17:554/stream1.
+Error opening input files: Server returned 401 Unauthorized (authorization failed)
+[2026-05-08T09:00:37.926Z] [192.168.1.17:554/stream1] [rtsp @ 0000029a2a340c00] method DESCRIBE failed: 401 Unauthorized
+[2026-05-08T09:00:37.926Z] [192.168.1.17:554/stream1] [in#0 @ 0000029a2a340ac0] Error opening input: Server returned 401 Unauthorized (authorization failed)
+Error opening input file rtsp://Testcamera:12345678@192.168.1.17:554/stream1.
+Error opening input files: Server returned 401 Unauthorized (authorization failed)
+[2026-05-08T09:00:43.076Z] [192.168.1.17:554/stream1] [rtsp @ 0000027122750c00] method DESCRIBE failed: 401 Unauthorized
+[2026-05-08T09:00:43.076Z] [192.168.1.17:554/stream1] [in#0 @ 0000027122750ac0] Error opening input: Server returned 401 Unauthorized (authorization failed)
+Error opening input file rtsp://Testcamera:12345678@192.168.1.17:554/stream1.
+Error opening input files: Server returned 401 Unauthorized (authorization failed)
+[2026-05-08T09:00:48.196Z] [192.168.1.17:554/stream1] [rtsp @ 000001b127c50c00] method DESCRIBE failed: 401 Unauthorized
+[2026-05-08T09:00:48.196Z] [192.168.1.17:554/stream1] [in#0 @ 000001b127c50ac0] Error opening input: Server returned 401 Unauthorized (authorization failed)
+Error opening input file rtsp://Testcamera:12345678@192.168.1.17:554/stream1.
+Error opening input files: Server returned 401 Unauthorized (authorization failed)
+[2026-05-08T09:00:53.323Z] [192.168.1.17:554/stream1] [rtsp @ 000002204c470c00] method DESCRIBE failed: 401 Unauthorized
+[2026-05-08T09:00:53.323Z] [192.168.1.17:554/stream1] [in#0 @ 000002204c470ac0] Error opening input: Server returned 401 Unauthorized (authorization failed)
+Error opening input file rtsp://Testcamera:12345678@192.168.1.17:554/stream1.
+Error opening input files: Server returned 401 Unauthorized (authorization failed)
+[2026-05-08T09:00:58.427Z] [192.168.1.17:554/stream1] [rtsp @ 0000026510700c00] method DESCRIBE failed: 401 Unauthorized
+[2026-05-08T09:00:58.427Z] [192.168.1.17:554/stream1] [in#0 @ 0000026510700ac0] Error opening input: Server returned 401 Unauthorized (authorization failed)
+Error opening input file rtsp://Testcamera:12345678@192.168.1.17:554/stream1.
+Error opening input files: Server returned 401 Unauthorized (authorization failed)
+[2026-05-08T09:01:03.547Z] [192.168.1.17:554/stream1] [rtsp @ 0000018ab6a70c00] method DESCRIBE failed: 401 Unauthorized
+[2026-05-08T09:01:03.547Z] [192.168.1.17:554/stream1] [in#0 @ 0000018ab6a70ac0] Error opening input: Server returned 401 Unauthorized (authorization failed)
+Error opening input file rtsp://Testcamera:12345678@192.168.1.17:554/stream1.
+Error opening input files: Server returned 401 Unauthorized (authorization failed)
+[2026-05-08T09:01:08.672Z] [192.168.1.17:554/stream1] [rtsp @ 000002675c880c00] method DESCRIBE failed: 401 Unauthorized
+[2026-05-08T09:01:08.672Z] [192.168.1.17:554/stream1] [in#0 @ 000002675c880ac0] Error opening input: Server returned 401 Unauthorized (authorization failed)
+Error opening input file rtsp://Testcamera:12345678@192.168.1.17:554/stream1.
+Error opening input files: Server returned 401 Unauthorized (authorization failed)
+[2026-05-08T09:01:13.779Z] [192.168.1.17:554/stream1] [rtsp @ 000002555ba90c00] method DESCRIBE failed: 401 Unauthorized
+[2026-05-08T09:01:13.780Z] [192.168.1.17:554/stream1] [in#0 @ 000002555ba90ac0] Error opening input: Server returned 401 Unauthorized (authorization failed)
+Error opening input file rtsp://Testcamera:12345678@192.168.1.17:554/stream1.
+Error opening input files: Server returned 401 Unauthorized (authorization failed)
+[2026-05-08T09:01:18.894Z] [192.168.1.17:554/stream1] [rtsp @ 000002303b1f0c00] method DESCRIBE failed: 401 Unauthorized
+[2026-05-08T09:01:18.894Z] [192.168.1.17:554/stream1] [in#0 @ 000002303b1f0ac0] Error opening input: Server returned 401 Unauthorized (authorization failed)
+Error opening input file rtsp://Testcamera:12345678@192.168.1.17:554/stream1.
+Error opening input files: Server returned 401 Unauthorized (authorization failed)
+[2026-05-08T09:01:24.035Z] [192.168.1.17:554/stream1] [rtsp @ 0000015f94e70c00] method DESCRIBE failed: 401 Unauthorized
+[2026-05-08T09:01:24.035Z] [192.168.1.17:554/stream1] [in#0 @ 0000015f94e70ac0] Error opening input: Server returned 401 Unauthorized (authorization failed)
+Error opening input file rtsp://Testcamera:12345678@192.168.1.17:554/stream1.
+Error opening input files: Server returned 401 Unauthorized (authorization failed)
+[2026-05-08T09:01:29.136Z] [192.168.1.17:554/stream1] [rtsp @ 000001d65e770c00] method DESCRIBE failed: 401 Unauthorized
+[2026-05-08T09:01:29.136Z] [192.168.1.17:554/stream1] [in#0 @ 000001d65e770ac0] Error opening input: Server returned 401 Unauthorized (authorization failed)
+Error opening input file rtsp://Testcamera:12345678@192.168.1.17:554/stream1.
+Error opening input files: Server returned 401 Unauthorized (authorization failed)
+[2026-05-08T09:01:34.261Z] [192.168.1.17:554/stream1] [rtsp @ 0000025988fe0c00] method DESCRIBE failed: 401 Unauthorized
+[2026-05-08T09:01:34.262Z] [192.168.1.17:554/stream1] [in#0 @ 0000025988fe0ac0] Error opening input: Server returned 401 Unauthorized (authorization failed)
+Error opening input file rtsp://Testcamera:12345678@192.168.1.17:554/stream1.
+Error opening input files: Server returned 401 Unauthorized (authorization failed)
+[2026-05-08T09:01:39.381Z] [192.168.1.17:554/stream1] [rtsp @ 00000259311a0c00] method DESCRIBE failed: 401 Unauthorized
+[2026-05-08T09:01:39.382Z] [192.168.1.17:554/stream1] [in#0 @ 00000259311a0ac0] Error opening input: Server returned 401 Unauthorized (authorization failed)
+Error opening input file rtsp://Testcamera:12345678@192.168.1.17:554/stream1.
+Error opening input files: Server returned 401 Unauthorized (authorization failed)

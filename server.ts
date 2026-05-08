@@ -72,7 +72,7 @@ async function startServer() {
   const SOI = Buffer.from([0xFF, 0xD8]);
   const EOI = Buffer.from([0xFF, 0xD9]);
 
-  function startStream(rtspUrl: string) {
+  async function startStream(rtspUrl: string) {
     console.log(`[Camera Manager] Starting FFmpeg for: ${rtspUrl.split('@')[1] || rtspUrl}`); // Hide credentials in logs
     const args = [
       '-loglevel', 'error',

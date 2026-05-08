@@ -1,4 +1,3 @@
-
 import { useState, useEffect, useRef, useCallback, MouseEvent } from "react";
 import { 
   Camera as CameraIcon, 
@@ -26,11 +25,12 @@ import {
   Maximize2,
   Scan,
   X,
-  Lock,
+  AlertCircle,
+  Move,
   Gem,
-  AlertCircle
+  Lock
 } from "lucide-react";
-import { motion, AnimatePresence } from "motion/react";
+import { motion, AnimatePresence, Reorder } from "framer-motion";
 import { QRCodeCanvas } from 'qrcode.react';
 import { analyzeFrame, DetectionResult } from "./services/gemini";
 import { Camera, Incident, AlertTrigger, Zone, ZoneType, Point } from "./types";
@@ -172,15 +172,51 @@ const Auth = () => {
 };
 
 export default function App() {
+
   const [connectMethod, setConnectMethod] = useState<'direct' | 'advanced' | 'browser'>('direct');
   
   const [user, setUser] = useState<any>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [cameras, setCameras] = useState<Camera[]>([]);
+  const [activeCameraId, setActiveCameraId] = useState<string | null>(null);
+  const [incidents, setIncidents] = useState<Incident[]>([]);
+  const [isMonitoring, setIsMonitoring] = useState(false);
+  const [isAiEnabled, setIsAiEnabled] = useState(true);
+  const [alertingCameraIds, setAlertingCameraIds] = useState<string[]>([]);
+  const [lastAnalysis, setLastAnalysis] = useState<DetectionResult | null>(null);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+  const [showPlans, setShowPlans] = useState(false);
+  const [showCameraModal, setShowCameraModal] = useState(false);
+  const [editingCamera, setEditingCamera] = useState<Camera | null>(null);
+  const [activeCamStatuses, setActiveCamStatuses] = useState<Record<string, boolean>>({});
+  const [cameraToDelete, setCameraToDelete] = useState<string | null>(null);
+  const [isNightMode, setIsNightMode] = useState(false);
+  const [notificationEmails, setNotificationEmails] = useState<string[]>(["castromassimo@gmail.com"]);
+  const [newEmail, setNewEmail] = useState("");
+  const [isSimulating, setIsSimulating] = useState(false);
+  const [isMultiView, setIsMultiView] = useState(true);
+  const [preventSleep, setPreventSleep] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveStatus, setSaveStatus] = useState<{ type: 'success' | 'error', message: string } | null>(null);
+  const [isReordering, setIsReordering] = useState(false);
+
+  const [isEditingZones, setIsEditingZones] = useState(false);
+  const [currentDrawingZone, setCurrentDrawingZone] = useState<Partial<Zone> | null>(null);
+  const [draggingZoneId, setDraggingZoneId] = useState<string | null>(null);
+  const [dragType, setDragType] = useState<"move" | number | null>(null);
+  const [dragStart, setDragStart] = useState<{ x: number; y: number; initialPoints: Point[] } | null>(null);
+  const [selectedZoneId, setSelectedZoneId] = useState<string | null>(null);
+  
+  // Settings State
+  const [aiModel, setAiModel] = useState(() => localStorage.getItem("vigilai_model") || "gemini-1.5-flash");
+  const [appSettings, setAppSettings] = useState({
+    geminiKey: localStorage.getItem("vigilai_gemini_key") || "",
+    emailUser: localStorage.getItem("vigilai_email_user") || "",
+    emailPass: localStorage.getItem("vigilai_email_pass") || "",
+  });
   
   useEffect(() => {
-    console.log("[Supabase] Initializing with URL:", supabase.auth.getSession());
-    
     supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user ?? null);
       setAuthLoading(false);
@@ -204,63 +240,62 @@ export default function App() {
     if (user) checkTable();
   }, [user]);
 
+
+  
   const fetchUserData = useCallback(async () => {
+
     if (!user) return;
-    const { data: cams } = await supabase.from('cameras').select('*').eq('user_id', user.id);
+    const { data: cams } = await supabase.from('cameras').select('*').order('order', { ascending: true });
     if (cams) {
       const mappedCams = cams.map((c: any) => ({ ...c, enabledTriggers: c.enabled_triggers || [], rtspPath: c.rtsp_path || '/stream1' }));
       setCameras(mappedCams);
+      // Auto-enable monitoring for active cams if desired
+      const initialStatuses: Record<string, boolean> = {};
+      mappedCams.forEach(c => initialStatuses[c.id] = true);
+      setActiveCamStatuses(initialStatuses);
       if (mappedCams.length > 0 && !activeCameraId) setActiveCameraId(mappedCams[0].id);
     }
-  }, [user]);
+  }, [user, activeCameraId]);
+
+  const updateCameraOrder = async (newOrder: Camera[]) => {
+    setCameras(newOrder);
+    if (!user) return;
+    
+    // Persist new order to Supabase without wiping other columns
+    const updates = newOrder.map((cam, index) => ({
+      ...cam,
+      user_id: user.id,
+      order: index,
+      // Map frontend field names to DB column names if they differ
+      enabled_triggers: cam.enabledTriggers,
+      rtsp_path: cam.rtspPath
+    }));
+    
+    const { error } = await supabase.from('cameras').upsert(updates, { onConflict: 'id' });
+    if (error) console.error("Errore salvataggio ordine:", error);
+  };
+
+  const handleOrderSwap = (camId: string, newPosStr: string) => {
+    const newPos = parseInt(newPosStr);
+    if (isNaN(newPos) || newPos < 1 || newPos > cameras.length) return;
+    
+    const currentIndex = cameras.findIndex(c => c.id === camId);
+    const targetIndex = newPos - 1;
+    
+    if (currentIndex === targetIndex) return;
+    
+    const newOrder = [...cameras];
+    const temp = newOrder[currentIndex];
+    newOrder[currentIndex] = newOrder[targetIndex];
+    newOrder[targetIndex] = temp;
+    
+    updateCameraOrder(newOrder);
+  };
 
   useEffect(() => { if (user) fetchUserData(); }, [user, fetchUserData]);
 
-  const [activeCameraId, setActiveCameraId] = useState<string | null>(null);
-  const [incidents, setIncidents] = useState<Incident[]>([]);
-  const [isMonitoring, setIsMonitoring] = useState(false);
-  const [isAiEnabled, setIsAiEnabled] = useState(true);
-  
-  useEffect(() => {
-    if (!isAiEnabled) {
-      setLastAnalysis(null);
-      setIsAnalyzing(false);
-    }
-  }, [isAiEnabled]);
 
-  const [alertingCameraIds, setAlertingCameraIds] = useState<string[]>([]);
-  const [lastAnalysis, setLastAnalysis] = useState<DetectionResult | null>(null);
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [showSettings, setShowSettings] = useState(false);
-  const [showPlans, setShowPlans] = useState(false);
-  const [showCameraModal, setShowCameraModal] = useState(false);
-  const [editingCamera, setEditingCamera] = useState<Camera | null>(null);
-  const [activeCamStatuses, setActiveCamStatuses] = useState<Record<string, boolean>>({});
-  const [cameraToDelete, setCameraToDelete] = useState<string | null>(null);
-  const [isNightMode, setIsNightMode] = useState(false);
-  const [notificationEmails, setNotificationEmails] = useState<string[]>(["castromassimo@gmail.com"]);
-  const [newEmail, setNewEmail] = useState("");
-  const [isSimulating, setIsSimulating] = useState(false);
-  const [isMultiView, setIsMultiView] = useState(true);
-  const [preventSleep, setPreventSleep] = useState(true);
-  const [isSaving, setIsSaving] = useState(false);
-  const [saveStatus, setSaveStatus] = useState<{ type: 'success' | 'error', message: string } | null>(null);
 
-  // Smart Zones state
-  const [isEditingZones, setIsEditingZones] = useState(false);
-  const [currentDrawingZone, setCurrentDrawingZone] = useState<Partial<Zone> | null>(null);
-  const [draggingZoneId, setDraggingZoneId] = useState<string | null>(null);
-  const [dragType, setDragType] = useState<"move" | number | null>(null);
-  const [dragStart, setDragStart] = useState<{ x: number; y: number; initialPoints: Point[] } | null>(null);
-  const [selectedZoneId, setSelectedZoneId] = useState<string | null>(null);
-  
-  // Settings State
-  const [aiModel, setAiModel] = useState(() => localStorage.getItem("vigilai_model") || "gemini-3-flash-preview");
-  const [appSettings, setAppSettings] = useState({
-    geminiKey: localStorage.getItem("vigilai_gemini_key") || "",
-    emailUser: localStorage.getItem("vigilai_email_user") || "",
-    emailPass: localStorage.getItem("vigilai_email_pass") || "",
-  });
 
   const videoRefs = useRef<Map<string, HTMLVideoElement>>(new Map());
   const imgRefs = useRef<Map<string, HTMLImageElement>>(new Map());
@@ -861,8 +896,17 @@ export default function App() {
     setShowCameraModal(true);
   };
 
-  if (authLoading) return null;
+  if (authLoading) return (
+    <div className="min-h-screen bg-[#050810] flex items-center justify-center">
+      <div className="flex flex-col items-center gap-6">
+        <div className="w-16 h-16 border-4 border-blue-500/20 border-t-blue-500 rounded-full animate-spin shadow-[0_0_20px_rgba(37,99,235,0.2)]" />
+        <p className="text-[10px] font-black text-blue-500 uppercase tracking-[0.3em] animate-pulse">Sincronizzazione Vigil.AI...</p>
+      </div>
+    </div>
+  );
+
   if (!user) return <Auth />;
+
 
   return (
     <div className="min-h-screen bg-[#050810] text-slate-300 font-sans selection:bg-blue-500/30 flex flex-col overflow-hidden">
@@ -918,6 +962,17 @@ export default function App() {
                 title="Vista Griglia"
               >
                 <LayoutGrid size={18} />
+              </button>
+
+              <button 
+                onClick={() => {
+                  setIsReordering(!isReordering);
+                  if (!isReordering) setIsEditingZones(false);
+                }}
+                className={`p-3 rounded-xl lg:rounded-2xl transition-all border ${isReordering ? 'bg-blue-600 text-white shadow-[0_0_20px_rgba(37,99,235,0.4)] border-blue-400' : 'glass border-white/5 text-slate-500 hover:text-white'}`}
+                title={isReordering ? "Salva Ordine" : "Ordina Griglia"}
+              >
+                <Move size={18} className={isReordering ? "animate-pulse" : ""} />
               </button>
 
               <button 
@@ -992,7 +1047,6 @@ export default function App() {
             
             {/* Camera Grid Section */}
             <div
-              id="monitoring-grid"
               className={`grid gap-8 ${isMultiView ? 'grid-cols-1 xl:grid-cols-2' : 'grid-cols-1'}`}
               onMouseMove={(e) => handleZoneMove(e as any)}
               onTouchMove={(e) => handleZoneMove(e as any)}
@@ -1000,266 +1054,290 @@ export default function App() {
               onTouchEnd={handleZoneEnd}
               onMouseLeave={handleZoneEnd}
             >
-              {cameras.map((cam) => (
-                <motion.div 
-                  layout
-                  key={cam.id}
-                  ref={(el) => { if (el) cardRefs.current.set(cam.id, el as HTMLDivElement); }}
-                  onMouseDown={(e) => handleZoneStart(e as any, cam.id)}
-                  onTouchStart={(e) => handleZoneStart(e as any, cam.id)}
-                  onClick={() => { 
-                    if (isEditingZones) {
-                      setActiveCameraId(cam.id);
-                    } else {
-                      setActiveCameraId(cam.id); 
-                      setIsMultiView(false); 
-                    }
-                  }}
-                  className={`relative glass rounded-[48px] overflow-hidden group shadow-2xl transition-all duration-700 cursor-pointer ${
-                    !isMultiView && cam.id !== activeCameraId ? 'hidden' : ''
-                  } aspect-[16/10] ${
-                    isEditingZones && activeCameraId === cam.id
-                      ? 'ring-4 ring-amber-500/60 ring-inset touch-none'
-                      : 'border-white/5 opacity-80 hover:opacity-100'
-                  }`}
-                >
-                  <div className="absolute inset-0 bg-slate-900/40 z-0 animate-pulse" />
-                  
-                  {isMonitoring && activeCamStatuses[cam.id] ? (
-                    (cam.type === 'ip' || cam.type === 'onvif') ? (
-                      <IPCameraPlayer 
-                        url={cam.url || ''} 
-                        isAlertActive={alertingCameraIds.includes(cam.id)} 
-                        isNightMode={isNightMode} 
-                        imgRefCallback={(el) => { if (el) imgRefs.current.set(cam.id, el); else imgRefs.current.delete(cam.id); }} 
-                      />
+              <AnimatePresence mode="popLayout">
+                {cameras.map((cam, index) => (
+                  <motion.div 
+                    key={cam.id}
+                    layout
+                    transition={{ 
+                      type: "spring", 
+                      stiffness: 400, 
+                      damping: 35 
+                    }}
+                    ref={(el) => { if (el) cardRefs.current.set(cam.id, el as HTMLDivElement); }}
+                    onMouseDown={(e) => handleZoneStart(e as any, cam.id)}
+                    onTouchStart={(e) => handleZoneStart(e as any, cam.id)}
+                    onClick={() => { 
+                      if (isReordering) return;
+                      if (isEditingZones) {
+                        setActiveCameraId(cam.id);
+                      } else {
+                        setActiveCameraId(cam.id); 
+                        setIsMultiView(false); 
+                      }
+                    }}
+                    className={`relative glass rounded-[48px] overflow-hidden group shadow-2xl ${
+                      isReordering ? 'border-blue-500/50 bg-blue-500/5 shadow-blue-500/10' : 'cursor-pointer'
+                    } ${
+                      !isMultiView && cam.id !== activeCameraId ? 'hidden' : ''
+                    } aspect-[16/10] ${
+                      isEditingZones && activeCameraId === cam.id
+                        ? 'ring-4 ring-amber-500/60 ring-inset touch-none'
+                        : 'border-white/5 opacity-80 hover:opacity-100'
+                    }`}
+                  >
+                    <div className="absolute inset-0 bg-slate-900/40 z-0 animate-pulse" />
+                    
+                    {isMonitoring && activeCamStatuses[cam.id] ? (
+                      (cam.type === 'ip' || cam.type === 'onvif') ? (
+                        <IPCameraPlayer 
+                          url={cam.url || ''} 
+                          isAlertActive={alertingCameraIds.includes(cam.id)} 
+                          isNightMode={isNightMode} 
+                          imgRefCallback={(el) => { if (el) imgRefs.current.set(cam.id, el); else imgRefs.current.delete(cam.id); }} 
+                        />
+                      ) : (
+                        <video 
+                          ref={(el) => { if (el) videoRefs.current.set(cam.id, el); else videoRefs.current.delete(cam.id); }}
+                          autoPlay 
+                          muted 
+                          crossOrigin="anonymous"
+                          playsInline 
+                          className={`w-full h-full object-cover transition-all duration-1000 ${alertingCameraIds.includes(cam.id) ? 'opacity-40 saturate-150' : 'opacity-100'}`}
+                          style={isNightMode ? { filter: 'grayscale(1) brightness(1.2) contrast(1.1) sepia(0.2) hue-rotate(180deg)' } : {}}
+                        />
+                      )
                     ) : (
-                      <video 
-                        ref={(el) => { if (el) videoRefs.current.set(cam.id, el); else videoRefs.current.delete(cam.id); }}
-                        autoPlay 
-                        muted 
-                        crossOrigin="anonymous"
-                        playsInline 
-                        className={`w-full h-full object-cover transition-all duration-1000 ${alertingCameraIds.includes(cam.id) ? 'opacity-40 saturate-150' : 'opacity-100'}`}
-                        style={isNightMode ? { filter: 'grayscale(1) brightness(1.2) contrast(1.1) sepia(0.2) hue-rotate(180deg)' } : {}}
-                      />
-                    )
-                  ) : (
-                    <div className="absolute inset-0 flex flex-col items-center justify-center space-y-6 text-slate-700">
-                      <div className="p-8 glass rounded-full bg-white/5"><VideoOff size={40} /></div>
-                      <div className="text-center">
-                        <p className="text-xs font-black uppercase tracking-[0.4em]">Segnale Assente</p>
-                        <p className="text-[10px] font-bold text-slate-800 mt-2">IL SISTEMA È IN STANDBY</p>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* UI Overlays for Video (MONITORING MODE) */}
-                  {!isEditingZones && (
-                    <div className="absolute inset-0 p-4 lg:p-10 pointer-events-none flex flex-col justify-between z-30">
-                      <div className="flex justify-between items-start">
-                        <div className="flex flex-col gap-2">
-                          <div className="glass px-3 py-1.5 lg:px-4 lg:py-2 rounded-xl bg-slate-950/40 border-white/20 backdrop-blur-md flex items-center gap-2 lg:gap-3">
-                            <div className={`w-1.5 h-1.5 lg:w-2 lg:h-2 rounded-full ${isMonitoring ? 'bg-red-500 animate-pulse' : 'bg-slate-500'}`} />
-                            <span className="text-[9px] lg:text-[10px] font-black text-white uppercase tracking-widest">{cam.name}</span>
-                          </div>
-                          <div className="glass px-3 py-1 rounded-lg bg-slate-950/20 text-[8px] lg:text-[9px] font-bold text-slate-400 uppercase tracking-widest w-fit">
-                            {cam.location || 'Settore Default'}
-                          </div>
+                      <div className="absolute inset-0 flex flex-col items-center justify-center space-y-6 text-slate-700">
+                        <div className="p-8 glass rounded-full bg-white/5"><VideoOff size={40} /></div>
+                        <div className="text-center">
+                          <p className="text-xs font-black uppercase tracking-[0.4em] animate-pulse">Segnale Assente</p>
+                          <p className="text-[10px] font-bold text-slate-800 mt-2">IL SISTEMA È IN STANDBY</p>
                         </div>
-                        {isMonitoring && isAiEnabled && (
-                          <div className="flex flex-col items-end gap-2">
-                            <div className="glass px-3 py-1.5 lg:px-4 lg:py-2 rounded-xl bg-blue-600/20 border-blue-500/30 backdrop-blur-md flex items-center gap-2">
-                              <Cpu size={10} className="text-blue-400" />
-                              <span className="text-[8px] lg:text-[9px] font-black text-blue-400 uppercase tracking-widest">AI Core</span>
+                      </div>
+                    )}
+  
+                    {/* Numeric Reorder Overlay */}
+                    <AnimatePresence>
+                      {isReordering && (
+                        <motion.div 
+                          initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                          className="absolute inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex flex-col items-center justify-center border-2 border-blue-500/40 rounded-[48px] p-6"
+                        >
+                          <div className="relative group/num">
+                            <input 
+                              type="text"
+                              defaultValue={index + 1}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  handleOrderSwap(cam.id, (e.target as HTMLInputElement).value);
+                                  (e.target as HTMLInputElement).blur();
+                                }
+                              }}
+                              className="w-40 h-40 bg-white/5 border-2 border-white/10 rounded-[40px] text-center text-8xl font-black text-white focus:outline-none focus:border-blue-500 focus:bg-blue-500/10 transition-all selection:bg-blue-500/30"
+                            />
+                            <div className="absolute -top-4 -right-4 w-10 h-10 bg-blue-600 rounded-full flex items-center justify-center text-white shadow-lg">
+                              <Move size={16} />
                             </div>
                           </div>
-                        )}
-                      </div>
+                          <p className="mt-8 text-[12px] font-black text-blue-400 uppercase tracking-[0.4em] animate-pulse">Cambia Posizione</p>
+                          <p className="mt-2 text-[9px] text-slate-500 font-bold uppercase tracking-widest italic">Premi INVIO per confermare</p>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
 
-                      <div className="flex justify-between items-end">
-                        <div className="flex gap-2 pointer-events-auto">
-                          <button 
-                            onClick={(e) => toggleSingleCamera(cam.id, e)}
-                            className={`p-2.5 lg:p-3.5 glass rounded-xl lg:rounded-2xl transition-all border ${activeCamStatuses[cam.id] ? 'bg-green-600/20 border-green-500/30 text-green-400' : 'bg-red-600/20 border-red-500/30 text-red-400'}`}
-                          >
-                            {activeCamStatuses[cam.id] ? <Video size={16} /> : <VideoOff size={16} />}
-                          </button>
-                          <button 
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              openCameraConfig(cam);
-                            }}
-                            className="p-2.5 lg:p-3.5 glass rounded-xl lg:rounded-2xl bg-white/5 hover:bg-white/10 text-white transition-all shadow-xl border-white/5"
-                            title="Impostazioni Camera"
-                          >
-                            <Settings size={16} />
-                          </button>
-                          <button 
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setCameraToDelete(cam.id);
-                            }}
-                            className="p-2.5 lg:p-3.5 glass rounded-xl lg:rounded-2xl bg-red-600/10 hover:bg-red-600/20 text-red-500 hover:text-red-400 transition-all shadow-xl border-red-500/10"
-                            title="Elimina Camera"
-                          >
-                            <Trash2 size={16} />
-                          </button>
+                    {/* UI Overlays for Video (MONITORING MODE) */}
+                    {!isEditingZones && !isReordering && (
+                      <div className="absolute inset-0 p-4 lg:p-10 pointer-events-none flex flex-col justify-between z-30">
+                        <div className="flex justify-between items-start">
+                          <div className="flex flex-col gap-2">
+                            <div className="glass px-3 py-1.5 lg:px-4 lg:py-2 rounded-xl bg-slate-950/40 border-white/20 backdrop-blur-md flex items-center gap-2 lg:gap-3">
+                              <div className={`w-1.5 h-1.5 lg:w-2 lg:h-2 rounded-full ${isMonitoring ? 'bg-red-500 animate-pulse' : 'bg-slate-500'}`} />
+                              <span className="text-[9px] lg:text-[10px] font-black text-white uppercase tracking-widest">{cam.name}</span>
+                            </div>
+                            <div className="glass px-3 py-1 rounded-lg bg-slate-950/20 text-[8px] lg:text-[9px] font-bold text-slate-400 uppercase tracking-widest w-fit">
+                              {cam.location || 'Settore Default'}
+                            </div>
+                          </div>
+                          {isMonitoring && isAiEnabled && (
+                            <div className="flex flex-col items-end gap-2">
+                              <div className="glass px-3 py-1.5 lg:px-4 lg:py-2 rounded-xl bg-blue-600/20 border-blue-500/30 backdrop-blur-md flex items-center gap-2">
+                                <Cpu size={10} className="text-blue-400" />
+                                <span className="text-[8px] lg:text-[9px] font-black text-blue-400 uppercase tracking-widest">AI Core</span>
+                              </div>
+                            </div>
+                          )}
                         </div>
-                      
-                        <div className="flex flex-col items-end gap-3">
-                          <div className="text-[8px] lg:text-[10px] font-mono font-bold text-white/40 bg-black/40 px-3 py-1 rounded-full backdrop-blur-sm">
-                            {new Date().toLocaleTimeString('it-IT')}
+  
+                        <div className="flex justify-between items-end">
+                          <div className="flex gap-2 pointer-events-auto">
+                            <button 
+                              onClick={(e) => toggleSingleCamera(cam.id, e)}
+                              className={`p-2.5 lg:p-3.5 glass rounded-xl lg:rounded-2xl transition-all border ${activeCamStatuses[cam.id] ? 'bg-green-600/20 border-green-500/30 text-green-400' : 'bg-red-600/20 border-red-500/30 text-red-400'}`}
+                            >
+                              {activeCamStatuses[cam.id] ? <Video size={16} /> : <VideoOff size={16} />}
+                            </button>
+                            <button 
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                openCameraConfig(cam);
+                              }}
+                              className="p-2.5 lg:p-3.5 glass rounded-xl lg:rounded-2xl bg-white/5 hover:bg-white/10 text-white transition-all shadow-xl border-white/5"
+                              title="Impostazioni Camera"
+                            >
+                              <Settings size={16} />
+                            </button>
+                            <button 
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setCameraToDelete(cam.id);
+                              }}
+                              className="p-2.5 lg:p-3.5 glass rounded-xl lg:rounded-2xl bg-red-600/10 hover:bg-red-600/20 text-red-500 hover:text-red-400 transition-all shadow-xl border-red-500/10"
+                              title="Elimina Camera"
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          </div>
+                        
+                          <div className="flex flex-col items-end gap-3">
+                            <div className="text-[8px] lg:text-[10px] font-mono font-bold text-white/40 bg-black/40 px-3 py-1 rounded-full backdrop-blur-sm">
+                              {new Date().toLocaleTimeString('it-IT')}
+                            </div>
                           </div>
                         </div>
                       </div>
-                    </div>
-                  )}
-
-                  {/* UI Overlays for Video (DRAWING MODE) */}
-                  {isEditingZones && activeCameraId === cam.id && (
-                    <div className="absolute top-4 left-1/2 -translate-x-1/2 z-50 pointer-events-auto w-[95%] sm:w-auto">
-                      <motion.div 
-                        initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }}
-                        className="glass p-1.5 lg:p-2 rounded-2xl bg-slate-950/90 backdrop-blur-3xl border-amber-500/30 shadow-[0_0_50px_rgba(245,158,11,0.3)] flex items-center justify-center gap-1.5"
-                      >
-                        {(['restricted', 'alert', 'privacy', 'excluded'] as ZoneType[]).map(t => {
-                          const isSelected = selectedZoneId ? cameras.find(c => c.id === cam.id)?.zones?.find(z => z.id === selectedZoneId)?.type === t : false;
-                          return (
-                            <button
-                              key={t}
-                              onClick={() => selectedZoneId && updateZoneType(selectedZoneId, t)}
-                              className={`flex-1 sm:flex-none h-10 px-3 sm:px-4 rounded-xl border text-[9px] font-black uppercase tracking-wider transition-all flex items-center justify-center gap-2 ${
-                                isSelected
-                                ? (t === 'restricted' ? 'bg-red-500 border-red-400 text-white' : t === 'alert' ? 'bg-amber-500 border-amber-400 text-white' : t === 'privacy' ? 'bg-slate-800 border-slate-600 text-white' : 'bg-slate-500 border-slate-400 text-white')
-                                : 'bg-white/5 border-white/5 text-slate-400 hover:text-white hover:bg-white/10'
-                              }`}
-                              title={t}
+                    )}
+  
+                    {/* UI Overlays for Video (DRAWING MODE) */}
+                    {isEditingZones && activeCameraId === cam.id && (
+                      <div className="absolute top-4 left-1/2 -translate-x-1/2 z-50 pointer-events-auto w-[95%] sm:w-auto">
+                        <motion.div 
+                          initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }}
+                          className="glass p-1.5 lg:p-2 rounded-2xl bg-slate-950/90 backdrop-blur-3xl border-amber-500/30 shadow-[0_0_50px_rgba(245,158,11,0.3)] flex items-center justify-center gap-1.5"
+                        >
+                          {(['restricted', 'alert', 'privacy', 'excluded'] as ZoneType[]).map(t => {
+                            const isSelected = selectedZoneId ? cameras.find(c => c.id === cam.id)?.zones?.find(z => z.id === selectedZoneId)?.type === t : false;
+                            return (
+                              <button
+                                key={t}
+                                onClick={() => selectedZoneId && updateZoneType(selectedZoneId, t)}
+                                className={`flex-1 sm:flex-none h-10 px-3 sm:px-4 rounded-xl border text-[9px] font-black uppercase tracking-wider transition-all flex items-center justify-center gap-2 ${
+                                  isSelected
+                                  ? (t === 'restricted' ? 'bg-red-500 border-red-400 text-white' : t === 'alert' ? 'bg-amber-500 border-amber-400 text-white' : t === 'privacy' ? 'bg-slate-800 border-slate-600 text-white' : 'bg-slate-500 border-slate-400 text-white')
+                                  : 'bg-white/5 border-white/5 text-slate-400 hover:text-white hover:bg-white/10'
+                                }`}
+                                title={t}
+                              >
+                                <div className={`w-2.5 h-2.5 rounded-full shadow-[0_0_8px_rgba(255,255,255,0.2)] ${t === 'restricted' ? 'bg-red-500' : t === 'alert' ? 'bg-amber-500' : t === 'privacy' ? 'bg-black' : 'bg-slate-400'}`} />
+                                <span className="hidden sm:inline">{t === 'restricted' ? 'Vietata' : t === 'alert' ? 'Allerta' : t === 'privacy' ? 'Privacy' : 'Esclusa'}</span>
+                              </button>
+                            );
+                          })}
+                          
+                          {selectedZoneId && (
+                            <button 
+                              onClick={() => { deleteZone(selectedZoneId); setSelectedZoneId(null); }}
+                              className="p-2 bg-red-600/20 hover:bg-red-600 text-red-400 hover:text-white rounded-xl border border-red-500/20 transition-all"
+                              title="Elimina Zona"
                             >
-                              <div className={`w-2.5 h-2.5 rounded-full shadow-[0_0_8px_rgba(255,255,255,0.2)] ${t === 'restricted' ? 'bg-red-500' : t === 'alert' ? 'bg-amber-500' : t === 'privacy' ? 'bg-black' : 'bg-slate-400'}`} />
-                              <span className="hidden sm:inline">{t === 'restricted' ? 'Vietata' : t === 'alert' ? 'Allerta' : t === 'privacy' ? 'Privacy' : 'Esclusa'}</span>
+                              <Trash2 size={16} />
                             </button>
+                          )}
+                          
+                          <button 
+                            onClick={() => { setIsEditingZones(false); setSelectedZoneId(null); }} 
+                            className="p-2 bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white rounded-xl border border-white/5 transition-all"
+                            title="Chiudi Configurazione"
+                          >
+                            <X size={18}/>
+                          </button>
+                        </motion.div>
+                      </div>
+                    )}
+  
+                    {/* ── SMART ZONE SVG OVERLAY ── */}
+                    <div className="absolute inset-0 pointer-events-none z-20">
+                      <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="absolute inset-0 w-full h-full">
+                        {/* Existing zones */}
+                        {cam.zones?.map((zone) => {
+                          const ZONE_COLORS: Record<string, { fill: string; stroke: string }> = {
+                            restricted: { fill: 'rgba(239,68,68,0.12)', stroke: '#ef4444' },
+                            alert:      { fill: 'rgba(245,158,11,0.10)', stroke: '#f59e0b' },
+                            privacy:    { fill: 'rgba(0,0,0,0.65)',       stroke: '#64748b' },
+                            excluded:   { fill: 'rgba(100,116,139,0.10)', stroke: '#64748b' },
+                          };
+                          const col = ZONE_COLORS[zone.type];
+                          const xs = zone.points.map(p => p.x);
+                          const ys = zone.points.map(p => p.y);
+                          const cx = ((Math.min(...xs) + Math.max(...xs)) / 2 * 100).toFixed(1);
+                          const labelY = (Math.min(...ys) * 100 - 4).toFixed(1);
+                          const LABELS: Record<string, string> = { restricted: '🚫 VIETATA', alert: '⚠️ ALLERTA', privacy: '🔒 PRIVACY', excluded: '⬛ ESCLUSA' };
+                          return (
+                            <g key={zone.id}>
+                              <polygon
+                                points={zone.points.map(p => `${(p.x*100).toFixed(2)},${(p.y*100).toFixed(2)}`).join(' ')}
+                                fill={col.fill}
+                                stroke={col.stroke}
+                                strokeWidth="0.6"
+                                strokeDasharray={zone.type === 'excluded' ? '2,1' : undefined}
+                                style={{ pointerEvents: 'auto', cursor: isEditingZones ? 'grab' : 'default' }}
+                                className="transition-colors duration-300"
+                              />
+                              {isEditingZones && activeCameraId === cam.id && zone.points.map((p, i) => (
+                                <g key={i} className="zone-control-btn" style={{pointerEvents:'auto',cursor:'pointer'}}>
+                                  <circle cx={p.x*100} cy={p.y*100} r="6" fill="transparent" />
+                                  <circle cx={p.x*100} cy={p.y*100} r="2.5" fill="white" stroke={col.stroke} strokeWidth="1" className="transition-all duration-300 shadow-[0_0_15px_rgba(255,255,255,0.5)]" />
+                                </g>
+                              ))}
+                              <foreignObject x={Number(cx)-8} y={Number(labelY)} width="16" height="5" className="overflow-visible" style={{pointerEvents:'none'}}>
+                                <div className="flex justify-center">
+                                  <span className="bg-black/80 backdrop-blur-sm text-white font-black uppercase tracking-widest whitespace-nowrap rounded-full border border-white/10 shadow-xl" style={{fontSize:'2.2px',padding:'0.5px 2px'}}>
+                                    {LABELS[zone.type]}
+                                  </span>
+                                </div>
+                              </foreignObject>
+                            </g>
                           );
                         })}
-                        
-                        {selectedZoneId && (
-                          <button 
-                            onClick={() => { deleteZone(selectedZoneId); setSelectedZoneId(null); }}
-                            className="p-2 bg-red-600/20 hover:bg-red-600 text-red-400 hover:text-white rounded-xl border border-red-500/20 transition-all"
-                            title="Elimina Zona"
-                          >
-                            <Trash2 size={16} />
-                          </button>
+                        {/* Drawing preview */}
+                        {isEditingZones && activeCameraId === cam.id && currentDrawingZone?.points && (
+                          <polygon
+                            points={currentDrawingZone.points.map(p => `${(p.x*100).toFixed(2)},${(p.y*100).toFixed(2)}`).join(' ')}
+                            fill="rgba(245,158,11,0.08)"
+                            stroke="#f59e0b"
+                            strokeWidth="0.5"
+                            strokeDasharray="2,1"
+                          />
                         )}
-                        
-                        <button 
-                          onClick={() => { setIsEditingZones(false); setSelectedZoneId(null); }} 
-                          className="p-2 bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white rounded-xl border border-white/5 transition-all"
-                          title="Chiudi Configurazione"
-                        >
-                          <X size={18}/>
-                        </button>
-                      </motion.div>
+                      </svg>
                     </div>
-                  )}
-
-                  {/* ── SMART ZONE SVG OVERLAY ── */}
-                  <div className="absolute inset-0 pointer-events-none z-20">
-                    <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="absolute inset-0 w-full h-full">
-                      {/* Existing zones */}
-                      {cam.zones?.map((zone) => {
-                        const ZONE_COLORS: Record<string, { fill: string; stroke: string }> = {
-                          restricted: { fill: 'rgba(239,68,68,0.12)', stroke: '#ef4444' },
-                          alert:      { fill: 'rgba(245,158,11,0.10)', stroke: '#f59e0b' },
-                          privacy:    { fill: 'rgba(0,0,0,0.65)',       stroke: '#64748b' },
-                          excluded:   { fill: 'rgba(100,116,139,0.10)', stroke: '#64748b' },
-                        };
-                        const col = ZONE_COLORS[zone.type];
-                        const xs = zone.points.map(p => p.x);
-                        const ys = zone.points.map(p => p.y);
-                        const cx = ((Math.min(...xs) + Math.max(...xs)) / 2 * 100).toFixed(1);
-                        const labelY = (Math.min(...ys) * 100 - 4).toFixed(1);
-                        const controlY = (Math.max(...ys) * 100 + 1).toFixed(1);
-                        const LABELS: Record<string, string> = { restricted: '🚫 VIETATA', alert: '⚠️ ALLERTA', privacy: '🔒 PRIVACY', excluded: '⬛ ESCLUSA' };
-                        return (
-                          <g key={zone.id}>
-                            {/* Filled polygon with move cursor */}
-                            <polygon
-                              points={zone.points.map(p => `${(p.x*100).toFixed(2)},${(p.y*100).toFixed(2)}`).join(' ')}
-                              fill={col.fill}
-                              stroke={col.stroke}
-                              strokeWidth="0.6"
-                              strokeDasharray={zone.type === 'excluded' ? '2,1' : undefined}
-                              style={{ pointerEvents: 'auto', cursor: isEditingZones ? 'grab' : 'default' }}
-                              className="transition-colors duration-300"
-                            />
-                            {/* Corner handles (editing mode) - Premium Circular Handles */}
-                            {isEditingZones && activeCameraId === cam.id && zone.points.map((p, i) => (
-                              <g key={i} className="zone-control-btn group/handle" style={{pointerEvents:'auto',cursor:'pointer'}}>
-                                {/* Large invisible hit area for easy grabbing */}
-                                <circle cx={p.x*100} cy={p.y*100} r="6" fill="transparent" />
-                                
-                                {/* Visible Handle Circle */}
-                                <circle 
-                                  cx={p.x*100} cy={p.y*100} r="2.5" 
-                                  fill="white" 
-                                  stroke={col.stroke} 
-                                  strokeWidth="1" 
-                                  className="transition-all duration-300 shadow-[0_0_15px_rgba(255,255,255,0.5)]" 
-                                  style={{ filter: 'drop-shadow(0 0 4px rgba(255,255,255,0.8))' }}
-                                />
-                              </g>
-                            ))}
-                            {/* Zone label badge */}
-                            <foreignObject x={Number(cx)-8} y={Number(labelY)} width="16" height="5" className="overflow-visible" style={{pointerEvents:'none'}}>
-                              <div className="flex justify-center">
-                                <span className="bg-black/80 backdrop-blur-sm text-white font-black uppercase tracking-widest whitespace-nowrap rounded-full border border-white/10 shadow-xl" style={{fontSize:'2.2px',padding:'0.5px 2px'}}>
-                                  {LABELS[zone.type]}
-                                </span>
-                              </div>
-                            </foreignObject>
-                          </g>
-                        );
-                      })}
-                      {/* Drawing preview */}
-                      {isEditingZones && activeCameraId === cam.id && currentDrawingZone?.points && (
-                        <polygon
-                          points={currentDrawingZone.points.map(p => `${(p.x*100).toFixed(2)},${(p.y*100).toFixed(2)}`).join(' ')}
-                          fill="rgba(245,158,11,0.08)"
-                          stroke="#f59e0b"
-                          strokeWidth="0.5"
-                          strokeDasharray="2,1"
-                        />
-                      )}
-                    </svg>
-                  </div>
-                  {/* ── END ZONE OVERLAY ── */}
-
-                  {/* Alert Overlay */}
-                  <AnimatePresence>
-                    {alertingCameraIds.includes(cam.id) && isMonitoring && (
-                      <motion.div 
-                        initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                        className="absolute inset-0 z-40 pointer-events-none border-[6px] lg:border-[12px] border-red-500/40 animate-pulse bg-red-950/20"
-                      >
-                        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 flex flex-col items-center w-full px-4 text-center">
-                          <div className="p-5 lg:p-10 rounded-full bg-red-600 shadow-[0_0_50px_rgba(239,68,68,0.6)] lg:shadow-[0_0_100px_rgba(239,68,68,0.8)] animate-bounce mb-4 lg:mb-6">
-                            <AlertTriangle className="text-white w-8 h-8 lg:w-16 lg:h-16" />
+                    {/* ── END ZONE OVERLAY ── */}
+  
+                    {/* Alert Overlay */}
+                    <AnimatePresence>
+                      {alertingCameraIds.includes(cam.id) && isMonitoring && (
+                        <motion.div 
+                          initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                          className="absolute inset-0 z-40 pointer-events-none border-[6px] lg:border-[12px] border-red-500/40 animate-pulse bg-red-950/20"
+                        >
+                          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 flex flex-col items-center w-full px-4 text-center">
+                            <div className="p-5 lg:p-10 rounded-full bg-red-600 shadow-[0_0_50px_rgba(239,68,68,0.6)] lg:shadow-[0_0_100px_rgba(239,68,68,0.8)] animate-bounce mb-4 lg:mb-6">
+                              <AlertTriangle className="text-white w-8 h-8 lg:w-16 lg:h-16" />
+                            </div>
+                            <h2 className="text-xl sm:text-2xl lg:text-5xl font-black text-white uppercase tracking-tighter drop-shadow-2xl">MINACCIA RILEVATA</h2>
+                            <button 
+                              onClick={(e) => { e.stopPropagation(); stopActiveAlert(cam.id); }}
+                              className="mt-6 lg:mt-10 pointer-events-auto px-6 py-3 lg:px-10 lg:py-5 bg-white text-red-600 rounded-full font-black uppercase tracking-widest text-[9px] lg:text-xs shadow-2xl hover:scale-110 active:scale-95 transition-all"
+                            >
+                              Silenzia Allarme
+                            </button>
                           </div>
-                          <h2 className="text-xl sm:text-2xl lg:text-5xl font-black text-white uppercase tracking-tighter drop-shadow-2xl">MINACCIA RILEVATA</h2>
-                          <button 
-                            onClick={(e) => { e.stopPropagation(); stopActiveAlert(cam.id); }}
-                            className="mt-6 lg:mt-10 pointer-events-auto px-6 py-3 lg:px-10 lg:py-5 bg-white text-red-600 rounded-full font-black uppercase tracking-widest text-[9px] lg:text-xs shadow-2xl hover:scale-110 active:scale-95 transition-all"
-                          >
-                            Silenzia Allarme
-                          </button>
-                        </div>
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
-                </motion.div>
-              ))}
-
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </motion.div>
+                ))}
+              </AnimatePresence>
             </div>
 
             {/* AI Diagnostics & Event Log Section */}
