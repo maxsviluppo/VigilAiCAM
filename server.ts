@@ -73,7 +73,7 @@ async function startServer() {
   const EOI = Buffer.from([0xFF, 0xD9]);
 
   function startStream(rtspUrl: string) {
-    console.log(`[Camera Manager] Starting FFmpeg for: ${rtspUrl}`);
+    console.log(`[Camera Manager] Starting FFmpeg for: ${rtspUrl.split('@')[1] || rtspUrl}`); // Hide credentials in logs
     const args = [
       '-loglevel', 'error',
       '-rtsp_transport', 'tcp',
@@ -96,6 +96,18 @@ async function startServer() {
     };
     activeStreams.set(rtspUrl, streamData);
 
+    const fs = await import("fs");
+    const logPath = path.join(__dirname, "ffmpeg_error.log");
+    const logStream = fs.createWriteStream(logPath, { flags: 'a' });
+    
+    ff.stderr.on('data', (data) => {
+      const msg = data.toString();
+      logStream.write(`[${new Date().toISOString()}] [${rtspUrl.split('@')[1]}] ${msg}`);
+      if (msg.includes('error') || msg.includes('failed') || msg.includes('Invalid')) {
+        console.error(`[FFmpeg Error] ${msg.trim()}`);
+      }
+    });
+
     ff.stdout.on('data', (chunk: Buffer) => {
       buffer = Buffer.concat([buffer, chunk]);
       while (true) {
@@ -109,10 +121,17 @@ async function startServer() {
       if (buffer.length > 5 * 1024 * 1024) buffer = Buffer.alloc(0);
     });
 
+    ff.on('error', (err) => {
+      console.error(`[Camera Manager] Failed to start FFmpeg: ${err.message}`);
+      logStream.write(`[${new Date().toISOString()}] [ERROR] ${err.message}\n`);
+    });
+
     ff.on('close', (code: number) => {
-      console.log(`[Camera Manager] FFmpeg closed for ${rtspUrl} (code ${code})`);
+      console.log(`[Camera Manager] FFmpeg closed for ${rtspUrl.split('@')[1] || rtspUrl} (code ${code})`);
       if (activeStreams.has(rtspUrl)) {
-        setTimeout(() => startStream(rtspUrl), 2000); // Auto-restart if still needed
+        setTimeout(() => {
+           if (activeStreams.has(rtspUrl)) startStream(rtspUrl);
+        }, 5000); // Wait longer before restart to avoid spamming
       }
     });
   }

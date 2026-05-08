@@ -34,6 +34,8 @@ import { motion, AnimatePresence } from "motion/react";
 import { QRCodeCanvas } from 'qrcode.react';
 import { analyzeFrame, DetectionResult } from "./services/gemini";
 import { Camera, Incident, AlertTrigger, Zone, ZoneType, Point } from "./types";
+import { supabase } from "./supabase";
+import { User } from "@supabase/supabase-js";
 
 const IPCameraPlayer = ({ url, isAlertActive, isNightMode, imgRefCallback }: { 
   url: string; 
@@ -120,41 +122,101 @@ const IPCameraPlayer = ({ url, isAlertActive, isNightMode, imgRefCallback }: {
   );
 };
 
+const Auth = () => {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [mode, setMode] = useState<'login' | 'register'>('login');
+
+  const handleAuth = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    try {
+      if (mode === 'login') {
+        const { error } = await supabase.auth.signInWithPassword({ email, password });
+        if (error) throw error;
+      } else {
+        const { error } = await supabase.auth.signUp({ email, password });
+        if (error) throw error;
+        alert("Controlla la tua email per confermare l'iscrizione!");
+      }
+    } catch (error: any) {
+      alert(error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-[1000] bg-[#050810] flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(30,58,138,0.2),transparent_70%)]" />
+      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="w-full max-w-md glass p-8 rounded-[40px] border-white/5 shadow-2xl relative z-10">
+        <div className="flex flex-col items-center gap-6 mb-8">
+          <div className="w-20 h-20 glass rounded-3xl flex items-center justify-center bg-blue-600/10 border-blue-500/20 shadow-[0_0_30px_rgba(37,99,235,0.2)]">
+            <ShieldCheck size={48} className="text-blue-400" />
+          </div>
+          <div className="text-center">
+            <h1 className="text-3xl font-black text-white uppercase tracking-tighter">VIGIL.<span className="text-blue-400">AI</span></h1>
+            <p className="text-slate-500 text-xs font-bold uppercase tracking-widest mt-1">Intelligence-Driven Security</p>
+          </div>
+        </div>
+        <form onSubmit={handleAuth} className="space-y-4">
+          <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 text-white focus:border-blue-500/50 outline-none transition-all" placeholder="Email" required />
+          <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 text-white focus:border-blue-500/50 outline-none transition-all" placeholder="Password" required />
+          <button type="submit" disabled={loading} className="w-full bg-blue-600 hover:bg-blue-500 text-white font-black uppercase py-4 rounded-2xl shadow-[0_0_20px_rgba(37,99,235,0.4)] disabled:opacity-50">{loading ? 'Caricamento...' : mode === 'login' ? 'Accedi' : 'Registrati'}</button>
+        </form>
+        <button onClick={() => setMode(mode === 'login' ? 'register' : 'login')} className="w-full mt-6 text-xs text-slate-500 hover:text-blue-400 uppercase font-bold tracking-widest">{mode === 'login' ? 'Non hai un account? Registrati' : 'Hai già un account? Accedi'}</button>
+      </motion.div>
+    </div>
+  );
+};
+
 export default function App() {
   const [connectMethod, setConnectMethod] = useState<'direct' | 'advanced' | 'browser'>('direct');
-  const [cameras, setCameras] = useState<Camera[]>([
-    { 
-      id: "cam-1", 
-      name: "Main Entrance", 
-      location: "Ingresso Principale", 
-      type: "webcam", 
-      status: "online",
-      enabledTriggers: ["intrusion", "violence"]
-    },
-    {
-      id: "cam-tapo-c220",
-      name: "Tapo C220",
-      location: "Soggiorno",
-      type: "ip",
-      url: "rtsp://Testcamera:12345678@192.168.1.17:554/stream1",
-      status: "online",
-      enabledTriggers: ["intrusion", "violence"]
-    },
-    {
-      id: "cam-onvif-gen",
-      name: "IP Camera ONVIF",
-      location: "Esterno",
-      type: "onvif",
-      ip: "192.168.1.100",
-      port: 554,
-      username: "admin",
-      password: "password",
-      rtspPath: "/stream1",
-      status: "online",
-      enabledTriggers: ["intrusion", "violence"]
+  
+  const [user, setUser] = useState<any>(null);
+  const [authLoading, setAuthLoading] = useState(true);
+  const [cameras, setCameras] = useState<Camera[]>([]);
+  
+  useEffect(() => {
+    console.log("[Supabase] Initializing with URL:", supabase.auth.getSession());
+    
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setUser(session?.user ?? null);
+      setAuthLoading(false);
+    });
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null);
+    });
+    return () => subscription.unsubscribe();
+  }, []);
+
+  // Diagnostic: Check if 'cameras' table is accessible
+  useEffect(() => {
+    const checkTable = async () => {
+      const { data, error } = await supabase.from('cameras').select('id').limit(1);
+      if (error) {
+        console.error("[Supabase Diagnostic] Error accessing 'cameras' table:", error);
+      } else {
+        console.log("[Supabase Diagnostic] 'cameras' table is accessible. Found:", data.length, "records");
+      }
+    };
+    if (user) checkTable();
+  }, [user]);
+
+  const fetchUserData = useCallback(async () => {
+    if (!user) return;
+    const { data: cams } = await supabase.from('cameras').select('*').eq('user_id', user.id);
+    if (cams) {
+      const mappedCams = cams.map((c: any) => ({ ...c, enabledTriggers: c.enabled_triggers || [], rtspPath: c.rtsp_path || '/stream1' }));
+      setCameras(mappedCams);
+      if (mappedCams.length > 0 && !activeCameraId) setActiveCameraId(mappedCams[0].id);
     }
-  ]);
-  const [activeCameraId, setActiveCameraId] = useState<string>("cam-1");
+  }, [user]);
+
+  useEffect(() => { if (user) fetchUserData(); }, [user, fetchUserData]);
+
+  const [activeCameraId, setActiveCameraId] = useState<string | null>(null);
   const [incidents, setIncidents] = useState<Incident[]>([]);
   const [isMonitoring, setIsMonitoring] = useState(false);
   const [isAiEnabled, setIsAiEnabled] = useState(true);
@@ -181,6 +243,8 @@ export default function App() {
   const [isSimulating, setIsSimulating] = useState(false);
   const [isMultiView, setIsMultiView] = useState(true);
   const [preventSleep, setPreventSleep] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveStatus, setSaveStatus] = useState<{ type: 'success' | 'error', message: string } | null>(null);
 
   // Smart Zones state
   const [isEditingZones, setIsEditingZones] = useState(false);
@@ -344,7 +408,7 @@ export default function App() {
     setCameraToDelete(id);
   };
 
-  const confirmDelete = () => {
+  const confirmDelete = async () => {
     if (!cameraToDelete) return;
     
     // Stop the stream if it exists
@@ -354,13 +418,8 @@ export default function App() {
       streamsRef.current.delete(cameraToDelete);
     }
     
-    setCameras(prev => {
-      const updated = prev.filter(c => c.id !== cameraToDelete);
-      if (activeCameraId === cameraToDelete) {
-        setActiveCameraId(updated[0]?.id || null);
-      }
-      return updated;
-    });
+    await supabase.from('cameras').delete().eq('id', cameraToDelete);
+    fetchUserData();
     
     setCameraToDelete(null);
   };
@@ -725,42 +784,85 @@ export default function App() {
 
   // ── END SMART ZONE HANDLERS ────────────────────────────────────────────────
 
-  const saveCamera = (cam: Camera) => {
-    const finalCam = { ...cam };
-    if (finalCam.type === 'onvif') {
-      finalCam.url = `rtsp://${finalCam.username}:${finalCam.password}@${finalCam.ip}:${finalCam.port}${finalCam.rtspPath}`;
-    }
-    if (cameras.find(c => c.id === finalCam.id)) {
-      setCameras(cameras.map(c => c.id === finalCam.id ? finalCam : c));
-    } else {
-      setCameras([...cameras, finalCam]);
-    }
-    setShowCameraModal(false);
-    setEditingCamera(null);
-  };
+  const saveCamera = async (cam: Camera) => {
+    if (!user) return;
+    setIsSaving(true);
+    setSaveStatus(null);
+    try {
+      const finalCam: any = { 
+        ...cam, 
+        user_id: user.id, 
+        enabled_triggers: cam.enabledTriggers, 
+        rtsp_path: cam.rtspPath 
+      };
+      
+      // Handle ONVIF URL construction
+      if (finalCam.type === 'onvif' && finalCam.ip && finalCam.username) {
+        // Build the URL only if it's missing or needs update
+        finalCam.url = `rtsp://${finalCam.username}:${finalCam.password}@${finalCam.ip}:${finalCam.port || 554}${finalCam.rtspPath || '/stream1'}`;
+      } else if (finalCam.type === 'ip' && !finalCam.url) {
+        // Fallback for IP type if URL is missing
+        finalCam.url = `rtsp://${finalCam.username}:${finalCam.password}@${finalCam.ip}:${finalCam.port || 554}/stream1`;
+      }
+      
+      const dbCam = { ...finalCam };
+      // If it's a new camera (temporary ID), remove ID to let Supabase generate one
+      if (dbCam.id?.startsWith('cam-')) {
+        delete dbCam.id;
+      }
+      
+      // Clean up fields that shouldn't be in the DB
+      delete dbCam.enabledTriggers; 
+      delete dbCam.rtspPath;
+      
+      console.log("[Supabase] Saving camera:", dbCam);
+      
+      const { error } = await supabase.from('cameras').upsert(dbCam);
+      if (error) throw error;
+      
+      await fetchUserData();
+      setSaveStatus({ type: 'success', message: 'Camera salvata con successo!' });
+      
+      // Close modal after a short delay to show success
+      setTimeout(() => {
+        setShowCameraModal(false);
+        setEditingCamera(null);
+        setSaveStatus(null);
+      }, 1500);
 
-  const removeCamera = (id: string) => {
-    setCameras(cameras.filter(c => c.id !== id));
-    if (activeCameraId === id) setActiveCameraId(cameras[0]?.id);
+    } catch (err: any) {
+      console.error("Errore salvataggio camera:", err);
+      setSaveStatus({ 
+        type: 'error', 
+        message: err.message?.includes('PGRST205') 
+          ? 'Errore: Tabella "cameras" non trovata nel database. Crea la tabella su Supabase.' 
+          : `Errore: ${err.message || 'Errore nel salvataggio'}`
+      });
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const openCameraConfig = (cam?: Camera) => {
     setEditingCamera(cam || {
       id: `cam-${Date.now()}`,
-      name: `Camera ${cameras.length + 1}`,
-      location: "",
+      name: "Tapo C220",
+      location: "Ingresso",
       type: "onvif",
       url: "",
-      ip: "",
+      ip: "192.168.1.",
       port: 554,
-      username: "admin",
-      password: "",
+      username: "Testcamera",
+      password: "12345678",
       rtspPath: "/stream1",
       status: "online",
-      enabledTriggers: ["intrusion", "violence"]
+      enabledTriggers: ["intrusion", "violence", "fire"]
     });
     setShowCameraModal(true);
   };
+
+  if (authLoading) return null;
+  if (!user) return <Auth />;
 
   return (
     <div className="min-h-screen bg-[#050810] text-slate-300 font-sans selection:bg-blue-500/30 flex flex-col overflow-hidden">
@@ -1464,9 +1566,34 @@ export default function App() {
                   </div>
                 </div>
 
+                {saveStatus && (
+                  <motion.div 
+                    initial={{ opacity: 0, y: 10 }} 
+                    animate={{ opacity: 1, y: 0 }}
+                    className={`p-4 rounded-2xl text-[10px] font-black uppercase tracking-widest text-center ${
+                      saveStatus.type === 'success' ? 'bg-green-500/20 text-green-400 border border-green-500/30' : 'bg-red-500/20 text-red-400 border border-red-500/30'
+                    }`}
+                  >
+                    {saveStatus.message}
+                  </motion.div>
+                )}
+
                 <div className="flex flex-col sm:flex-row gap-3 pt-4">
-                  <button onClick={() => setShowCameraModal(false)} className="flex-1 py-4 glass rounded-2xl text-[10px] font-black uppercase tracking-widest text-slate-500 hover:text-white transition-all order-2 sm:order-1">Annulla</button>
-                  <button onClick={() => saveCamera(editingCamera)} className="flex-[2] py-4 bg-blue-600 rounded-2xl text-[10px] font-black uppercase tracking-widest text-white shadow-xl hover:bg-blue-500 order-1 sm:order-2">Salva Configurazione</button>
+                  <button 
+                    disabled={isSaving}
+                    onClick={() => setShowCameraModal(false)} 
+                    className="flex-1 py-4 glass rounded-2xl text-[10px] font-black uppercase tracking-widest text-slate-500 hover:text-white transition-all order-2 sm:order-1 disabled:opacity-30"
+                  >
+                    Annulla
+                  </button>
+                  <button 
+                    disabled={isSaving}
+                    onClick={() => saveCamera(editingCamera)} 
+                    className="flex-[2] py-4 bg-blue-600 rounded-2xl text-[10px] font-black uppercase tracking-widest text-white shadow-xl hover:bg-blue-500 order-1 sm:order-2 disabled:opacity-50 flex items-center justify-center gap-3"
+                  >
+                    {isSaving && <div className="w-3 h-3 border-2 border-white/20 border-t-white rounded-full animate-spin" />}
+                    {isSaving ? 'Salvataggio...' : 'Salva Configurazione'}
+                  </button>
                 </div>
               </div>
             </motion.div>
