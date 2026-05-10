@@ -28,7 +28,9 @@ import {
   AlertCircle,
   Move,
   Gem,
-  Lock
+  Lock,
+  LogOut,
+  EyeOff
 } from "lucide-react";
 import { motion, AnimatePresence, Reorder } from "framer-motion";
 import { QRCodeCanvas } from 'qrcode.react';
@@ -128,6 +130,7 @@ const Auth = () => {
   const [loading, setLoading] = useState(false);
   const [mode, setMode] = useState<'login' | 'register'>('login');
   const [status, setStatus] = useState<{ type: 'error' | 'success', title: string, message: string } | null>(null);
+  const [showPassword, setShowPassword] = useState(false);
 
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -176,7 +179,23 @@ const Auth = () => {
         </div>
         <form onSubmit={handleAuth} className="space-y-4">
           <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 text-white focus:border-blue-500/50 outline-none transition-all" placeholder="Email" required />
-          <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 text-white focus:border-blue-500/50 outline-none transition-all" placeholder="Password" required />
+          <div className="relative">
+            <input 
+              type={showPassword ? "text" : "password"} 
+              value={password} 
+              onChange={(e) => setPassword(e.target.value)} 
+              className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 text-white focus:border-blue-500/50 outline-none transition-all pr-12" 
+              placeholder="Password" 
+              required 
+            />
+            <button 
+              type="button"
+              onClick={() => setShowPassword(!showPassword)}
+              className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white transition-colors"
+            >
+              {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+            </button>
+          </div>
           <button type="submit" disabled={loading} className="w-full bg-blue-600 hover:bg-blue-500 text-white font-black uppercase py-4 rounded-2xl shadow-[0_0_20px_rgba(37,99,235,0.4)] disabled:opacity-50">{loading ? 'Caricamento...' : mode === 'login' ? 'Accedi' : 'Registrati'}</button>
         </form>
         <button onClick={() => setMode(mode === 'login' ? 'register' : 'login')} className="w-full mt-6 text-xs text-slate-500 hover:text-blue-400 uppercase font-bold tracking-widest">{mode === 'login' ? 'Non hai un account? Registrati' : 'Hai già un account? Accedi'}</button>
@@ -242,6 +261,17 @@ export default function App() {
   const [isSaving, setIsSaving] = useState(false);
   const [isReordering, setIsReordering] = useState(false);
   const [globalModal, setGlobalModal] = useState<{ type: 'error' | 'success' | 'info', title: string, message: string } | null>(null);
+
+  const handleLogout = async () => {
+    const { error } = await supabase.auth.signOut();
+    if (error) {
+      setGlobalModal({
+        type: 'error',
+        title: 'Errore Logout',
+        message: 'Si è verificato un errore durante la disconnessione. Riprova.'
+      });
+    }
+  };
 
   const [isEditingZones, setIsEditingZones] = useState(false);
   const [currentDrawingZone, setCurrentDrawingZone] = useState<Partial<Zone> | null>(null);
@@ -1048,6 +1078,14 @@ export default function App() {
                 title="Piani e Costi"
               >
                 <Gem size={18} />
+              </button>
+
+              <button 
+                onClick={handleLogout}
+                className="p-3 glass border-white/5 text-red-500/50 hover:text-red-500 hover:bg-red-500/10 rounded-xl lg:rounded-2xl transition-all"
+                title="Logout"
+              >
+                <LogOut size={18} />
               </button>
 
               <button
