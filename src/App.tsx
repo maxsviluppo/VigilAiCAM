@@ -127,10 +127,12 @@ const Auth = () => {
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [mode, setMode] = useState<'login' | 'register'>('login');
+  const [status, setStatus] = useState<{ type: 'error' | 'success', title: string, message: string } | null>(null);
 
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
+    setStatus(null);
     try {
       if (mode === 'login') {
         const { error } = await supabase.auth.signInWithPassword({ email, password });
@@ -138,10 +140,22 @@ const Auth = () => {
       } else {
         const { error } = await supabase.auth.signUp({ email, password });
         if (error) throw error;
-        alert("Controlla la tua email per confermare l'iscrizione!");
+        setStatus({
+          type: 'success',
+          title: 'Verifica Richiesta',
+          message: "Abbiamo inviato un link di conferma alla tua email. Controlla la posta per attivare l'account."
+        });
       }
     } catch (error: any) {
-      alert(error.message);
+      let msg = error.message;
+      if (msg === "Invalid login credentials") {
+        msg = "Le credenziali inserite non sono corrette. Verifica email e password e riprova.";
+      }
+      setStatus({
+        type: 'error',
+        title: 'Accesso Negato',
+        message: msg
+      });
     } finally {
       setLoading(false);
     }
@@ -167,6 +181,34 @@ const Auth = () => {
         </form>
         <button onClick={() => setMode(mode === 'login' ? 'register' : 'login')} className="w-full mt-6 text-xs text-slate-500 hover:text-blue-400 uppercase font-bold tracking-widest">{mode === 'login' ? 'Non hai un account? Registrati' : 'Hai già un account? Accedi'}</button>
       </motion.div>
+
+      <AnimatePresence>
+        {status && (
+          <motion.div 
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[1100] bg-slate-950/80 backdrop-blur-xl flex items-center justify-center p-6"
+          >
+            <motion.div 
+              initial={{ scale: 0.9, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.9, y: 20 }}
+              className="glass max-w-sm w-full p-8 rounded-[40px] border-white/10 text-center space-y-6 shadow-2xl"
+            >
+              <div className={`w-16 h-16 rounded-3xl flex items-center justify-center mx-auto border ${status.type === 'error' ? 'bg-red-500/10 border-red-500/20 text-red-500' : 'bg-green-500/10 border-green-500/20 text-green-500'}`}>
+                {status.type === 'error' ? <AlertCircle size={32} /> : <ShieldCheck size={32} />}
+              </div>
+              <div className="space-y-2">
+                <h3 className="text-xl font-black text-white uppercase tracking-tighter">{status.title}</h3>
+                <p className="text-slate-400 text-xs font-bold leading-relaxed uppercase tracking-tight">{status.message}</p>
+              </div>
+              <button 
+                onClick={() => setStatus(null)}
+                className="w-full py-4 bg-white/5 hover:bg-white/10 border border-white/10 rounded-2xl text-[10px] font-black uppercase tracking-widest text-white transition-all"
+              >
+                Ho Capito
+              </button>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };
@@ -198,8 +240,8 @@ export default function App() {
   const [isMultiView, setIsMultiView] = useState(true);
   const [preventSleep, setPreventSleep] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
-  const [saveStatus, setSaveStatus] = useState<{ type: 'success' | 'error', message: string } | null>(null);
   const [isReordering, setIsReordering] = useState(false);
+  const [globalModal, setGlobalModal] = useState<{ type: 'error' | 'success' | 'info', title: string, message: string } | null>(null);
 
   const [isEditingZones, setIsEditingZones] = useState(false);
   const [currentDrawingZone, setCurrentDrawingZone] = useState<Partial<Zone> | null>(null);
@@ -489,7 +531,7 @@ export default function App() {
     if (success) {
       const screenshot = canvas.toDataURL("image/jpeg", 0.6).split(",")[1];
       await sendNotification(`[TEST MANUALE] Allarme inviato manualmente per verificare la ricezione delle immagini dalla camera: ${cam.name}`, screenshot);
-      // Feedback visivo nel log degli incidenti
+      
       setIncidents(prev => [{
         id: Math.random().toString(36).substr(2, 9),
         timestamp: new Date(),
@@ -499,9 +541,18 @@ export default function App() {
         threatLevel: "medium",
         screenshot: canvas.toDataURL("image/jpeg", 0.8)
       }, ...prev]);
-      alert("Allarme test inviato con successo!");
+      
+      setGlobalModal({
+        type: 'success',
+        title: 'Test Inviato',
+        message: 'L\'allarme di test è stato inoltrato correttamente ai destinatari configurati.'
+      });
     } else {
-      alert("Impossibile catturare l'immagine della camera. Assicurati che sia attiva e visibile.");
+      setGlobalModal({
+        type: 'error',
+        title: 'Errore Acquisizione',
+        message: 'Impossibile catturare l\'immagine della camera. Assicurati che il flusso video sia attivo.'
+      });
     }
   };
 
@@ -2023,6 +2074,38 @@ export default function App() {
                 </div>
 
               </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {globalModal && (
+          <motion.div 
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[2000] bg-slate-950/80 backdrop-blur-xl flex items-center justify-center p-6"
+          >
+            <motion.div 
+              initial={{ scale: 0.9, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.9, y: 20 }}
+              className="glass max-w-sm w-full p-8 rounded-[40px] border-white/10 text-center space-y-6 shadow-2xl"
+            >
+              <div className={`w-16 h-16 rounded-3xl flex items-center justify-center mx-auto border ${
+                globalModal.type === 'error' ? 'bg-red-500/10 border-red-500/20 text-red-500' : 
+                globalModal.type === 'success' ? 'bg-green-500/10 border-green-500/20 text-green-500' :
+                'bg-blue-500/10 border-blue-500/20 text-blue-500'
+              }`}>
+                {globalModal.type === 'error' ? <AlertCircle size={32} /> : <ShieldCheck size={32} />}
+              </div>
+              <div className="space-y-2">
+                <h3 className="text-xl font-black text-white uppercase tracking-tighter">{globalModal.title}</h3>
+                <p className="text-slate-400 text-xs font-bold leading-relaxed uppercase tracking-tight">{globalModal.message}</p>
+              </div>
+              <button 
+                onClick={() => setGlobalModal(null)}
+                className="w-full py-4 bg-white/5 hover:bg-white/10 border border-white/10 rounded-2xl text-[10px] font-black uppercase tracking-widest text-white transition-all"
+              >
+                Chiudi
+              </button>
             </motion.div>
           </motion.div>
         )}
