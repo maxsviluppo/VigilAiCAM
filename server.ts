@@ -5,6 +5,7 @@ import { fileURLToPath } from "url";
 import nodemailer from "nodemailer";
 import bodyParser from "body-parser";
 import dotenv from "dotenv";
+import { networkInterfaces } from "os";
 
 dotenv.config();
 
@@ -16,6 +17,25 @@ async function startServer() {
   const PORT = 3001;
 
   app.use(bodyParser.json({ limit: "10mb" }));
+
+  // API Route for System Info (IP Discovery)
+  app.get("/api/info", (req, res) => {
+    console.log("[API] Info request received");
+    const nets = networkInterfaces();
+    const results: string[] = [];
+
+    for (const name of Object.keys(nets)) {
+      const interfaces = nets[name];
+      if (interfaces) {
+        for (const net of interfaces) {
+          if (net.family === 'IPv4' && !net.internal) {
+            results.push(net.address);
+          }
+        }
+      }
+    }
+    res.json({ ips: results, port: PORT });
+  });
 
   // API Route for Notifications
   app.post("/api/notify", async (req, res) => {

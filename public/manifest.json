@@ -1,15 +1,17 @@
 {
-  "short_name": "VIGIL.AI",
-  "name": "VIGIL.AI - Security Platform",
-  "icons": [
-    {
-      "src": "favicon.png",
-      "sizes": "512x512",
-      "type": "image/png"
-    }
-  ],
+  "name": "Vigil.AI - Security Platform",
+  "short_name": "Vigil.AI",
+  "description": "Intelligence-Driven Security Platform",
   "start_url": ".",
   "display": "standalone",
-  "theme_color": "#000000",
-  "background_color": "#000000"
+  "background_color": "#050810",
+  "theme_color": "#2563eb",
+  "icons": [
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
 }

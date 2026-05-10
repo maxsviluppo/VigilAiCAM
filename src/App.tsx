@@ -262,6 +262,11 @@ export default function App() {
   const [isReordering, setIsReordering] = useState(false);
   const [saveStatus, setSaveStatus] = useState<{ type: 'success' | 'error', message: string } | null>(null);
   const [globalModal, setGlobalModal] = useState<{ type: 'error' | 'success' | 'info', title: string, message: string } | null>(null);
+  const [serverInfo, setServerInfo] = useState<{ ips: string[], port: number } | null>(null);
+
+  useEffect(() => {
+    fetch('/api/info').then(res => res.json()).then(setServerInfo).catch(console.error);
+  }, []);
 
   const handleLogout = async () => {
     const { error } = await supabase.auth.signOut();
@@ -1128,6 +1133,20 @@ export default function App() {
               {isMonitoring ? <VideoOff size={18} /> : <Video size={18} />}
               <span>{isMonitoring ? 'OFF' : 'VIGILA'}</span>
             </motion.button>
+
+            {serverInfo && (
+              <button 
+                onClick={() => setGlobalModal({
+                  type: 'info',
+                  title: 'Quick Connect',
+                  message: 'Scansiona il QR Code con il tablet per collegarlo istantaneamente.'
+                })}
+                className="p-3 bg-green-600/20 border border-green-500/30 text-green-400 rounded-xl lg:rounded-2xl hover:bg-green-600 hover:text-white transition-all shadow-lg shadow-green-500/10"
+                title="Collega Tablet"
+              >
+                <Scan size={20} />
+              </button>
+            )}
           </div>
         </header>
 
@@ -1763,6 +1782,34 @@ export default function App() {
                     {isSaving ? 'Salvataggio...' : 'Salva Configurazione'}
                   </button>
                 </div>
+
+                <div className="h-px w-full bg-white/5" />
+
+                {/* Local Connection Guide */}
+                {serverInfo && (
+                  <div className="p-6 bg-green-500/5 border border-green-500/10 rounded-3xl space-y-4">
+                    <div className="flex items-center gap-2 text-green-400">
+                      <Monitor size={16} />
+                      <span className="text-[10px] font-black uppercase tracking-widest">Connessione Tablet Cliente</span>
+                    </div>
+                    <p className="text-[9px] text-slate-400 uppercase font-bold leading-relaxed">
+                      Per collegare un tablet, apri il browser sul dispositivo e inserisci uno dei seguenti indirizzi:
+                    </p>
+                    <div className="space-y-2">
+                      {serverInfo.ips.map(ip => (
+                        <div key={ip} className="flex items-center justify-between bg-black/20 p-3 rounded-xl border border-white/5">
+                          <code className="text-xs text-blue-400 font-mono">http://{ip}:{serverInfo.port}</code>
+                          <span className="text-[8px] font-black text-slate-600 uppercase">WiFi Locale</span>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="p-3 bg-blue-600/10 rounded-xl border border-blue-500/20">
+                      <p className="text-[8px] text-blue-400 font-black uppercase tracking-widest text-center">
+                        💡 Tocca "Aggiungi a Home" sul tablet per installarla come App
+                      </p>
+                    </div>
+                  </div>
+                )}
               </div>
             </motion.div>
           </motion.div>
@@ -2133,12 +2180,52 @@ export default function App() {
                 globalModal.type === 'success' ? 'bg-green-500/10 border-green-500/20 text-green-500' :
                 'bg-blue-500/10 border-blue-500/20 text-blue-500'
               }`}>
-                {globalModal.type === 'error' ? <AlertCircle size={32} /> : <ShieldCheck size={32} />}
+                {globalModal.title === 'Quick Connect' ? <Scan size={32} /> : globalModal.type === 'error' ? <AlertCircle size={32} /> : <ShieldCheck size={32} />}
               </div>
               <div className="space-y-2">
                 <h3 className="text-xl font-black text-white uppercase tracking-tighter">{globalModal.title}</h3>
                 <p className="text-slate-400 text-xs font-bold leading-relaxed uppercase tracking-tight">{globalModal.message}</p>
               </div>
+
+              {globalModal.title === 'Quick Connect' && serverInfo && (
+                <div className="flex flex-col items-center gap-6 py-4">
+                  <div className="p-4 bg-white rounded-[32px] shadow-2xl shadow-blue-500/20">
+                    {(() => {
+                      const priorityIp = serverInfo.ips.find(ip => ip.startsWith('192.168.') || ip.startsWith('10.')) || serverInfo.ips[0];
+                      return (
+                        <QRCodeCanvas 
+                          value={`http://${priorityIp}:${serverInfo.port}`}
+                          size={200}
+                          level="H"
+                          includeMargin={false}
+                          imageSettings={{
+                            src: "/favicon.png",
+                            x: undefined,
+                            y: undefined,
+                            height: 40,
+                            width: 40,
+                            excavate: true,
+                          }}
+                        />
+                      );
+                    })()}
+                  </div>
+                  <div className="space-y-3 w-full">
+                    <p className="text-[10px] text-blue-400 font-black uppercase tracking-widest text-center">Indirizzi Rilevati:</p>
+                    <div className="flex flex-col gap-2">
+                      {serverInfo.ips.map(ip => (
+                        <div key={ip} className="flex items-center justify-between bg-white/5 px-4 py-2 rounded-xl border border-white/5">
+                          <code className="text-[10px] text-slate-300 font-mono">{ip}</code>
+                          <span className={`text-[8px] font-black uppercase px-2 py-0.5 rounded-full ${ip.startsWith('192.168.') || ip.startsWith('10.') ? 'bg-green-500/20 text-green-400' : 'bg-slate-700 text-slate-400'}`}>
+                            {ip.startsWith('192.168.') || ip.startsWith('10.') ? 'Consigliato' : 'Virtuale'}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+
               <button 
                 onClick={() => setGlobalModal(null)}
                 className="w-full py-4 bg-white/5 hover:bg-white/10 border border-white/10 rounded-2xl text-[10px] font-black uppercase tracking-widest text-white transition-all"
