@@ -2166,9 +2166,9 @@ export default function App() {
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8 relative z-10">
-                  <div className="space-y-4">
+                  <div className="flex flex-col space-y-4 h-full">
                     <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest px-1">Descrizione Scena</label>
-                    <div className="glass bg-slate-900/40 rounded-3xl p-6 min-h-[140px] border-white/5 flex items-center justify-center">
+                    <div className="glass bg-slate-900/40 rounded-3xl p-6 border-white/5 flex-1 flex items-center justify-center min-h-[140px]">
                       {isMonitoring && isAiEnabled ? (
                         <p className="text-[11px] font-bold text-white leading-relaxed italic text-center">
                           {isAnalyzing ? "Elaborazione fotogramma in corso..." : (lastAnalysis?.description || "In attesa di dati dalla telecamera attiva...")}
