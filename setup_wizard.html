@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Vigil.AI - Configurazione Iniziale</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-gradient: linear-gradient(135deg, #0d0e15 0%, #1a1c29 100%);
+      --panel-bg: rgba(22, 24, 38, 0.75);
+      --border-color: rgba(255, 255, 255, 0.08);
+      --primary: #5c62ec;
+      --primary-hover: #484ecf;
+      --primary-glow: rgba(92, 98, 236, 0.3);
+      --text: #f3f4f6;
+      --text-muted: #9ca3af;
+      --success: #10b981;
+      --error: #ef4444;
+      --font: 'Outfit', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: var(--font);
+      background: var(--bg-gradient);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      padding: 20px;
+      overflow-x: hidden;
+      position: relative;
+    }
+
+    /* Ambient background glow effects */
+    body::before, body::after {
+      content: '';
+      position: absolute;
+      width: 400px;
+      height: 400px;
+      border-radius: 50%;
+      background: var(--primary);
+      filter: blur(150px);
+      opacity: 0.15;
+      z-index: 0;
+      pointer-events: none;
+    }
+    body::before {
+      top: -100px;
+      left: -100px;
+    }
+    body::after {
+      bottom: -100px;
+      right: -100px;
+    }
+
+    .container {
+      background: var(--panel-bg);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid var(--border-color);
+      border-radius: 24px;
+      padding: 40px;
+      width: 100%;
+      max-width: 580px;
+      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
+      z-index: 1;
+      position: relative;
+      transition: transform 0.3s ease, box-shadow 0.3s ease;
+    }
+
+    .container:hover {
+      box-shadow: 0 25px 50px rgba(0, 0, 0, 0.5), 0 0 2px var(--primary-glow);
+    }
+
+    header {
+      text-align: center;
+      margin-bottom: 35px;
+    }
+
+    .logo-container {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(92, 98, 236, 0.1);
+      border: 1px solid rgba(92, 98, 236, 0.2);
+      border-radius: 16px;
+      width: 56px;
+      height: 56px;
+      margin-bottom: 16px;
+      color: var(--primary);
+    }
+
+    .logo-svg {
+      width: 28px;
+      height: 28px;
+      fill: currentColor;
+    }
+
+    h1 {
+      font-size: 28px;
+      font-weight: 700;
+      margin-bottom: 8px;
+      background: linear-gradient(135deg, #ffffff 0%, #cacede 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    p.subtitle {
+      font-size: 14px;
+      color: var(--text-muted);
+      line-height: 1.5;
+    }
+
+    .form-group {
+      margin-bottom: 22px;
+      position: relative;
+    }
+
+    label {
+      display: block;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-muted);
+      margin-bottom: 8px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .input-wrapper {
+      position: relative;
+      display: flex;
+      align-items: center;
+    }
+
+    input {
+      width: 100%;
+      padding: 14px 16px;
+      background: rgba(10, 11, 18, 0.5);
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      color: var(--text);
+      font-family: var(--font);
+      font-size: 15px;
+      transition: all 0.2s ease;
+      outline: none;
+    }
+
+    input:focus {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px var(--primary-glow);
+      background: rgba(10, 11, 18, 0.8);
+    }
+
+    .help-text {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-top: 6px;
+    }
+
+    button.btn-submit {
+      width: 100%;
+      padding: 16px;
+      background: var(--primary);
+      border: none;
+      border-radius: 12px;
+      color: white;
+      font-family: var(--font);
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 10px;
+      box-shadow: 0 4px 12px rgba(92, 98, 236, 0.3);
+      margin-top: 10px;
+    }
+
+    button.btn-submit:hover:not(:disabled) {
+      background: var(--primary-hover);
+      transform: translateY(-1px);
+      box-shadow: 0 6px 16px rgba(92, 98, 236, 0.4);
+    }
+
+    button.btn-submit:active:not(:disabled) {
+      transform: translateY(1px);
+    }
+
+    button.btn-submit:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      box-shadow: none;
+    }
+
+    .alert {
+      padding: 14px 16px;
+      border-radius: 12px;
+      margin-bottom: 24px;
+      font-size: 14px;
+      line-height: 1.4;
+      display: none;
+    }
+
+    .alert-error {
+      background: rgba(239, 68, 68, 0.1);
+      border: 1px solid rgba(239, 68, 68, 0.2);
+      color: #fca5a5;
+    }
+
+    .alert-success {
+      background: rgba(16, 185, 129, 0.1);
+      border: 1px solid rgba(16, 185, 129, 0.2);
+      color: #a7f3d0;
+    }
+
+    .loader {
+      width: 20px;
+      height: 20px;
+      border: 2px solid rgba(255, 255, 255, 0.3);
+      border-radius: 50%;
+      border-top-color: white;
+      animation: spin 0.8s linear infinite;
+      display: none;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    .hidden {
+      display: none;
+    }
+
+    .success-panel {
+      text-align: center;
+      padding: 20px 0;
+    }
+
+    .success-icon {
+      width: 64px;
+      height: 64px;
+      background: rgba(16, 185, 129, 0.1);
+      border: 1px solid rgba(16, 185, 129, 0.2);
+      color: var(--success);
+      border-radius: 50%;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 20px;
+      animation: scaleUp 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    }
+
+    @keyframes scaleUp {
+      from { transform: scale(0.5); opacity: 0; }
+      to { transform: scale(1); opacity: 1; }
+    }
+
+    .countdown {
+      font-size: 32px;
+      font-weight: 700;
+      color: var(--primary);
+      margin-top: 15px;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="container" id="main-container">
+    <div id="setup-form-container">
+      <header>
+        <div class="logo-container">
+          <svg class="logo-svg" viewBox="0 0 24 24">
+            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/>
+          </svg>
+        </div>
+        <h1>Configurazione Vigil.AI</h1>
+        <p class="subtitle">Inserisci le chiavi del sistema per configurare VigilAI sul tuo Raspberry Pi.</p>
+      </header>
+
+      <div class="alert alert-error" id="error-alert"></div>
+      <div class="alert alert-success" id="success-alert"></div>
+
+      <form id="setup-form" onsubmit="saveConfig(event)">
+        
+        <div class="form-group">
+          <label for="geminiKey">Gemini API Key</label>
+          <input type="text" id="geminiKey" required placeholder="AIzaSy...">
+          <p class="help-text">Necessaria per il rilevamento intelligente degli eventi.</p>
+        </div>
+
+        <div class="form-group">
+          <label for="supabaseUrl">Supabase URL</label>
+          <input type="url" id="supabaseUrl" required placeholder="https://xxxx.supabase.co">
+          <p class="help-text">URL del tuo database Supabase.</p>
+        </div>
+
+        <div class="form-group">
+          <label for="supabaseAnonKey">Supabase Anon Key</label>
+          <input type="text" id="supabaseAnonKey" required placeholder="eyJhbGciOi...">
+          <p class="help-text">Chiave Anon di Supabase per inviare i log.</p>
+        </div>
+
+        <div class="form-group">
+          <label for="emailUser">Email Mittente (Gmail)</label>
+          <input type="email" id="emailUser" required placeholder="esempio@gmail.com">
+          <p class="help-text">Account Gmail da cui verranno inviate le notifiche.</p>
+        </div>
+
+        <div class="form-group">
+          <label for="emailPass">Email App Password (Gmail)</label>
+          <input type="password" id="emailPass" required placeholder="••••••••••••••••">
+          <p class="help-text">Password per l'applicazione generata dal tuo account Google (16 caratteri).</p>
+        </div>
+
+        <button type="submit" class="btn-submit" id="btn-submit">
+          <span class="loader" id="btn-loader"></span>
+          <span id="btn-text">Salva e Avvia Sistema</span>
+        </button>
+      </form>
+    </div>
+
+    <!-- Success View -->
+    <div id="success-container" class="success-panel hidden">
+      <div class="success-icon">
+        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="20 6 9 17 4 12"></polyline>
+        </svg>
+      </div>
+      <h2>Configurazione Salvata!</h2>
+      <p class="subtitle" style="margin-top: 10px;">Il server si sta riavviando per applicare le nuove impostazioni.</p>
+      <p class="subtitle" style="margin-top: 5px;">Questa pagina si ricaricherà automaticamente tra:</p>
+      <div class="countdown" id="countdown-timer">5</div>
+    </div>
+  </div>
+
+  <script>
+    async function saveConfig(event) {
+      event.preventDefault();
+      
+      const geminiKey = document.getElementById('geminiKey').value.trim();
+      const supabaseUrl = document.getElementById('supabaseUrl').value.trim();
+      const supabaseAnonKey = document.getElementById('supabaseAnonKey').value.trim();
+      const emailUser = document.getElementById('emailUser').value.trim();
+      const emailPass = document.getElementById('emailPass').value.trim();
+
+      const btn = document.getElementById('btn-submit');
+      const loader = document.getElementById('btn-loader');
+      const btnText = document.getElementById('btn-text');
+      const errorAlert = document.getElementById('error-alert');
+      
+      // Reset alerts
+      errorAlert.style.display = 'none';
+      
+      // Loading state
+      btn.disabled = true;
+      loader.style.display = 'block';
+      btnText.innerText = 'Salvataggio in corso...';
+
+      try {
+        const response = await fetch('/api/setup', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            GEMINI_API_KEY: geminiKey,
+            VITE_GEMINI_API_KEY: geminiKey,
+            VITE_SUPABASE_URL: supabaseUrl,
+            VITE_SUPABASE_ANON_KEY: supabaseAnonKey,
+            EMAIL_USER: emailUser,
+            EMAIL_PASS: emailPass
+          })
+        });
+
+        const result = await response.json();
+
+        if (response.ok && result.success) {
+          // Hide form, show success
+          document.getElementById('setup-form-container').classList.add('hidden');
+          document.getElementById('success-container').classList.remove('hidden');
+          
+          let timeLeft = 5;
+          const timerDisplay = document.getElementById('countdown-timer');
+          
+          const interval = setInterval(() => {
+            timeLeft--;
+            timerDisplay.innerText = timeLeft;
+            if (timeLeft <= 0) {
+              clearInterval(interval);
+              window.location.reload();
+            }
+          }, 1000);
+        } else {
+          throw new Error(result.error || 'Errore durante il salvataggio.');
+        }
+      } catch (err) {
+        errorAlert.innerText = err.message;
+        errorAlert.style.display = 'block';
+        
+        // Reset button
+        btn.disabled = false;
+        loader.style.display = 'none';
+        btnText.innerText = 'Salva e Avvia Sistema';
+      }
+    }
+  </script>
+</body>
+</html>

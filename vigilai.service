@@ -1,0 +1,15 @@
+[Unit]
+Description=Vigil.AI Security System Server
+After=network.target
+
+[Service]
+Type=simple
+User={{USER}}
+WorkingDirectory={{WORKING_DIR}}
+ExecStart=/usr/bin/npm start
+Restart=always
+Environment=NODE_ENV=production
+Environment=PORT=3088
+
+[Install]
+WantedBy=multi-user.target

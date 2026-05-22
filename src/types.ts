@@ -1,49 +1,47 @@
-export interface Hotspot {
+export type AlertTrigger = 
+  | "intrusion" 
+  | "violence" 
+  | "fire" 
+  | "smoke" 
+  | "safety_gear" 
+  | "fall";
+
+export type ZoneType = "restricted" | "alert" | "privacy" | "excluded";
+
+export interface Point {
+  x: number; // 0-1 normalized
+  y: number; // 0-1 normalized
+}
+
+export interface Zone {
+  id: string;
+  type: ZoneType;
+  points: Point[];
+  label?: string;
+}
+
+export interface Camera {
   id: string;
   name: string;
-  nameIt: string;
-  x: number; // percentage from left
-  y: number; // percentage from top
-  width: number;
-  height: number;
-  description: string;
-  descriptionIt: string;
-  evaTranscription?: string;
-  translationIt?: string;
-  translationEn?: string;
-  wordByWord?: WordAnalysis[];
+  location: string;
+  type: "webcam" | "ip" | "browser" | "onvif";
+  url?: string;
+  ip?: string;
+  port?: number;
+  username?: string;
+  password?: string;
+  rtspPath?: string;
+  zones?: Zone[];
+  status: "online" | "offline";
+  enabledTriggers: AlertTrigger[];
 }
 
-export interface Theory {
+export interface Incident {
   id: string;
-  name: string;
-  nameIt: string;
-  proponent: string;
+  timestamp: Date;
+  cameraId: string;
+  cameraName: string;
   description: string;
-  descriptionIt: string;
-  concept: string;
-  conceptIt: string;
-  plausibility: number; // 1-100%
-  exampleSubstitution?: Record<string, string>;
-}
-
-export interface LetterMap {
-  eva: string;
-  char: string;
-  name: string;
-  ipa?: string;
-  approxSound?: string;
-}
-
-export interface WordAnalysis {
-  voynichWord: string;
-  translation: string;
-  explanation: string;
-}
-
-export interface DecryptionResult {
-  suggestedMapping?: Record<string, string>;
-  hypotheticalTranslation?: string;
-  wordByWordAnalysis?: WordAnalysis[];
-  statisticalCommentary?: string;
+  threatLevel: "low" | "medium" | "high";
+  screenshot?: string;
 }

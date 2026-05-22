@@ -162,3 +162,8 @@ Error opening input files: Server returned 401 Unauthorized (authorization faile
 [2026-05-08T09:01:39.382Z] [192.168.1.17:554/stream1] [in#0 @ 00000259311a0ac0] Error opening input: Server returned 401 Unauthorized (authorization failed)
 Error opening input file rtsp://Testcamera:12345678@192.168.1.17:554/stream1.
 Error opening input files: Server returned 401 Unauthorized (authorization failed)
+[2026-05-22T08:00:17.998Z] [192.168.1.17:554/stream1] [in#0/rtsp @ 00000209f0ad2600][2026-05-22T08:00:18.013Z] [192.168.1.17:554/stream1]  [2026-05-22T08:00:18.014Z] [192.168.1.17:554/stream1] Error during demuxing: Error number -10054 occurred
+[2026-05-22T08:00:18.040Z] [192.168.1.17:554/stream1] [in#0/rtsp @ 00000209f0ad2600][2026-05-22T08:00:18.041Z] [192.168.1.17:554/stream1]  Error retrieving a packet from demuxer: Error number -10054 occurred
+[2026-05-22T08:00:18.047Z] [192.168.1.17:554/stream1] [h264 @ 00000209f0f0c680] [2026-05-22T08:00:18.047Z] [192.168.1.17:554/stream1] error while decoding MB 10 38, bytestream -7[2026-05-22T08:00:18.057Z] [192.168.1.17:554/stream1] 
+[2026-05-22T08:05:29.946Z] [192.168.1.17:554/stream1] [h264 @ 0000015786df5100] left block unavailable for requested intra4x4 mode -1
+[h264 @ 0000015786df5100] error while decoding MB 0 57, bytestream 91522

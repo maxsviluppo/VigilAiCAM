@@ -6,6 +6,8 @@ import nodemailer from "nodemailer";
 import bodyParser from "body-parser";
 import dotenv from "dotenv";
 import { networkInterfaces } from "os";
+import ffmpeg from "ffmpeg-static";
+import fs from "fs";
 
 dotenv.config();
 
@@ -14,9 +16,64 @@ const __dirname = path.dirname(__filename);
 
 async function startServer() {
   const app = express();
-  const PORT = 3001;
+  const PORT = 3088;
 
   app.use(bodyParser.json({ limit: "10mb" }));
+
+  // Controlla se le variabili essenziali nel file .env sono configurate
+  const isConfigured = () => {
+    return !!(
+      process.env.GEMINI_API_KEY &&
+      process.env.VITE_SUPABASE_URL &&
+      process.env.VITE_SUPABASE_ANON_KEY &&
+      process.env.EMAIL_USER &&
+      process.env.EMAIL_PASS
+    );
+  };
+
+  // Endpoint per salvare la configurazione iniziale da browser
+  app.post("/api/setup", (req, res) => {
+    try {
+      const { GEMINI_API_KEY, VITE_GEMINI_API_KEY, VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY, EMAIL_USER, EMAIL_PASS } = req.body;
+      
+      if (!GEMINI_API_KEY || !VITE_SUPABASE_URL || !VITE_SUPABASE_ANON_KEY || !EMAIL_USER || !EMAIL_PASS) {
+        return res.status(400).json({ success: false, error: "Tutti i campi sono obbligatori." });
+      }
+
+      const envContent = [
+        `GEMINI_API_KEY=${GEMINI_API_KEY}`,
+        `VITE_GEMINI_API_KEY=${VITE_GEMINI_API_KEY}`,
+        `EMAIL_USER=${EMAIL_USER}`,
+        `EMAIL_PASS=${EMAIL_PASS}`,
+        `VITE_SUPABASE_URL=${VITE_SUPABASE_URL}`,
+        `VITE_SUPABASE_ANON_KEY=${VITE_SUPABASE_ANON_KEY}`,
+        `NODE_ENV=production` // Forza la modalità di produzione al riavvio
+      ].join("\n");
+
+      fs.writeFileSync(path.join(process.cwd(), ".env"), envContent, "utf-8");
+      console.log("[Setup] Configurazione salvata correttamente nel file .env");
+      
+      res.json({ success: true });
+
+      // Riavvia il server tramite systemd per applicare i cambiamenti
+      setTimeout(() => {
+        console.log("[Setup] Riavvio del processo...");
+        process.exit(1); // L'uscita forzata fa riavviare il servizio da systemd
+      }, 1000);
+
+    } catch (err: any) {
+      console.error("[Setup] Errore di salvataggio:", err);
+      res.status(500).json({ success: false, error: err.message || "Impossibile salvare la configurazione." });
+    }
+  });
+
+  // Reindirizza tutte le richieste HTML al Setup Wizard se non configurato
+  app.use((req, res, next) => {
+    if (!isConfigured() && !req.path.startsWith("/api/")) {
+      return res.sendFile(path.join(process.cwd(), "setup_wizard.html"));
+    }
+    next();
+  });
 
   // API Route for System Info (IP Discovery)
   app.get("/api/info", (req, res) => {
@@ -86,7 +143,7 @@ async function startServer() {
 
   // --- IP CAMERA STREAM MANAGER ---
   const { spawn } = await import("child_process");
-  const FFMPEG_BIN = path.join(process.cwd(), "node_modules", "ffmpeg-static", "ffmpeg.exe");
+  const FFMPEG_BIN = ffmpeg || (process.platform === "win32" ? "ffmpeg.exe" : "ffmpeg");
   const activeStreams = new Map<string, { latestFrame: Buffer | null, lastAccessed: number, process: any }>();
   
   const SOI = Buffer.from([0xFF, 0xD8]);
