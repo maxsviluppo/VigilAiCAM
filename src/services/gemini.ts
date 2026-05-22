@@ -13,7 +13,8 @@ export const analyzeFrame = async (
   triggers: AlertTrigger[] = ["intrusion", "violence"],
   location: string = "Area monitorata",
   modelId: string = "gemini-3-flash-preview",
-  zones: any[] = []
+  zones: any[] = [],
+  triggerDescriptionsMap?: Record<string, string>
 ): Promise<DetectionResult> => {
   try {
     let rawKey = localStorage.getItem("vigilai_gemini_key") || "";
@@ -22,8 +23,8 @@ export const analyzeFrame = async (
        rawKey = import.meta.env.VITE_GEMINI_API_KEY || "";
     }
     if (!rawKey) {
-      // @ts-ignore
-      rawKey = process.env.GEMINI_API_KEY || "";
+       // @ts-ignore
+       rawKey = process.env.GEMINI_API_KEY || "";
     }
     const apiKey = rawKey ? rawKey.trim() : "";
     
@@ -40,16 +41,19 @@ export const analyzeFrame = async (
     // Clean base64 data if it contains the prefix
     const cleanBase64 = base64Image.includes(",") ? base64Image.split(",")[1] : base64Image;
 
-    const triggerDescriptions: Record<string, string> = {
-      intrusion: "Intrusione non autorizzata o presenza sospetta.",
-      violence: "Rapine, aggressioni, armi (pistole, coltelli, mazze).",
-      fire: "Fiamme libere o incendio.",
-      smoke: "Fumo denso.",
-      safety_gear: "Mancato uso di caschi/DPI.",
-      fall: "Persone a terra."
+    const defaultDescriptions: Record<string, string> = {
+      intrusion: "Intrusione non autorizzata o presenza sospetta di intrusi.",
+      violence: "Rapine, aggressioni, atti vandalici o armi (pistole, coltelli, mazze).",
+      fire: "Fiamme libere, principio di incendio o presenza di fuoco.",
+      smoke: "Fumo denso o fumo anomalo negli ambienti.",
+      safety_gear: "Mancato uso di caschi di protezione, giubbotti catarifrangenti o abbigliamento protettivo obbligatorio.",
+      fall: "Persone a terra, svenimenti o cadute accidentali.",
+      flooding: "Presenza di acqua o liquidi sul pavimento, allagamenti, pozze o perdite da tubature.",
+      earthquake: "Vibrazioni, oscillazioni continue o scuotimento dell'inquadratura compatibili con un terremoto/scossa sismica (da distinguere da urti singoli al tavolo/supporto)."
     };
 
-    const activePrompts = triggers.map((t) => triggerDescriptions[t] || t).join(" ");
+    const descriptions = triggerDescriptionsMap || defaultDescriptions;
+    const activePrompts = triggers.map((t) => descriptions[t] || t).join(" ");
 
     const zoneInfo = zones.length > 0 
       ? `\nZONE DEFINITE (Coordinate 0-1, 0,0 è top-left):\n${zones.map(z => `- NOME: "${z.label}", TIPO: "${z.type}", COORDINATE: ${JSON.stringify(z.points)}`).join('\n')}`

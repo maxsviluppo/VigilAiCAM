@@ -31,12 +31,16 @@ import {
   Gem,
   Lock,
   LogOut,
-  EyeOff
+  EyeOff,
+  Key,
+  ExternalLink,
+  Keyboard
 } from "lucide-react";
+import * as Lucide from "lucide-react";
 import { motion, AnimatePresence, Reorder } from "framer-motion";
 import { QRCodeCanvas } from 'qrcode.react';
 import { analyzeFrame, DetectionResult } from "./services/gemini";
-import { Camera, Incident, AlertTrigger, Zone, ZoneType, Point } from "./types";
+import { Camera, Incident, AlertTrigger, AlertTriggerItem, Zone, ZoneType, Point } from "./types";
 import { supabase } from "./supabase";
 import { User } from "@supabase/supabase-js";
 
@@ -125,6 +129,164 @@ const IPCameraPlayer = ({ url, isAlertActive, isNightMode, imgRefCallback }: {
   );
 };
 
+interface VirtualKeyboardProps {
+  activeField: string | null;
+  value: string;
+  setValue: React.Dispatch<React.SetStateAction<string>>;
+  onClose: () => void;
+  title?: string;
+}
+
+const VirtualKeyboard: React.FC<VirtualKeyboardProps> = ({
+  activeField,
+  value,
+  setValue,
+  onClose,
+  title
+}) => {
+  const [isShift, setIsShift] = useState(false);
+  const [isSymbols, setIsSymbols] = useState(false);
+
+  useEffect(() => {
+    const handleOutsideClick = (e: MouseEvent | TouchEvent) => {
+      const target = e.target as HTMLElement;
+      const isInput = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.closest('button[type="button"]') || target.closest('input') || target.closest('textarea');
+      const isKeyboard = target.closest('.virtual-keyboard');
+      if (!isInput && !isKeyboard) {
+        onClose();
+      }
+    };
+    document.addEventListener('mousedown', handleOutsideClick);
+    document.addEventListener('touchstart', handleOutsideClick);
+    return () => {
+      document.removeEventListener('mousedown', handleOutsideClick);
+      document.removeEventListener('touchstart', handleOutsideClick);
+    };
+  }, [onClose]);
+
+  if (!activeField) return null;
+
+  const normalRows = [
+    ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '-', '_'],
+    ['q', 'w', 'e', 'r', 't', 'y', 'u', 'i', 'o', 'p', '.', '/'],
+    ['a', 's', 'd', 'f', 'g', 'h', 'j', 'k', 'l', '@', ':'],
+    ['Shift', 'z', 'x', 'c', 'v', 'b', 'n', 'm', 'Space', '?123'],
+    ['Canc', 'OK']
+  ];
+
+  const symbolRows = [
+    ['!', '@', '#', '$', '%', '^', '&', '*', '(', ')', '-', '_'],
+    ['+', '=', '{', '}', '[', ']', '|', '\\', ':', ';', '"', '\''],
+    ['<', '>', ',', '?', '/', '~', '`', '.', 'Space', 'ABC'],
+    ['Canc', 'OK']
+  ];
+
+  const rows = isSymbols ? symbolRows : normalRows;
+
+  const handleKeyPress = (key: string) => {
+    if (key === 'Shift') {
+      setIsShift(prev => !prev);
+    } else if (key === '?123') {
+      setIsSymbols(true);
+    } else if (key === 'ABC') {
+      setIsSymbols(false);
+    } else if (key === 'Space') {
+      setValue(prev => prev + ' ');
+    } else if (key === 'Canc') {
+      setValue(prev => prev.slice(0, -1));
+    } else if (key === 'OK') {
+      onClose();
+    } else {
+      const val = isShift ? key.toUpperCase() : key.toLowerCase();
+      setValue(prev => prev + val);
+    }
+  };
+
+  return (
+    <motion.div
+      initial={{ y: 320, opacity: 0 }}
+      animate={{ y: 0, opacity: 1 }}
+      exit={{ y: 320, opacity: 0 }}
+      transition={{ type: "spring", stiffness: 300, damping: 30 }}
+      className="virtual-keyboard fixed bottom-0 left-0 right-0 mx-auto w-full max-w-lg bg-[#0d101e]/98 backdrop-blur-xl border-t border-white/10 rounded-t-[32px] p-4 z-[9999] flex flex-col gap-2 shadow-[0_-15px_40px_rgba(0,0,0,0.8)]"
+    >
+      <div className="flex justify-between items-center px-2 mb-1">
+        <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">
+          {title || `Tastiera Virtuale (${activeField})`}
+        </span>
+        <button
+          onClick={onClose}
+          type="button"
+          className="text-slate-500 hover:text-white text-xs font-black uppercase tracking-wider"
+        >
+          Nascondi
+        </button>
+      </div>
+
+      <div className="flex flex-col gap-1.5">
+        {rows.map((row, rIndex) => (
+          <div key={rIndex} className="flex justify-center gap-1 w-full">
+            {row.map((keyVal, kIndex) => {
+              let displayVal = keyVal;
+              let isWide = false;
+              let isActive = false;
+              let isAction = false;
+
+              if (keyVal === 'Shift') {
+                isWide = true;
+                displayVal = '⇧';
+                isActive = isShift;
+              } else if (keyVal === 'Space') {
+                isWide = true;
+                displayVal = 'Spazio';
+              } else if (keyVal === 'Canc') {
+                isWide = true;
+                displayVal = '⌫';
+              } else if (keyVal === 'OK') {
+                isWide = true;
+                isAction = true;
+                displayVal = 'OK';
+              } else if (keyVal === '?123' || keyVal === 'ABC') {
+                isWide = true;
+                displayVal = keyVal;
+              } else {
+                displayVal = isShift ? keyVal.toUpperCase() : keyVal.toLowerCase();
+              }
+
+              return (
+                <button
+                  key={kIndex}
+                  type="button"
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    handleKeyPress(keyVal);
+                  }}
+                  onTouchStart={(e) => {
+                    e.preventDefault();
+                    handleKeyPress(keyVal);
+                  }}
+                  className={`
+                    h-11 rounded-lg text-sm font-bold flex items-center justify-center select-none transition-all duration-75 active:scale-95 touch-manipulation
+                    ${isWide ? 'flex-[1.5]' : 'flex-1'}
+                    ${isAction 
+                      ? 'bg-blue-600 border border-blue-500 text-white shadow-[0_0_10px_rgba(37,99,235,0.4)]' 
+                      : isActive 
+                        ? 'bg-blue-500/20 border border-blue-500/40 text-blue-400' 
+                        : 'bg-white/5 border border-white/5 text-slate-200 hover:bg-white/10 hover:border-white/10'
+                    }
+                  `}
+                >
+                  {displayVal}
+                </button>
+              );
+            })}
+          </div>
+        ))}
+      </div>
+    </motion.div>
+  );
+};
+
 const Auth = () => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -132,6 +294,7 @@ const Auth = () => {
   const [mode, setMode] = useState<'login' | 'register'>('login');
   const [status, setStatus] = useState<{ type: 'error' | 'success', title: string, message: string } | null>(null);
   const [showPassword, setShowPassword] = useState(false);
+  const [activeField, setActiveField] = useState<'email' | 'password' | null>(null);
 
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -179,12 +342,21 @@ const Auth = () => {
           </div>
         </div>
         <form onSubmit={handleAuth} className="space-y-4">
-          <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 text-white focus:border-blue-500/50 outline-none transition-all" placeholder="Email" required />
+          <input 
+            type="email" 
+            value={email} 
+            onChange={(e) => setEmail(e.target.value)} 
+            onFocus={() => setActiveField('email')}
+            className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 text-white focus:border-blue-500/50 outline-none transition-all" 
+            placeholder="Email" 
+            required 
+          />
           <div className="relative">
             <input 
               type={showPassword ? "text" : "password"} 
               value={password} 
               onChange={(e) => setPassword(e.target.value)} 
+              onFocus={() => setActiveField('password')}
               className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 text-white focus:border-blue-500/50 outline-none transition-all pr-12" 
               placeholder="Password" 
               required 
@@ -229,13 +401,37 @@ const Auth = () => {
           </motion.div>
         )}
       </AnimatePresence>
+
+      <AnimatePresence>
+        {activeField && (
+          <VirtualKeyboard
+            activeField={activeField}
+            value={activeField === 'email' ? email : password}
+            setValue={activeField === 'email' ? setEmail : setPassword}
+            title={activeField === 'email' ? 'Tastiera Virtuale (Email)' : 'Tastiera Virtuale (Password)'}
+            onClose={() => setActiveField(null)}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 };
 
+const DEFAULT_TRIGGERS: AlertTriggerItem[] = [
+  { id: 'intrusion', label: 'Intrusione', description: 'Intrusione non autorizzata o presenza sospetta di intrusi.', icon_name: 'Eye', color_class: 'text-blue-400' },
+  { id: 'violence', label: 'Violenza', description: 'Rapine, aggressioni, atti vandalici o armi (pistole, coltelli, mazze).', icon_name: 'ShieldAlert', color_class: 'text-red-500' },
+  { id: 'fire', label: 'Incendio', description: 'Fiamme libere, principio di incendio o presenza di fuoco.', icon_name: 'Flame', color_class: 'text-orange-500' },
+  { id: 'smoke', label: 'Fumo', description: 'Fumo denso o fumo anomalo negli ambienti.', icon_name: 'Wind', color_class: 'text-slate-300' },
+  { id: 'safety_gear', label: 'DPI', description: 'Mancato uso di caschi di protezione, giubbotti catarifrangenti o abbigliamento protettivo obbligatorio.', icon_name: 'UserCheck', color_class: 'text-green-400' },
+  { id: 'fall', label: 'Cadute', description: 'Persone a terra, svenimenti o cadute accidentali.', icon_name: 'Activity', color_class: 'text-purple-400' },
+  { id: 'flooding', label: 'Allagamento', description: 'Presenza di acqua o liquidi sul pavimento, allagamenti, pozze o perdite da tubature.', icon_name: 'Waves', color_class: 'text-cyan-400' },
+  { id: 'earthquake', label: 'Terremoto', description: 'Vibrazioni, oscillazioni continue o scuotimento dell\'inquadratura compatibili con un terremoto/scossa sismica (da distinguere da urti singoli al tavolo/supporto).', icon_name: 'Zap', color_class: 'text-amber-500' }
+];
+
 export default function App() {
 
   const [connectMethod, setConnectMethod] = useState<'direct' | 'advanced' | 'browser'>('direct');
+  const [availableTriggers, setAvailableTriggers] = useState<AlertTriggerItem[]>(DEFAULT_TRIGGERS);
   
   const [user, setUser] = useState<any>(null);
   const [authLoading, setAuthLoading] = useState(true);
@@ -297,6 +493,234 @@ export default function App() {
     emailUser: localStorage.getItem("vigilai_email_user") || "",
     emailPass: localStorage.getItem("vigilai_email_pass") || "",
   });
+
+  // State della tastiera virtuale e del rilevamento tastiera fisica
+  const [keyboardTarget, setKeyboardTarget] = useState<{ id: string; title: string } | null>(null);
+  const [useVirtualKeyboard, setUseVirtualKeyboard] = useState(true);
+  const [showApiKeyModal, setShowApiKeyModal] = useState(false);
+  const [modalGeminiKey, setModalGeminiKey] = useState(() => localStorage.getItem("vigilai_gemini_key") || "");
+  const [showApiKeyHeaderInput, setShowApiKeyHeaderInput] = useState(false);
+
+  useEffect(() => {
+    const handlePhysicalKeyboard = (e: KeyboardEvent) => {
+      // Se l'evento è affidabile (isTrusted) ed è un singolo carattere alfanumerico
+      if (e.isTrusted && e.key.length === 1) {
+        setUseVirtualKeyboard(false);
+        setKeyboardTarget(null); // Chiude la tastiera a schermo
+      }
+    };
+    window.addEventListener('keydown', handlePhysicalKeyboard);
+    return () => window.removeEventListener('keydown', handlePhysicalKeyboard);
+  }, []);
+
+  // Sincronizza modalGeminiKey quando cambia appSettings.geminiKey
+  useEffect(() => {
+    setModalGeminiKey(appSettings.geminiKey);
+  }, [appSettings.geminiKey]);
+
+  // Esegue il backup diviso della chiave API su Supabase
+  const backupApiKeyToSupabase = async (key: string) => {
+    if (!key) {
+      try {
+        await supabase.from('settings').upsert({
+          id: 'gemini_key_backup',
+          gemini_part1: '',
+          gemini_part2: '',
+          updated_at: new Date().toISOString()
+        });
+      } catch (err) {
+        console.warn("[Backup API Key] Errore nella rimozione:", err);
+      }
+      return;
+    }
+    
+    try {
+      const mid = Math.floor(key.length / 2);
+      const part1 = key.substring(0, mid);
+      const part2 = key.substring(mid);
+      
+      const { error } = await supabase.from('settings').upsert({
+        id: 'gemini_key_backup',
+        gemini_part1: part1,
+        gemini_part2: part2,
+        updated_at: new Date().toISOString()
+      });
+      
+      if (error) {
+        if (error.code === 'PGRST205') {
+          console.warn("[Backup API Key] Tabella 'settings' non trovata su Supabase. Assicurati di aver eseguito lo script supabase_backup_table.sql");
+        } else {
+          console.error("[Backup API Key] Errore nel salvataggio su Supabase:", error.message);
+        }
+      } else {
+        console.log("[Backup API Key] Backup completato con successo su Supabase (diviso in due colonne).");
+      }
+    } catch (err) {
+      console.error("[Backup API Key] Errore inaspettato:", err);
+    }
+  };
+
+  const prevKeyboardTargetRef = useRef<{ id: string; title: string } | null>(null);
+  useEffect(() => {
+    const prevTarget = prevKeyboardTargetRef.current;
+    if (prevTarget && (prevTarget.id === 'settingsGeminiKey' || prevTarget.id === 'modalGeminiKey') && keyboardTarget?.id !== prevTarget.id) {
+      backupApiKeyToSupabase(appSettings.geminiKey);
+    }
+    prevKeyboardTargetRef.current = keyboardTarget;
+  }, [keyboardTarget, appSettings.geminiKey]);
+
+  // Risolve dinamicamente valore e setter per la tastiera virtuale globale
+  const getKeyboardProps = () => {
+    if (!keyboardTarget) return null;
+    const id = keyboardTarget.id;
+
+    if (id === 'settingsGeminiKey') {
+      return {
+        value: appSettings.geminiKey,
+        setValue: (val: string | ((prev: string) => string)) => {
+          setAppSettings(prev => {
+            const nextVal = typeof val === 'function' ? val(prev.geminiKey) : val;
+            localStorage.setItem("vigilai_gemini_key", nextVal);
+            return { ...prev, geminiKey: nextVal };
+          });
+        }
+      };
+    }
+    if (id === 'settingsEmailUser') {
+      return {
+        value: appSettings.emailUser,
+        setValue: (val: string | ((prev: string) => string)) => {
+          setAppSettings(prev => {
+            const nextVal = typeof val === 'function' ? val(prev.emailUser) : val;
+            return { ...prev, emailUser: nextVal };
+          });
+        }
+      };
+    }
+    if (id === 'settingsEmailPass') {
+      return {
+        value: appSettings.emailPass,
+        setValue: (val: string | ((prev: string) => string)) => {
+          setAppSettings(prev => {
+            const nextVal = typeof val === 'function' ? val(prev.emailPass) : val;
+            return { ...prev, emailPass: nextVal };
+          });
+        }
+      };
+    }
+    if (id === 'settingsNewEmail') {
+      return {
+        value: newEmail,
+        setValue: setNewEmail
+      };
+    }
+    if (id === 'modalGeminiKey') {
+      return {
+        value: modalGeminiKey,
+        setValue: setModalGeminiKey
+      };
+    }
+
+    if (editingCamera) {
+      if (id === 'cameraName') {
+        return {
+          value: editingCamera.name || '',
+          setValue: (val: string | ((prev: string) => string)) => {
+            setEditingCamera(prev => {
+              if (!prev) return null;
+              const nextVal = typeof val === 'function' ? val(prev.name || '') : val;
+              return { ...prev, name: nextVal };
+            });
+          }
+        };
+      }
+      if (id === 'cameraLocation') {
+        return {
+          value: editingCamera.location || '',
+          setValue: (val: string | ((prev: string) => string)) => {
+            setEditingCamera(prev => {
+              if (!prev) return null;
+              const nextVal = typeof val === 'function' ? val(prev.location || '') : val;
+              return { ...prev, location: nextVal };
+            });
+          }
+        };
+      }
+      if (id === 'cameraUrl') {
+        return {
+          value: editingCamera.url || '',
+          setValue: (val: string | ((prev: string) => string)) => {
+            setEditingCamera(prev => {
+              if (!prev) return null;
+              const nextVal = typeof val === 'function' ? val(prev.url || '') : val;
+              return { ...prev, url: nextVal };
+            });
+          }
+        };
+      }
+      if (id === 'cameraIp') {
+        return {
+          value: editingCamera.ip || '',
+          setValue: (val: string | ((prev: string) => string)) => {
+            setEditingCamera(prev => {
+              if (!prev) return null;
+              const nextVal = typeof val === 'function' ? val(prev.ip || '') : val;
+              return { ...prev, ip: nextVal };
+            });
+          }
+        };
+      }
+      if (id === 'cameraPort') {
+        return {
+          value: String(editingCamera.port || ''),
+          setValue: (val: string | ((prev: string) => string)) => {
+            setEditingCamera(prev => {
+              if (!prev) return null;
+              const nextVal = typeof val === 'function' ? val(String(prev.port || '')) : val;
+              return { ...prev, port: nextVal ? parseInt(nextVal) || 0 : 0 };
+            });
+          }
+        };
+      }
+      if (id === 'cameraUser') {
+        return {
+          value: editingCamera.username || '',
+          setValue: (val: string | ((prev: string) => string)) => {
+            setEditingCamera(prev => {
+              if (!prev) return null;
+              const nextVal = typeof val === 'function' ? val(prev.username || '') : val;
+              return { ...prev, username: nextVal };
+            });
+          }
+        };
+      }
+      if (id === 'cameraPass') {
+        return {
+          value: editingCamera.password || '',
+          setValue: (val: string | ((prev: string) => string)) => {
+            setEditingCamera(prev => {
+              if (!prev) return null;
+              const nextVal = typeof val === 'function' ? val(prev.password || '') : val;
+              return { ...prev, password: nextVal };
+            });
+          }
+        };
+      }
+      if (id === 'cameraRtsp') {
+        return {
+          value: editingCamera.rtspPath || '',
+          setValue: (val: string | ((prev: string) => string)) => {
+            setEditingCamera(prev => {
+              if (!prev) return null;
+              const nextVal = typeof val === 'function' ? val(prev.rtspPath || '') : val;
+              return { ...prev, rtspPath: nextVal };
+            });
+          }
+        };
+      }
+    }
+    return null;
+  };
   
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -307,6 +731,31 @@ export default function App() {
       setUser(session?.user ?? null);
     });
     return () => subscription.unsubscribe();
+  }, []);
+
+  // Caricamento dei trigger AI dinamici da Supabase
+  useEffect(() => {
+    const fetchTriggers = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('alert_triggers')
+          .select('*')
+          .order('created_at', { ascending: true });
+        
+        if (error) {
+          console.warn("[Database] Impossibile recuperare i trigger AI, uso fallback locali:", error.message);
+          return;
+        }
+
+        if (data && data.length > 0) {
+          console.log("[Database] Trigger AI caricati con successo:", data.length);
+          setAvailableTriggers(data);
+        }
+      } catch (err: any) {
+        console.warn("[Database] Errore imprevisto nel recupero dei trigger AI:", err.message);
+      }
+    };
+    fetchTriggers();
   }, []);
 
   // Diagnostic: Check if 'cameras' table is accessible
@@ -321,6 +770,79 @@ export default function App() {
     };
     if (user) checkTable();
   }, [user]);
+
+  // Recupero e allineamento dell'API Key da Supabase all'avvio
+  useEffect(() => {
+    const syncApiKey = async () => {
+      try {
+        const localKey = localStorage.getItem("vigilai_gemini_key") || "";
+        
+        // 1. Proviamo a leggere il backup da Supabase
+        const { data, error } = await supabase
+          .from('settings')
+          .select('gemini_part1, gemini_part2')
+          .eq('id', 'gemini_key_backup')
+          .maybeSingle();
+        
+        if (error) {
+          if (error.code === 'PGRST205') {
+            console.warn("[VigilAI Backup] Tabella 'settings' non trovata su Supabase. Crea la tabella tramite lo script SQL fornito.");
+          } else {
+            console.error("[VigilAI Backup] Errore nel recupero backup API Key:", error.message);
+          }
+          return;
+        }
+        
+        const dbKey = data ? ((data.gemini_part1 || '') + (data.gemini_part2 || '')).trim() : '';
+        
+        if (!localKey && dbKey) {
+          // Caso A: Cache locale cancellata ma chiave presente su Supabase -> Ripristina
+          console.log("[VigilAI Backup] API Key Gemini non trovata in locale ma presente nel database. Ripristino in corso...");
+          localStorage.setItem("vigilai_gemini_key", dbKey);
+          setAppSettings(prev => ({ ...prev, geminiKey: dbKey }));
+          setModalGeminiKey(dbKey);
+          setGlobalModal({
+            type: 'success',
+            title: 'API Key Ripristinata',
+            message: 'La tua chiave API Gemini è stata recuperata con successo dal backup del database cloud.'
+          });
+        } else if (localKey && !dbKey) {
+          // Caso B: Chiave presente in locale ma non su Supabase -> Effettua backup
+          console.log("[VigilAI Backup] API Key presente in locale ma non sul database. Allineamento backup in corso...");
+          const mid = Math.floor(localKey.length / 2);
+          const part1 = localKey.substring(0, mid);
+          const part2 = localKey.substring(mid);
+          await supabase.from('settings').upsert({
+            id: 'gemini_key_backup',
+            gemini_part1: part1,
+            gemini_part2: part2,
+            updated_at: new Date().toISOString()
+          });
+        } else if (localKey && dbKey && localKey !== dbKey) {
+          // Caso C: Disallineamento (l'utente ha cambiato chiave su un altro dispositivo o in locale)
+          // Diamo la precedenza alla chiave locale più recente o aggiorniamo Supabase
+          console.log("[VigilAI Backup] Rilevato disallineamento chiave locale/database. Allineamento database con chiave locale...");
+          const mid = Math.floor(localKey.length / 2);
+          const part1 = localKey.substring(0, mid);
+          const part2 = localKey.substring(mid);
+          await supabase.from('settings').upsert({
+            id: 'gemini_key_backup',
+            gemini_part1: part1,
+            gemini_part2: part2,
+            updated_at: new Date().toISOString()
+          });
+        }
+      } catch (err) {
+        console.error("[VigilAI Backup] Errore critico nel processo di sincronizzazione chiave:", err);
+      }
+    };
+    
+    // Eseguiamo la sincronizzazione dopo un piccolo delay per assicurare che il client Supabase sia pronto
+    const timer = setTimeout(() => {
+      syncApiKey();
+    }, 1000);
+    return () => clearTimeout(timer);
+  }, []);
 
 
   
@@ -749,7 +1271,11 @@ export default function App() {
 
       setIsAnalyzing(true);
       try {
-        const result = await analyzeFrame(base64Image, cam.enabledTriggers, cam.location, aiModel, cam.zones);
+        const triggerDescriptionsMap: Record<string, string> = {};
+        availableTriggers.forEach(t => {
+          triggerDescriptionsMap[t.id] = t.description;
+        });
+        const result = await analyzeFrame(base64Image, cam.enabledTriggers, cam.location, aiModel, cam.zones, triggerDescriptionsMap);
         if (cam.id === activeCameraId || result.isEmergency) {
           setLastAnalysis(result);
         }
@@ -1005,7 +1531,7 @@ export default function App() {
       password: "12345678",
       rtspPath: "/stream1",
       status: "online",
-      enabledTriggers: ["intrusion", "violence", "fire"]
+      enabledTriggers: availableTriggers.slice(0, 3).map(t => t.id)
     });
     setShowCameraModal(true);
   };
@@ -1076,6 +1602,76 @@ export default function App() {
                 title="Vista Griglia"
               >
                 <LayoutGrid size={18} />
+              </button>
+
+              {/* Gemini API Key Bar - Solo Desktop/TV */}
+              <div className="hidden md:flex items-center gap-2 relative">
+                <button
+                  type="button"
+                  onClick={() => setShowApiKeyHeaderInput(!showApiKeyHeaderInput)}
+                  className={`p-3 rounded-xl lg:rounded-2xl transition-all border ${showApiKeyHeaderInput || appSettings.geminiKey ? 'bg-blue-600/20 border-blue-500/30 text-blue-400' : 'glass border-white/5 text-slate-500 hover:text-white'}`}
+                  title="Gestisci API Key Gemini"
+                >
+                  <Key size={18} />
+                </button>
+                
+                <AnimatePresence>
+                  {showApiKeyHeaderInput && (
+                    <motion.div
+                      initial={{ width: 0, opacity: 0 }}
+                      animate={{ width: 220, opacity: 1 }}
+                      exit={{ width: 0, opacity: 0 }}
+                      className="overflow-hidden flex items-center gap-2 bg-slate-900/90 border border-white/10 rounded-xl px-2 py-1"
+                    >
+                      <input
+                        type="password"
+                        value={appSettings.geminiKey}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setAppSettings(prev => ({ ...prev, geminiKey: val }));
+                          localStorage.setItem("vigilai_gemini_key", val);
+                        }}
+                        onFocus={() => {
+                          if (useVirtualKeyboard) {
+                            setKeyboardTarget({ id: 'settingsGeminiKey', title: 'Chiave API Gemini' });
+                          }
+                        }}
+                        onBlur={() => backupApiKeyToSupabase(appSettings.geminiKey)}
+                        placeholder="API Key Gemini"
+                        className="bg-transparent text-xs text-white outline-none w-full px-1 py-1 font-mono"
+                      />
+                      {!appSettings.geminiKey && (
+                        <button
+                          type="button"
+                          onClick={() => setShowApiKeyModal(true)}
+                          className="px-2 py-1 bg-blue-600 text-white rounded text-[9px] font-black uppercase whitespace-nowrap hover:bg-blue-500"
+                        >
+                          Ottieni
+                        </button>
+                      )}
+                      {appSettings.geminiKey && (
+                        <button
+                          type="button"
+                          onClick={() => setShowApiKeyModal(true)}
+                          className="text-[9px] text-slate-400 hover:text-white uppercase font-bold px-1"
+                          title="Mostra QR Code / Info"
+                        >
+                          Info
+                        </button>
+                      )}
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+
+              {/* Pulsante Forza Tastiera Virtuale */}
+              <button 
+                type="button"
+                onClick={() => setUseVirtualKeyboard(!useVirtualKeyboard)}
+                className={`p-3 rounded-xl lg:rounded-2xl transition-all border ${useVirtualKeyboard ? 'bg-blue-600/20 border-blue-500/30 text-blue-400 shadow-[0_0_15px_rgba(59,130,246,0.2)]' : 'glass border-white/5 text-slate-500 hover:text-white'}`}
+                title={useVirtualKeyboard ? "Tastiera Virtuale Attiva" : "Tastiera Virtuale Disattivata"}
+              >
+                <Keyboard size={18} />
               </button>
 
               <button 
@@ -1184,11 +1780,15 @@ export default function App() {
 
         {/* Content Scrolling Area */}
         <div className="flex-1 overflow-y-auto p-4 lg:p-10 custom-scrollbar relative">
-          <div className="max-w-[1600px] mx-auto space-y-6 lg:space-y-10">
+          <div className="max-w-none mx-auto space-y-6 lg:space-y-10">
             
-            {/* Camera Grid Section */}
-            <div
-              className={`grid gap-8 ${isMultiView ? 'grid-cols-1 xl:grid-cols-2' : 'grid-cols-1'}`}
+            <div className="flex flex-col lg:flex-row gap-8 items-start">
+              
+              {/* Colonna Destra (Griglia Camere) - sopra su mobile, a dx su desktop */}
+              <div className="flex-1 w-full order-1 lg:order-2">
+                {/* Camera Grid Section */}
+                <div
+                  className={`grid gap-8 ${isMultiView ? 'grid-cols-1 xl:grid-cols-2' : 'grid-cols-1'}`}
               onMouseMove={(e) => handleZoneMove(e as any)}
               onTouchMove={(e) => handleZoneMove(e as any)}
               onMouseUp={handleZoneEnd}
@@ -1222,6 +1822,8 @@ export default function App() {
                     } ${
                       !isMultiView && cam.id !== activeCameraId ? 'hidden' : ''
                     } aspect-[16/10] ${
+                      !isMultiView ? 'max-w-[1200px] mx-auto w-full' : ''
+                    } ${
                       isEditingZones && activeCameraId === cam.id
                         ? 'ring-4 ring-amber-500/60 ring-inset touch-none'
                         : 'border-white/5 opacity-80 hover:opacity-100'
@@ -1539,12 +2141,13 @@ export default function App() {
                 ))}
               </AnimatePresence>
             </div>
+            </div> {/* Fine Colonna Destra */}
 
-            {/* AI Diagnostics & Event Log Section */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            {/* Colonna Sinistra (Diagnostica + Log) - sotto su mobile, a sx su desktop/TV */}
+            <div className="w-full lg:w-[400px] xl:w-[480px] grid grid-cols-1 md:grid-cols-3 lg:flex lg:flex-col gap-8 order-2 lg:order-1 shrink-0">
               
               {/* AI Real-time Output */}
-              <div id="ai-engine" className="lg:col-span-2 glass rounded-[32px] lg:rounded-[40px] p-6 lg:p-10 space-y-6 lg:space-y-8 border-white/5 relative overflow-hidden">
+              <div id="ai-engine" className="md:col-span-2 lg:w-full glass rounded-[32px] lg:rounded-[40px] p-6 lg:p-10 space-y-6 lg:space-y-8 border-white/5 relative overflow-hidden">
                 <div className="absolute top-0 right-0 w-64 h-64 bg-blue-500/5 rounded-full blur-[100px] pointer-events-none" />
                 
                 <div className="flex justify-between items-center relative z-10">
@@ -1626,7 +2229,7 @@ export default function App() {
               </div>
 
               {/* Event Log Sidebar */}
-              <div id="event-log" className="glass rounded-[32px] lg:rounded-[40px] p-6 lg:p-10 space-y-6 lg:space-y-8 border-white/5 flex flex-col max-h-[500px] lg:max-h-none">
+              <div id="event-log" className="md:col-span-1 lg:w-full glass rounded-[32px] lg:rounded-[40px] p-6 lg:p-10 space-y-6 lg:space-y-8 border-white/5 flex flex-col max-h-[500px] lg:max-h-none">
                 <div className="flex items-center gap-4">
                   <div className="w-10 h-10 lg:w-12 lg:h-12 glass rounded-2xl flex items-center justify-center bg-orange-500/10 border-orange-500/20">
                     <History size={20} className="text-orange-400 lg:size-[24px]" />
@@ -1672,7 +2275,8 @@ export default function App() {
                 </div>
               </div>
 
-            </div>
+            </div> {/* Fine Colonna Sinistra */}
+            </div> {/* Fine flex container responsive */}
 
             {/* Developer Credit Footer */}
             <div className="mt-20 pb-10 flex flex-col items-center justify-center gap-2 opacity-40 hover:opacity-100 transition-opacity">
@@ -1713,20 +2317,32 @@ export default function App() {
 
                 <div className="space-y-5 lg:space-y-6">
                   <div className="space-y-2">
-                    <label className="text-[9px] font-black uppercase tracking-widest text-slate-500 px-1">Nome Identificativo</label>
+                    <div className="flex justify-between items-center">
+                      <label className="text-[9px] font-black uppercase tracking-widest text-slate-500 px-1">Nome Identificativo</label>
+                      {keyboardTarget?.id === 'cameraName' && (
+                        <Keyboard size={12} className="text-blue-400 animate-pulse" />
+                      )}
+                    </div>
                     <input 
                       type="text" value={editingCamera.name}
                       onChange={(e) => setEditingCamera({...editingCamera, name: e.target.value})}
+                      onFocus={() => { if (useVirtualKeyboard) setKeyboardTarget({ id: 'cameraName', title: 'Nome Identificativo' }); }}
                       placeholder="es. Ingresso Sud"
                       className="w-full bg-white/5 border border-white/10 px-4 py-3 text-xs rounded-xl focus:border-white/30 outline-none transition-all text-white font-bold"
                     />
                   </div>
 
                   <div className="space-y-2">
-                    <label className="text-[9px] font-black uppercase tracking-widest text-slate-500 px-1">Posizione Fisica</label>
+                    <div className="flex justify-between items-center">
+                      <label className="text-[9px] font-black uppercase tracking-widest text-slate-500 px-1">Posizione Fisica</label>
+                      {keyboardTarget?.id === 'cameraLocation' && (
+                        <Keyboard size={12} className="text-blue-400 animate-pulse" />
+                      )}
+                    </div>
                     <input 
                       type="text" value={editingCamera.location}
                       onChange={(e) => setEditingCamera({...editingCamera, location: e.target.value})}
+                      onFocus={() => { if (useVirtualKeyboard) setKeyboardTarget({ id: 'cameraLocation', title: 'Posizione Fisica' }); }}
                       placeholder="es. Primo Piano, Ala Est"
                       className="w-full bg-white/5 border border-white/10 px-4 py-3 text-xs rounded-xl focus:border-white/30 outline-none transition-all text-white font-bold"
                     />
@@ -1748,12 +2364,18 @@ export default function App() {
                     
                     {editingCamera.type !== 'onvif' && (
                       <div className="space-y-2">
-                        <label className="text-[9px] font-black uppercase tracking-widest text-slate-500 px-1">Sorgente Video</label>
+                        <div className="flex justify-between items-center">
+                          <label className="text-[9px] font-black uppercase tracking-widest text-slate-500 px-1">Sorgente Video</label>
+                          {keyboardTarget?.id === 'cameraUrl' && (
+                            <Keyboard size={12} className="text-blue-400 animate-pulse" />
+                          )}
+                        </div>
                         <input 
                           type="text" 
                           disabled={editingCamera.type === 'webcam'}
                           value={editingCamera.type === 'webcam' ? 'Default System' : editingCamera.url}
                           onChange={(e) => setEditingCamera({...editingCamera, url: e.target.value})}
+                          onFocus={() => { if (useVirtualKeyboard) setKeyboardTarget({ id: 'cameraUrl', title: 'Sorgente Video URL' }); }}
                           placeholder="rtsp://..."
                           className="w-full bg-white/5 border border-white/10 px-4 py-3 text-[10px] rounded-xl focus:border-white/30 outline-none transition-all text-white/60 font-mono disabled:opacity-30"
                         />
@@ -1769,43 +2391,63 @@ export default function App() {
                       </div>
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div className="space-y-1">
-                          <label className="text-[8px] font-black uppercase tracking-widest text-slate-500 px-1">Indirizzo IP</label>
+                          <div className="flex justify-between items-center">
+                            <label className="text-[8px] font-black uppercase tracking-widest text-slate-500 px-1">Indirizzo IP</label>
+                            {keyboardTarget?.id === 'cameraIp' && <Keyboard size={10} className="text-blue-400 animate-pulse" />}
+                          </div>
                           <input 
                             type="text" value={editingCamera.ip || ''}
                             onChange={(e) => setEditingCamera({...editingCamera, ip: e.target.value})}
+                            onFocus={() => { if (useVirtualKeyboard) setKeyboardTarget({ id: 'cameraIp', title: 'Indirizzo IP ONVIF' }); }}
                             placeholder="es. 192.168.1.17"
                             className="w-full bg-slate-900/50 border border-white/10 px-4 py-3 text-xs rounded-xl outline-none text-white font-mono"
                           />
                         </div>
                         <div className="space-y-1">
-                          <label className="text-[8px] font-black uppercase tracking-widest text-slate-500 px-1">Porta RTSP</label>
+                          <div className="flex justify-between items-center">
+                            <label className="text-[8px] font-black uppercase tracking-widest text-slate-500 px-1">Porta RTSP</label>
+                            {keyboardTarget?.id === 'cameraPort' && <Keyboard size={10} className="text-blue-400 animate-pulse" />}
+                          </div>
                           <input 
                             type="number" value={editingCamera.port || 554}
                             onChange={(e) => setEditingCamera({...editingCamera, port: Number(e.target.value)})}
+                            onFocus={() => { if (useVirtualKeyboard) setKeyboardTarget({ id: 'cameraPort', title: 'Porta RTSP' }); }}
                             className="w-full bg-slate-900/50 border border-white/10 px-4 py-3 text-xs rounded-xl outline-none text-white font-mono"
                           />
                         </div>
                         <div className="space-y-1">
-                          <label className="text-[8px] font-black uppercase tracking-widest text-slate-500 px-1">Username</label>
+                          <div className="flex justify-between items-center">
+                            <label className="text-[8px] font-black uppercase tracking-widest text-slate-500 px-1">Username</label>
+                            {keyboardTarget?.id === 'cameraUser' && <Keyboard size={10} className="text-blue-400 animate-pulse" />}
+                          </div>
                           <input 
                             type="text" value={editingCamera.username || ''}
                             onChange={(e) => setEditingCamera({...editingCamera, username: e.target.value})}
+                            onFocus={() => { if (useVirtualKeyboard) setKeyboardTarget({ id: 'cameraUser', title: 'Username ONVIF' }); }}
                             className="w-full bg-slate-900/50 border border-white/10 px-4 py-3 text-xs rounded-xl outline-none text-white font-mono"
                           />
                         </div>
                         <div className="space-y-1">
-                          <label className="text-[8px] font-black uppercase tracking-widest text-slate-500 px-1">Password</label>
+                          <div className="flex justify-between items-center">
+                            <label className="text-[8px] font-black uppercase tracking-widest text-slate-500 px-1">Password</label>
+                            {keyboardTarget?.id === 'cameraPass' && <Keyboard size={10} className="text-blue-400 animate-pulse" />}
+                          </div>
                           <input 
                             type="password" value={editingCamera.password || ''}
                             onChange={(e) => setEditingCamera({...editingCamera, password: e.target.value})}
+                            onFocus={() => { if (useVirtualKeyboard) setKeyboardTarget({ id: 'cameraPass', title: 'Password ONVIF' }); }}
                             className="w-full bg-slate-900/50 border border-white/10 px-4 py-3 text-xs rounded-xl outline-none text-white font-mono"
                           />
                         </div>
                         <div className="space-y-1 col-span-1 sm:col-span-2">
-                          <label className="text-[8px] font-black uppercase tracking-widest text-slate-500 px-1">Percorso (Path)</label>
+                          <div className="flex justify-between items-center">
+                            <label className="text-[8px] font-black uppercase tracking-widest text-slate-500 px-1">Percorso (Path)</label>
+                            {keyboardTarget?.id === 'cameraRtsp' && <Keyboard size={10} className="text-blue-400 animate-pulse" />}
+                          </div>
                           <input 
                             type="text" value={editingCamera.rtspPath || '/stream1'}
                             onChange={(e) => setEditingCamera({...editingCamera, rtspPath: e.target.value})}
+                            onFocus={() => { if (useVirtualKeyboard) setKeyboardTarget({ id: 'cameraRtsp', title: 'Percorso RTSP (Path)' }); }}
                             className="w-full bg-slate-900/50 border border-white/10 px-4 py-3 text-xs rounded-xl outline-none text-white font-mono"
                           />
                         </div>
@@ -1816,15 +2458,9 @@ export default function App() {
                   <div className="space-y-4">
                     <label className="text-[9px] font-black uppercase tracking-widest text-slate-500 px-1">Trigger Allarmi AI Attivi</label>
                     <div className="grid grid-cols-2 gap-2">
-                      {[
-                        { id: 'intrusion', label: 'Intrusione', icon: <Eye size={12} />, color: 'text-blue-400' },
-                        { id: 'violence', label: 'Violenza', icon: <ShieldAlert size={12} />, color: 'text-red-500' },
-                        { id: 'fire', label: 'Incendio', icon: <Flame size={12} />, color: 'text-orange-500' },
-                        { id: 'smoke', label: 'Fumo', icon: <Wind size={12} />, color: 'text-slate-300' },
-                        { id: 'safety_gear', label: 'DPI', icon: <UserCheck size={12} />, color: 'text-green-400' },
-                        { id: 'fall', label: 'Cadute', icon: <Activity size={12} />, color: 'text-purple-400' },
-                      ].map(trigger => {
+                      {availableTriggers.map(trigger => {
                         const isActive = editingCamera.enabledTriggers.includes(trigger.id as AlertTrigger);
+                        const LucideIcon = (Lucide as any)[trigger.icon_name] || Lucide.AlertTriangle;
                         return (
                           <button
                             key={trigger.id}
@@ -1835,7 +2471,7 @@ export default function App() {
                             }}
                             className={`flex items-center gap-2 lg:gap-3 px-3 py-2.5 lg:px-4 lg:py-3 rounded-xl lg:rounded-2xl text-[9px] lg:text-[10px] font-black uppercase tracking-tight transition-all border ${isActive ? 'bg-white/10 border-white/30 text-white shadow-lg' : 'bg-transparent border-white/5 text-slate-500 hover:border-white/20'}`}
                           >
-                            <span className={isActive ? trigger.color : 'opacity-40'}>{trigger.icon}</span>
+                            <span className={isActive ? trigger.color_class : 'opacity-40'}><LucideIcon size={12} /></span>
                             {trigger.label}
                           </button>
                         );
@@ -1951,6 +2587,8 @@ export default function App() {
                       type="password" 
                       value={appSettings.geminiKey} 
                       onChange={(e) => setAppSettings({...appSettings, geminiKey: e.target.value})}
+                      onFocus={() => { if (useVirtualKeyboard) setKeyboardTarget({ id: 'settingsGeminiKey', title: 'Chiave API Gemini' }); }}
+                      onBlur={() => backupApiKeyToSupabase(appSettings.geminiKey)}
                       placeholder="Chiave API (AIzaSy...)"
                       className="w-full bg-black/20 border border-white/5 px-4 py-3 rounded-xl text-xs text-white outline-none focus:border-blue-500/50 transition-all font-mono"
                     />
@@ -1970,6 +2608,7 @@ export default function App() {
                       type="email" 
                       value={appSettings.emailUser} 
                       onChange={(e) => setAppSettings({...appSettings, emailUser: e.target.value})}
+                      onFocus={() => { if (useVirtualKeyboard) setKeyboardTarget({ id: 'settingsEmailUser', title: 'Email SMTP Mittente' }); }}
                       placeholder="tua.email@gmail.com"
                       className="w-full sm:flex-1 bg-white/5 border border-white/10 px-4 py-3 rounded-xl text-xs text-white outline-none focus:border-blue-500 transition-colors"
                     />
@@ -1977,6 +2616,7 @@ export default function App() {
                       type="password" 
                       value={appSettings.emailPass} 
                       onChange={(e) => setAppSettings({...appSettings, emailPass: e.target.value})}
+                      onFocus={() => { if (useVirtualKeyboard) setKeyboardTarget({ id: 'settingsEmailPass', title: 'Password App SMTP' }); }}
                       placeholder="Password App (16 car.)"
                       className="w-full sm:flex-1 bg-white/5 border border-white/10 px-4 py-3 rounded-xl text-xs text-white outline-none focus:border-blue-500 transition-colors"
                     />
@@ -1991,6 +2631,7 @@ export default function App() {
                   <div className="flex gap-2">
                     <input 
                       type="email" value={newEmail} onChange={(e) => setNewEmail(e.target.value)}
+                      onFocus={() => { if (useVirtualKeyboard) setKeyboardTarget({ id: 'settingsNewEmail', title: 'Aggiungi Destinatario Email' }); }}
                       placeholder="aggiungi destinatario..."
                       className="flex-1 bg-white/5 border border-white/10 px-4 py-3 rounded-xl text-xs text-white outline-none focus:border-blue-500 transition-colors"
                     />
@@ -2326,6 +2967,159 @@ export default function App() {
               </button>
             </motion.div>
           </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Gemini API Key Helper Modal */}
+      <AnimatePresence>
+        {showApiKeyModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[120] bg-slate-950/85 backdrop-blur-3xl flex items-center justify-center p-4"
+          >
+            <motion.div
+              initial={{ scale: 0.95, y: 30 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.95, y: 30 }}
+              className="glass bg-slate-900/98 rounded-[32px] lg:rounded-[40px] w-full max-w-4xl p-6 lg:p-10 border border-white/10 shadow-2xl relative flex flex-col max-h-[90vh]"
+            >
+              {/* Header */}
+              <div className="flex justify-between items-center mb-6">
+                <div>
+                  <h3 className="text-xl lg:text-2xl font-black text-white uppercase tracking-tight flex items-center gap-2">
+                    <Key className="text-blue-400" /> Ottieni API Key Gemini
+                  </h3>
+                  <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500 mt-1">Configurazione motore AI Google AI Studio</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowApiKeyModal(false)}
+                  className="p-2 lg:p-3 glass rounded-full hover:bg-white/10 transition-all text-slate-500 hover:text-white"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              {/* Modal Body */}
+              <div className="flex-1 overflow-y-auto space-y-6 pr-2 custom-scrollbar">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
+                  
+                  {/* Left Column: QR Code & Direct Link */}
+                  <div className="glass bg-white/5 border border-white/5 p-6 rounded-3xl space-y-4 flex flex-col items-center text-center">
+                    <h4 className="text-xs font-black text-white uppercase tracking-wider">Scansiona con Smartphone / Tablet</h4>
+                    <p className="text-[10px] text-slate-400 uppercase font-bold leading-relaxed">
+                      Scansiona il codice QR per generare e copiare la chiave sul tuo telefono. Puoi incollarla qui usando la tastiera virtuale, oppure puoi aprire l'app dal browser del tuo telefono all'indirizzo <span className="text-blue-400 font-mono select-all lowercase">{window.location.origin}</span> per incollarla direttamente da lì.
+                    </p>
+                    <div className="p-4 bg-white rounded-[24px] shadow-2xl shadow-blue-500/10">
+                      <QRCodeCanvas
+                        value="https://aistudio.google.com/app/apikey"
+                        size={160}
+                        level="H"
+                        includeMargin={false}
+                      />
+                    </div>
+                    <div className="w-full pt-2">
+                      <a
+                        href="https://aistudio.google.com/app/apikey"
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center gap-2 px-5 py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-[10px] font-black uppercase tracking-widest transition-all w-full justify-center shadow-lg shadow-blue-500/20"
+                      >
+                        Apri Google AI Studio <ExternalLink size={12} />
+                      </a>
+                    </div>
+                  </div>
+
+                  {/* Right Column: Google AI Studio in-app viewer (Iframe) */}
+                  <div className="glass bg-white/5 border border-white/5 p-6 rounded-3xl space-y-4 flex flex-col h-full">
+                    <h4 className="text-xs font-black text-white uppercase tracking-wider">In-App Google AI Studio</h4>
+                    <p className="text-[10px] text-slate-400 uppercase font-bold leading-relaxed">
+                      Puoi accedere direttamente alla console di Google da questa finestra per copiare la chiave. 
+                      <span className="text-amber-400 block mt-1">Nota: Se la finestra sotto rimane vuota, Google blocca il caricamento in iframe. Usa il QR Code a sinistra.</span>
+                    </p>
+                    <div className="flex-1 min-h-[220px] rounded-2xl overflow-hidden border border-white/10 bg-slate-950 relative">
+                      <iframe
+                        src="https://aistudio.google.com/app/apikey"
+                        className="w-full h-full border-none"
+                        title="Google AI Studio Key Page"
+                        sandbox="allow-same-origin allow-scripts allow-popups allow-forms"
+                      />
+                    </div>
+                  </div>
+
+                </div>
+
+                {/* API Key Input and Virtual Keyboard Trigger */}
+                <div className="bg-blue-900/20 border border-blue-500/20 p-5 rounded-3xl space-y-4">
+                  <div className="flex justify-between items-center">
+                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-300 px-1">Inserisci la tua API Key Gemini</label>
+                    {keyboardTarget?.id === 'modalGeminiKey' && (
+                      <Keyboard size={12} className="text-blue-400 animate-pulse" />
+                    )}
+                  </div>
+                  <input
+                    type="text"
+                    value={modalGeminiKey}
+                    onChange={(e) => setModalGeminiKey(e.target.value)}
+                    onFocus={() => {
+                      if (useVirtualKeyboard) {
+                        setKeyboardTarget({ id: 'modalGeminiKey', title: 'Nuova API Key Gemini' });
+                      }
+                    }}
+                    placeholder="Incolla o digita qui la chiave (AIzaSy...)"
+                    className="w-full bg-black/40 border border-white/10 px-4 py-3 rounded-xl text-xs text-white outline-none focus:border-blue-500 transition-colors font-mono"
+                  />
+                </div>
+              </div>
+
+              {/* Footer */}
+              <div className="flex gap-4 pt-4 border-t border-white/5 mt-6">
+                <button
+                  type="button"
+                  onClick={() => setShowApiKeyModal(false)}
+                  className="flex-1 py-4 glass rounded-2xl text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-white transition-all"
+                >
+                  Annulla
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAppSettings(prev => {
+                      const next = { ...prev, geminiKey: modalGeminiKey };
+                      localStorage.setItem("vigilai_gemini_key", modalGeminiKey);
+                      return next;
+                    });
+                    backupApiKeyToSupabase(modalGeminiKey);
+                    setShowApiKeyModal(false);
+                    setGlobalModal({
+                      type: 'success',
+                      title: 'API Key Salvata',
+                      message: 'La chiave API Gemini è stata configurata e salvata con successo.'
+                    });
+                  }}
+                  className="flex-2 py-4 bg-blue-600 rounded-2xl text-[10px] font-black uppercase tracking-widest text-white shadow-xl hover:bg-blue-500 transition-all font-bold"
+                >
+                  Salva API Key
+                </button>
+              </div>
+
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Global Virtual Keyboard */}
+      <AnimatePresence>
+        {keyboardTarget && (
+          <VirtualKeyboard
+            activeField={keyboardTarget.id}
+            value={getKeyboardProps()?.value || ""}
+            setValue={getKeyboardProps()?.setValue || (() => {})}
+            title={keyboardTarget.title}
+            onClose={() => setKeyboardTarget(null)}
+          />
         )}
       </AnimatePresence>
 

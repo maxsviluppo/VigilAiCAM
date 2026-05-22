@@ -7,18 +7,21 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <!-- Supabase JS Client per connettersi e inizializzare il DB direttamente dal setup -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <style>
     :root {
-      --bg-gradient: linear-gradient(135deg, #0d0e15 0%, #1a1c29 100%);
-      --panel-bg: rgba(22, 24, 38, 0.75);
+      --bg-gradient: linear-gradient(135deg, #090a10 0%, #12131e 100%);
+      --panel-bg: rgba(18, 20, 32, 0.7);
       --border-color: rgba(255, 255, 255, 0.08);
       --primary: #5c62ec;
       --primary-hover: #484ecf;
       --primary-glow: rgba(92, 98, 236, 0.3);
       --text: #f3f4f6;
-      --text-muted: #9ca3af;
+      --text-muted: #8e95a5;
       --success: #10b981;
       --error: #ef4444;
+      --warning: #f59e0b;
       --font: 'Outfit', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     }
 
@@ -36,179 +39,315 @@
       display: flex;
       justify-content: center;
       align-items: center;
-      padding: 20px;
+      padding: 15px;
       overflow-x: hidden;
       position: relative;
     }
 
-    /* Ambient background glow effects */
+    /* Ambient glow circles */
     body::before, body::after {
       content: '';
       position: absolute;
-      width: 400px;
-      height: 400px;
+      width: 300px;
+      height: 300px;
       border-radius: 50%;
       background: var(--primary);
-      filter: blur(150px);
-      opacity: 0.15;
+      filter: blur(120px);
+      opacity: 0.12;
       z-index: 0;
       pointer-events: none;
     }
     body::before {
-      top: -100px;
-      left: -100px;
+      top: -50px;
+      left: -50px;
     }
     body::after {
-      bottom: -100px;
-      right: -100px;
+      bottom: -50px;
+      right: -50px;
     }
 
     .container {
       background: var(--panel-bg);
-      backdrop-filter: blur(16px);
-      -webkit-backdrop-filter: blur(16px);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
       border: 1px solid var(--border-color);
-      border-radius: 24px;
-      padding: 40px;
+      border-radius: 20px;
+      padding: 30px 24px;
       width: 100%;
-      max-width: 580px;
-      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
+      max-width: 620px;
+      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
       z-index: 1;
       position: relative;
-      transition: transform 0.3s ease, box-shadow 0.3s ease;
+      overflow: hidden;
     }
 
-    .container:hover {
-      box-shadow: 0 25px 50px rgba(0, 0, 0, 0.5), 0 0 2px var(--primary-glow);
+    /* Stepper Header */
+    .stepper {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 25px;
+      position: relative;
+      padding: 0 10px;
     }
 
-    header {
-      text-align: center;
-      margin-bottom: 35px;
+    .stepper::before {
+      content: '';
+      position: absolute;
+      top: 15px;
+      left: 30px;
+      right: 30px;
+      height: 2px;
+      background: rgba(255, 255, 255, 0.05);
+      z-index: 1;
     }
 
-    .logo-container {
-      display: inline-flex;
+    .stepper-progress {
+      position: absolute;
+      top: 15px;
+      left: 30px;
+      width: 0%;
+      height: 2px;
+      background: var(--primary);
+      z-index: 2;
+      transition: width 0.3s ease;
+    }
+
+    .step-indicator {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      background: #151622;
+      border: 2px solid rgba(255, 255, 255, 0.1);
+      display: flex;
       align-items: center;
       justify-content: center;
-      background: rgba(92, 98, 236, 0.1);
-      border: 1px solid rgba(92, 98, 236, 0.2);
-      border-radius: 16px;
-      width: 56px;
-      height: 56px;
-      margin-bottom: 16px;
-      color: var(--primary);
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-muted);
+      position: relative;
+      z-index: 3;
+      transition: all 0.3s ease;
     }
 
-    .logo-svg {
-      width: 28px;
-      height: 28px;
-      fill: currentColor;
+    .step-indicator.active {
+      background: var(--primary);
+      border-color: var(--primary);
+      color: white;
+      box-shadow: 0 0 10px var(--primary-glow);
+    }
+
+    .step-indicator.completed {
+      background: var(--success);
+      border-color: var(--success);
+      color: white;
+    }
+
+    /* Form and step layouts */
+    .step-content {
+      display: none;
+    }
+
+    .step-content.active {
+      display: block;
+      animation: slideIn 0.3s ease forwards;
+    }
+
+    @keyframes slideIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
     }
 
     h1 {
-      font-size: 28px;
+      font-size: 22px;
       font-weight: 700;
-      margin-bottom: 8px;
+      margin-bottom: 6px;
       background: linear-gradient(135deg, #ffffff 0%, #cacede 100%);
       -webkit-background-clip: text;
       -webkit-text-fill-color: transparent;
     }
 
-    p.subtitle {
-      font-size: 14px;
+    .subtitle {
+      font-size: 13px;
       color: var(--text-muted);
-      line-height: 1.5;
+      margin-bottom: 20px;
+      line-height: 1.4;
     }
 
     .form-group {
-      margin-bottom: 22px;
-      position: relative;
+      margin-bottom: 16px;
     }
 
     label {
       display: block;
-      font-size: 13px;
+      font-size: 11px;
       font-weight: 600;
       color: var(--text-muted);
-      margin-bottom: 8px;
+      margin-bottom: 6px;
       text-transform: uppercase;
       letter-spacing: 0.05em;
     }
 
-    .input-wrapper {
-      position: relative;
-      display: flex;
-      align-items: center;
-    }
-
-    input {
+    input, select {
       width: 100%;
-      padding: 14px 16px;
-      background: rgba(10, 11, 18, 0.5);
+      padding: 12px 14px;
+      background: rgba(10, 11, 18, 0.6);
       border: 1px solid var(--border-color);
-      border-radius: 12px;
+      border-radius: 10px;
       color: var(--text);
       font-family: var(--font);
-      font-size: 15px;
+      font-size: 14px;
       transition: all 0.2s ease;
       outline: none;
     }
 
-    input:focus {
+    input:focus, select:focus {
       border-color: var(--primary);
       box-shadow: 0 0 0 3px var(--primary-glow);
-      background: rgba(10, 11, 18, 0.8);
     }
 
+    /* Info Badge / Help text */
     .help-text {
-      font-size: 12px;
+      font-size: 11px;
       color: var(--text-muted);
-      margin-top: 6px;
+      margin-top: 5px;
+      line-height: 1.3;
     }
 
-    button.btn-submit {
-      width: 100%;
-      padding: 16px;
-      background: var(--primary);
-      border: none;
-      border-radius: 12px;
-      color: white;
+    /* Buttons */
+    .button-group {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      margin-top: 25px;
+    }
+
+    button {
+      padding: 12px 20px;
+      border-radius: 10px;
       font-family: var(--font);
-      font-size: 16px;
+      font-size: 14px;
       font-weight: 600;
       cursor: pointer;
       transition: all 0.2s ease;
-      display: flex;
-      justify-content: center;
+      display: inline-flex;
       align-items: center;
-      gap: 10px;
-      box-shadow: 0 4px 12px rgba(92, 98, 236, 0.3);
-      margin-top: 10px;
+      justify-content: center;
+      gap: 8px;
+      outline: none;
+      border: none;
     }
 
-    button.btn-submit:hover:not(:disabled) {
+    .btn-primary {
+      background: var(--primary);
+      color: white;
+      box-shadow: 0 4px 12px var(--primary-glow);
+      flex-grow: 1;
+    }
+
+    .btn-primary:hover:not(:disabled) {
       background: var(--primary-hover);
       transform: translateY(-1px);
-      box-shadow: 0 6px 16px rgba(92, 98, 236, 0.4);
     }
 
-    button.btn-submit:active:not(:disabled) {
-      transform: translateY(1px);
+    .btn-secondary {
+      background: rgba(255, 255, 255, 0.05);
+      color: var(--text);
+      border: 1px solid var(--border-color);
     }
 
-    button.btn-submit:disabled {
-      opacity: 0.5;
+    .btn-secondary:hover:not(:disabled) {
+      background: rgba(255, 255, 255, 0.1);
+    }
+
+    button:disabled {
+      opacity: 0.4;
       cursor: not-allowed;
-      box-shadow: none;
+      transform: none !important;
+      box-shadow: none !important;
     }
 
+    .btn-test {
+      padding: 8px 12px;
+      font-size: 11px;
+      background: rgba(92, 98, 236, 0.15);
+      color: #9ea2f5;
+      border: 1px solid rgba(92, 98, 236, 0.3);
+      border-radius: 6px;
+      margin-top: 8px;
+    }
+
+    .btn-test:hover:not(:disabled) {
+      background: rgba(92, 98, 236, 0.25);
+    }
+
+    /* Wi-Fi lists and camera lists */
+    .wifi-list {
+      max-height: 180px;
+      overflow-y: auto;
+      border: 1px solid var(--border-color);
+      border-radius: 10px;
+      background: rgba(10, 11, 18, 0.4);
+      margin-bottom: 12px;
+    }
+
+    .wifi-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 12px 14px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+      cursor: pointer;
+      transition: background 0.2s ease;
+    }
+
+    .wifi-item:last-child {
+      border-bottom: none;
+    }
+
+    .wifi-item:hover {
+      background: rgba(255, 255, 255, 0.03);
+    }
+
+    .wifi-item.selected {
+      background: rgba(92, 98, 236, 0.1);
+      border-left: 3px solid var(--primary);
+    }
+
+    .wifi-info {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .wifi-signal {
+      display: flex;
+      align-items: flex-end;
+      gap: 2px;
+      height: 12px;
+    }
+
+    .wifi-bar {
+      width: 3px;
+      background: rgba(255, 255, 255, 0.2);
+      border-radius: 1px;
+    }
+
+    .wifi-bar.filled {
+      background: var(--success);
+    }
+
+    .wifi-bar:nth-child(1) { height: 3px; }
+    .wifi-bar:nth-child(2) { height: 6px; }
+    .wifi-bar:nth-child(3) { height: 9px; }
+    .wifi-bar:nth-child(4) { height: 12px; }
+
+    /* Alert and Badges */
     .alert {
-      padding: 14px 16px;
-      border-radius: 12px;
-      margin-bottom: 24px;
-      font-size: 14px;
+      padding: 10px 14px;
+      border-radius: 8px;
+      font-size: 12px;
       line-height: 1.4;
+      margin-bottom: 16px;
       display: none;
     }
 
@@ -224,148 +363,973 @@
       color: #a7f3d0;
     }
 
-    .loader {
-      width: 20px;
-      height: 20px;
-      border: 2px solid rgba(255, 255, 255, 0.3);
+    .alert-info {
+      background: rgba(92, 98, 236, 0.1);
+      border: 1px solid rgba(92, 98, 236, 0.2);
+      color: #c7d2fe;
+      display: block;
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 2px 6px;
+      font-size: 10px;
+      font-weight: 700;
+      border-radius: 4px;
+      text-transform: uppercase;
+    }
+
+    .badge-success {
+      background: rgba(16, 185, 129, 0.15);
+      color: var(--success);
+      border: 1px solid rgba(16, 185, 129, 0.3);
+    }
+
+    .badge-warning {
+      background: rgba(245, 158, 11, 0.15);
+      color: var(--warning);
+      border: 1px solid rgba(245, 158, 11, 0.3);
+    }
+
+    /* Camera Section CSS */
+    .camera-discovery-box {
+      margin-bottom: 15px;
+    }
+
+    .discovered-cams-list {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 8px;
+      margin-top: 10px;
+      max-height: 150px;
+      overflow-y: auto;
+    }
+
+    .cam-ip-item {
+      padding: 10px 12px;
+      background: rgba(255, 255, 255, 0.02);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .cam-ip-item:hover {
+      background: rgba(92, 98, 236, 0.05);
+      border-color: rgba(92, 98, 236, 0.3);
+    }
+
+    .cam-ip-item.selected {
+      background: rgba(92, 98, 236, 0.1);
+      border-color: var(--primary);
+    }
+
+    .preview-container {
+      width: 100%;
+      height: 180px;
+      border-radius: 10px;
+      background: #090a10;
+      border: 1px solid var(--border-color);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      margin-top: 10px;
+      position: relative;
+    }
+
+    .preview-img {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+
+    .preview-placeholder {
+      font-size: 12px;
+      color: var(--text-muted);
+      text-align: center;
+      padding: 20px;
+    }
+
+    .configured-list {
+      margin-top: 15px;
+      border-top: 1px solid var(--border-color);
+      padding-top: 15px;
+    }
+
+    .configured-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: rgba(16, 185, 129, 0.05);
+      border: 1px solid rgba(16, 185, 129, 0.2);
+      padding: 8px 12px;
+      border-radius: 8px;
+      margin-bottom: 6px;
+      font-size: 13px;
+    }
+
+    /* Loader animations */
+    .spinner {
+      width: 18px;
+      height: 18px;
+      border: 2px solid rgba(255, 255, 255, 0.2);
       border-radius: 50%;
       border-top-color: white;
       animation: spin 0.8s linear infinite;
-      display: none;
+      display: inline-block;
     }
 
     @keyframes spin {
       to { transform: rotate(360deg); }
     }
 
-    .hidden {
-      display: none;
+    .pulse {
+      animation: pulse-anim 1.5s infinite ease-in-out;
     }
 
-    .success-panel {
-      text-align: center;
-      padding: 20px 0;
+    @keyframes pulse-anim {
+      0% { opacity: 0.6; }
+      50% { opacity: 1; }
+      100% { opacity: 0.6; }
     }
 
-    .success-icon {
-      width: 64px;
-      height: 64px;
-      background: rgba(16, 185, 129, 0.1);
-      border: 1px solid rgba(16, 185, 129, 0.2);
-      color: var(--success);
-      border-radius: 50%;
-      display: inline-flex;
+    /* Small Screen Optimization (e.g. 3.5" display or portrait phone) */
+    @media (max-width: 480px), (max-height: 520px) {
+      body {
+        padding: 5px;
+        align-items: flex-start;
+      }
+      .container {
+        border-radius: 12px;
+        padding: 15px 12px;
+      }
+      h1 {
+        font-size: 18px;
+      }
+      .subtitle {
+        margin-bottom: 12px;
+        font-size: 11px;
+      }
+      .stepper {
+        margin-bottom: 15px;
+      }
+      .form-group {
+        margin-bottom: 10px;
+      }
+      input, select {
+        padding: 8px 10px;
+        font-size: 13px;
+      }
+      .wifi-list {
+        max-height: 100px;
+      }
+      .preview-container {
+        height: 120px;
+      }
+      .button-group {
+        margin-top: 15px;
+      }
+      button {
+        padding: 10px 14px;
+        font-size: 13px;
+      }
+    }
+
+    /* Virtual Keyboard styling */
+    .virtual-keyboard {
+      position: fixed;
+      bottom: -320px;
+      left: 0;
+      right: 0;
+      margin: 0 auto;
+      width: calc(100% - 20px);
+      max-width: 680px; /* Evita deformazioni su schermi grandi mantenendo dimensioni proporzionate */
+      background: rgba(13, 15, 25, 0.98);
+      backdrop-filter: blur(15px);
+      -webkit-backdrop-filter: blur(15px);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-bottom: none;
+      border-top-left-radius: 16px;
+      border-top-right-radius: 16px;
+      padding: 12px;
+      z-index: 10000;
+      transition: bottom 0.3s cubic-bezier(0.1, 0.9, 0.2, 1);
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.7);
+    }
+    .virtual-keyboard.active {
+      bottom: 0;
+    }
+    .keyboard-row {
+      display: flex;
+      justify-content: center;
+      gap: 4px;
+      width: 100%;
+    }
+    .key {
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      color: #f3f4f6;
+      border-radius: 6px;
+      height: 42px;
+      display: flex;
       align-items: center;
       justify-content: center;
-      margin-bottom: 20px;
-      animation: scaleUp 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+      flex-grow: 1;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      user-select: none;
+      transition: background 0.1s ease, transform 0.05s ease;
+      touch-action: manipulation;
     }
-
-    @keyframes scaleUp {
-      from { transform: scale(0.5); opacity: 0; }
-      to { transform: scale(1); opacity: 1; }
+    .key:active {
+      background: var(--primary);
+      transform: scale(0.92);
+      border-color: var(--primary);
     }
-
-    .countdown {
-      font-size: 32px;
-      font-weight: 700;
-      color: var(--primary);
-      margin-top: 15px;
+    .key.wide {
+      flex-grow: 2;
+      background: rgba(255, 255, 255, 0.15);
+      font-size: 13px;
+    }
+    .key.action-key {
+      background: var(--primary);
+      border-color: var(--primary);
+    }
+    .key.action-key:active {
+      background: var(--primary-hover);
+    }
+    body.keyboard-open {
+      padding-bottom: 280px !important;
     }
   </style>
 </head>
 <body>
 
-  <div class="container" id="main-container">
-    <div id="setup-form-container">
-      <header>
-        <div class="logo-container">
-          <svg class="logo-svg" viewBox="0 0 24 24">
-            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/>
-          </svg>
-        </div>
-        <h1>Configurazione Vigil.AI</h1>
-        <p class="subtitle">Inserisci le chiavi del sistema per configurare VigilAI sul tuo Raspberry Pi.</p>
-      </header>
-
-      <div class="alert alert-error" id="error-alert"></div>
-      <div class="alert alert-success" id="success-alert"></div>
-
-      <form id="setup-form" onsubmit="saveConfig(event)">
-        
-        <div class="form-group">
-          <label for="geminiKey">Gemini API Key</label>
-          <input type="text" id="geminiKey" required placeholder="AIzaSy...">
-          <p class="help-text">Necessaria per il rilevamento intelligente degli eventi.</p>
-        </div>
-
-        <div class="form-group">
-          <label for="supabaseUrl">Supabase URL</label>
-          <input type="url" id="supabaseUrl" required placeholder="https://xxxx.supabase.co">
-          <p class="help-text">URL del tuo database Supabase.</p>
-        </div>
-
-        <div class="form-group">
-          <label for="supabaseAnonKey">Supabase Anon Key</label>
-          <input type="text" id="supabaseAnonKey" required placeholder="eyJhbGciOi...">
-          <p class="help-text">Chiave Anon di Supabase per inviare i log.</p>
-        </div>
-
-        <div class="form-group">
-          <label for="emailUser">Email Mittente (Gmail)</label>
-          <input type="email" id="emailUser" required placeholder="esempio@gmail.com">
-          <p class="help-text">Account Gmail da cui verranno inviate le notifiche.</p>
-        </div>
-
-        <div class="form-group">
-          <label for="emailPass">Email App Password (Gmail)</label>
-          <input type="password" id="emailPass" required placeholder="••••••••••••••••">
-          <p class="help-text">Password per l'applicazione generata dal tuo account Google (16 caratteri).</p>
-        </div>
-
-        <button type="submit" class="btn-submit" id="btn-submit">
-          <span class="loader" id="btn-loader"></span>
-          <span id="btn-text">Salva e Avvia Sistema</span>
-        </button>
-      </form>
+  <div class="container" id="wizard-container">
+    
+    <!-- Stepper Progress Header -->
+    <div class="stepper">
+      <div class="stepper-progress" id="stepper-progress"></div>
+      <div class="step-indicator active" data-step="1">1</div>
+      <div class="step-indicator" data-step="2">2</div>
+      <div class="step-indicator" data-step="3">3</div>
     </div>
 
-    <!-- Success View -->
-    <div id="success-container" class="success-panel hidden">
-      <div class="success-icon">
-        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+    <div class="alert alert-error" id="error-alert"></div>
+    <div class="alert alert-success" id="success-alert"></div>
+
+    <!-- STEP 1: SISTEMA E RETE -->
+    <div class="step-content active" id="step-1-content">
+      <header>
+        <h1>1. Nome Box & Rete Wi-Fi</h1>
+        <p class="subtitle">Personalizza il nome del tuo Raspberry Pi ed effettua la connessione alla Wi-Fi locale.</p>
+      </header>
+
+      <div class="form-group">
+        <label for="hostname">Nome del Dispositivo (Hostname)</label>
+        <input type="text" id="hostname" placeholder="vigilai-box" value="vigilai-box">
+        <p class="help-text">Utilizzato per accedere al sistema in rete locale (es. http://vigilai-box.local:3088).</p>
+      </div>
+
+      <div class="form-group" style="margin-top: 20px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+          <label style="margin-bottom: 0;">Seleziona Rete Wi-Fi</label>
+          <button type="button" class="btn-test" style="margin-top: 0; padding: 4px 8px;" onclick="scanWifi()">
+            <span id="wifi-scan-loader" class="spinner" style="display: none; width: 10px; height: 10px; border-width: 1px;"></span>
+            <span id="wifi-scan-text">Cerca Reti</span>
+          </button>
+        </div>
+
+        <div class="wifi-list" id="wifi-list">
+          <div style="padding: 15px; text-align: center; font-size: 12px; color: var(--text-muted);">
+            Clicca "Cerca Reti" per individuare le connessioni Wi-Fi visibili.
+          </div>
+        </div>
+      </div>
+
+      <div class="form-group" id="wifi-password-group" style="display: none;">
+        <label for="wifi-password">Password per <span id="selected-ssid-label" style="color: var(--primary);"></span></label>
+        <input type="password" id="wifi-password" placeholder="Inserisci password Wi-Fi">
+      </div>
+
+      <div class="button-group">
+        <div></div> <!-- Spacer -->
+        <button type="button" class="btn-primary" id="btn-step-1" onclick="submitStep1()">
+          <span>Connetti e Continua</span>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
+        </button>
+      </div>
+    </div>
+
+    <!-- STEP 2: RILEVAMENTO TELECAMERE IP -->
+    <div class="step-content" id="step-2-content">
+      <header>
+        <h1>2. Rilevamento Telecamere IP</h1>
+        <p class="subtitle">Scansiona la tua rete locale per identificare e verificare le telecamere IP RTSP presenti.</p>
+      </header>
+
+      <div class="camera-discovery-box">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <label style="margin-bottom: 0;">Dispositivi IP Rilevati</label>
+          <button type="button" class="btn-test" style="margin-top: 0;" onclick="discoverCameras()">
+            <span id="cam-discover-loader" class="spinner" style="display: none; width: 10px; height: 10px; border-width: 1px;"></span>
+            <span id="cam-discover-text">Avvia Scansione IP</span>
+          </button>
+        </div>
+
+        <div class="discovered-cams-list" id="discovered-cams-list">
+          <div style="padding: 12px; text-align: center; font-size: 12px; color: var(--text-muted); width: 100%;">
+            Avvia la scansione per cercare dispositivi con porta RTSP attiva nella sottorete.
+          </div>
+        </div>
+      </div>
+
+      <!-- Configurazione Telecamera Selezionata -->
+      <div id="cam-config-panel" style="display: none; border-top: 1px solid var(--border-color); padding-top: 15px; margin-top: 10px;">
+        <h4 style="font-size: 13px; font-weight: 600; margin-bottom: 10px; color: var(--primary);">Configura Telecamera (<span id="active-cam-ip"></span>)</h4>
+        
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+          <div class="form-group">
+            <label for="cam-name">Nome Telecamera</label>
+            <input type="text" id="cam-name" placeholder="Es. Ingresso Principale">
+          </div>
+          <div class="form-group">
+            <label for="cam-location">Posizione / Zona</label>
+            <input type="text" id="cam-location" placeholder="Es. Esterno">
+          </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+          <div class="form-group">
+            <label for="cam-user">Username RTSP</label>
+            <input type="text" id="cam-user" placeholder="admin">
+          </div>
+          <div class="form-group">
+            <label for="cam-pass">Password RTSP</label>
+            <input type="password" id="cam-pass" placeholder="password">
+          </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; align-items: flex-end;">
+          <div class="form-group">
+            <label for="cam-path">Percorso RTSP (Path)</label>
+            <input type="text" id="cam-path" placeholder="/stream1" value="/stream1">
+          </div>
+          <button type="button" class="btn-secondary" style="height: 38px; margin-bottom: 16px;" onclick="testCameraStream()">
+            <span id="test-stream-loader" class="spinner" style="display: none; width: 12px; height: 12px; border-width: 1.5px;"></span>
+            <span>Verifica Stream</span>
+          </button>
+        </div>
+
+        <!-- Preview Immagine -->
+        <div class="preview-container" id="preview-container">
+          <div class="preview-placeholder" id="preview-placeholder">
+            Inserisci i dati e clicca "Verifica Stream" per vedere il fotogramma di anteprima.
+          </div>
+        </div>
+
+        <button type="button" class="btn-primary" style="margin-top: 10px; background: var(--success); width: 100%;" onclick="saveActiveCamera()">
+          Aggiungi Telecamera al Database
+        </button>
+      </div>
+
+      <!-- Elenco Telecamere Configurate e Aggiunte -->
+      <div class="configured-list" id="configured-list-section" style="display: none;">
+        <label>Telecamere Configurate nel Database</label>
+        <div id="configured-cams-container">
+          <!-- Popolato dinamicamente -->
+        </div>
+      </div>
+
+      <div class="button-group" style="margin-top: 20px;">
+        <button type="button" class="btn-secondary" onclick="prevStep(1)">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>
+          <span>Indietro</span>
+        </button>
+        <button type="button" class="btn-primary" id="btn-step-2" onclick="submitStep2()">
+          <span>Avanti (Riepilogo)</span>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
+        </button>
+      </div>
+    </div>
+
+    <!-- STEP 3: RIEPILOGO E SALVATAGGIO -->
+    <div class="step-content" id="step-3-content">
+      <header>
+        <h1>3. Riepilogo & Attivazione</h1>
+        <p class="subtitle">Conferma i dettagli di configurazione. Cliccando "Salva e Riavvia" il box si collegherà alla Wi-Fi configurata.</p>
+      </header>
+
+      <div style="background: rgba(255,255,255,0.02); border: 1px solid var(--border-color); border-radius: 12px; padding: 16px; margin-bottom: 20px; font-size: 13px;">
+        <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+          <span style="color: var(--text-muted);">Nome Box:</span>
+          <strong id="summary-hostname">vigilai-box</strong>
+        </div>
+        <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+          <span style="color: var(--text-muted);">Rete Wi-Fi:</span>
+          <strong id="summary-wifi">-</strong>
+        </div>
+        <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+          <span style="color: var(--text-muted);">Database Cloud:</span>
+          <strong style="color: var(--success);">Preimpostato</strong>
+        </div>
+        <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+          <span style="color: var(--text-muted);">Gemini AI Key:</span>
+          <strong style="color: var(--success);">Preimpostata</strong>
+        </div>
+        <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+          <span style="color: var(--text-muted);">Email Mittente:</span>
+          <strong style="color: var(--success);">Preimpostata</strong>
+        </div>
+        <div style="display: flex; justify-content: space-between;">
+          <span style="color: var(--text-muted);">Telecamere Aggiunte:</span>
+          <strong id="summary-cameras">0</strong>
+        </div>
+      </div>
+
+      <div class="alert alert-warning" style="display: block;">
+        <strong>Attenzione:</strong> Una volta salvato, l'hotspot di setup <em>VigilAI_Setup</em> verrà disattivato. Dovrai collegare il tuo smartphone o PC alla stessa rete Wi-Fi locale scelta per poter accedere a VigilAI.
+      </div>
+
+      <div class="button-group">
+        <button type="button" class="btn-secondary" onclick="prevStep(2)">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>
+          <span>Indietro</span>
+        </button>
+        <button type="button" class="btn-primary" id="btn-final-save" style="background: var(--success); box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);" onclick="saveAndReboot()">
+          <span>Salva e Riavvia Vigil.AI</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- SCHERMATA RIAVVIO IN CORSO -->
+    <div id="reboot-panel" style="display: none; text-align: center; padding: 30px 10px;">
+      <div style="width: 56px; height: 56px; background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.2); color: var(--success); border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; margin-bottom: 20px;">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
           <polyline points="20 6 9 17 4 12"></polyline>
         </svg>
       </div>
-      <h2>Configurazione Salvata!</h2>
-      <p class="subtitle" style="margin-top: 10px;">Il server si sta riavviando per applicare le nuove impostazioni.</p>
-      <p class="subtitle" style="margin-top: 5px;">Questa pagina si ricaricherà automaticamente tra:</p>
-      <div class="countdown" id="countdown-timer">5</div>
+      <h2 style="font-size: 20px; font-weight: 700; margin-bottom: 10px;">Configurazione Inviata!</h2>
+      <p class="subtitle">Il Raspberry Pi sta arrestando l'hotspot e collegandosi alla tua rete locale. Il servizio VigilAI verrà riavviato automaticamente.</p>
+      <p class="subtitle" style="margin-top: 15px;">Ricaricamento della pagina tra:</p>
+      <div style="font-size: 36px; font-weight: 700; color: var(--primary); margin-top: 10px;" id="reboot-countdown">10</div>
     </div>
+
   </div>
 
   <script>
-    async function saveConfig(event) {
-      event.preventDefault();
-      
-      const geminiKey = document.getElementById('geminiKey').value.trim();
-      const supabaseUrl = document.getElementById('supabaseUrl').value.trim();
-      const supabaseAnonKey = document.getElementById('supabaseAnonKey').value.trim();
-      const emailUser = document.getElementById('emailUser').value.trim();
-      const emailPass = document.getElementById('emailPass').value.trim();
+    // Configurazione dell'applicazione
+    const config = {
+      hostname: 'vigilai-box',
+      wifi: {
+        ssid: '',
+        password: ''
+      },
+      cloud: {
+        geminiKey: 'AIzaSyDznkSahzuLZIge6bruIMQk2J-WgMHEyHM',
+        supabaseUrl: 'https://bdcryhunzdemuficudws.supabase.co',
+        supabaseAnonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJkY3J5aHVuemRlbXVmaWN1ZHdzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzgxODQ4MzcsImV4cCI6MjA5Mzc2MDgzN30.hlqDNRSqgV12o3lFDFnB7wL5ve04JIk8T_VyjydLGh0'
+      },
+      email: {
+        user: 'castromassimo@gmail.com',
+        pass: 'nlytzpqmdhwouonl'
+      },
+      cameras: []
+    };
 
-      const btn = document.getElementById('btn-submit');
-      const loader = document.getElementById('btn-loader');
-      const btnText = document.getElementById('btn-text');
-      const errorAlert = document.getElementById('error-alert');
-      
-      // Reset alerts
-      errorAlert.style.display = 'none';
-      
-      // Loading state
+    let activeStep = 1;
+    let selectedSsid = '';
+    let selectedSsidIsSecured = false;
+    let selectedCamIp = '';
+    let supabaseClient = null;
+
+    // Aggiorna l'indicatore grafico dei passi (stepper)
+    function updateStepper() {
+      document.querySelectorAll('.step-indicator').forEach((el, index) => {
+        const stepNum = index + 1;
+        el.classList.remove('active', 'completed');
+        if (stepNum === activeStep) {
+          el.classList.add('active');
+        } else if (stepNum < activeStep) {
+          el.classList.add('completed');
+        }
+      });
+      const progressPercent = ((activeStep - 1) / 2) * 100;
+      document.getElementById('stepper-progress').style.width = `${progressPercent}%`;
+    }
+
+    // Naviga al passo precedente
+    function prevStep(step) {
+      document.getElementById(`step-${activeStep}-content`).classList.remove('active');
+      activeStep = step;
+      document.getElementById(`step-${activeStep}-content`).classList.add('active');
+      updateStepper();
+      hideAlerts();
+    }
+
+    // Gestione avvisi
+    function showAlert(type, msg) {
+      const errAlert = document.getElementById('error-alert');
+      const succAlert = document.getElementById('success-alert');
+      hideAlerts();
+      if (type === 'error') {
+        errAlert.innerText = msg;
+        errAlert.style.display = 'block';
+      } else {
+        succAlert.innerText = msg;
+        succAlert.style.display = 'block';
+      }
+    }
+
+    // Nasconde tutti gli avvisi
+    function hideAlerts() {
+      document.getElementById('error-alert').style.display = 'none';
+      document.getElementById('success-alert').style.display = 'none';
+    }
+
+    // --- STEP 1: HOSTNAME E WIFI ---
+    // Carica hostname di default all'avvio
+    async function loadDefaultHostname() {
+      try {
+        const res = await fetch('/api/system/hostname');
+        const data = await res.json();
+        if (res.ok && data.success) {
+          document.getElementById('hostname').value = data.hostname;
+          config.hostname = data.hostname;
+        }
+      } catch (err) {
+        console.warn('Errore lettura hostname default:', err);
+      }
+    }
+
+    // Esegue scansione delle reti Wi-Fi
+    async function scanWifi() {
+      const loader = document.getElementById('wifi-scan-loader');
+      const text = document.getElementById('wifi-scan-text');
+      const list = document.getElementById('wifi-list');
+
+      loader.style.display = 'inline-block';
+      text.innerText = 'Scansione...';
+      list.innerHTML = '<div style="padding: 20px; text-align: center;"><span class="spinner"></span><div style="margin-top: 8px; font-size: 12px; color: var(--text-muted);">Ricerca reti Wi-Fi in corso...</div></div>';
+
+      try {
+        const res = await fetch('/api/wifi/scan');
+        const data = await res.json();
+        
+        if (res.ok && data.success && data.networks.length > 0) {
+          list.innerHTML = '';
+          data.networks.forEach(net => {
+            const wifiItem = document.createElement('div');
+            wifiItem.className = 'wifi-item';
+            wifiItem.onclick = () => selectWifiNetwork(net.ssid, !!net.security, wifiItem);
+
+            // Calcolo barre segnale
+            const barsFilled = Math.ceil((net.signal || 0) / 25);
+            let signalHtml = '<div class="wifi-signal">';
+            for(let i=1; i<=4; i++) {
+              signalHtml += `<div class="wifi-bar ${i <= barsFilled ? 'filled' : ''}"></div>`;
+            }
+            signalHtml += '</div>';
+
+            wifiItem.innerHTML = `
+              <div class="wifi-info">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--text-muted);"><path d="M5 12.55a11 11 0 0 1 14.08 0"></path><path d="M1.42 9a16 16 0 0 1 21.16 0"></path><path d="M8.53 16.11a6 6 0 0 1 6.95 0"></path><line x1="12" y1="20" x2="12.01" y2="20"></line></svg>
+                <span style="font-size: 13px; font-weight: 500;">${net.ssid}</span>
+                ${net.security ? `<span class="badge badge-warning" style="font-size: 8px; padding: 1px 3px;">${net.security}</span>` : ''}
+              </div>
+              <div>${signalHtml}</div>
+            `;
+            list.appendChild(wifiItem);
+          });
+        } else {
+          list.innerHTML = '<div style="padding: 15px; text-align: center; font-size: 12px; color: var(--text-muted);">Nessuna rete Wi-Fi trovata. Assicurati che l\'antenna sia collegata.</div>';
+        }
+      } catch (err) {
+        list.innerHTML = `<div style="padding: 15px; text-align: center; font-size: 12px; color: var(--error);">Errore di scansione: ${err.message}</div>`;
+      } finally {
+        loader.style.display = 'none';
+        text.innerText = 'Cerca Reti';
+      }
+    }
+
+    // Seleziona una rete Wi-Fi e gestisce la richiesta password
+    function selectWifiNetwork(ssid, isSecured, element) {
+      selectedSsid = ssid;
+      selectedSsidIsSecured = isSecured;
+      document.querySelectorAll('.wifi-item').forEach(el => el.classList.remove('selected'));
+      element.classList.add('selected');
+      if (isSecured) {
+        document.getElementById('wifi-password-group').style.display = 'block';
+        document.getElementById('selected-ssid-label').innerText = ssid;
+        document.getElementById('wifi-password').value = '';
+        document.getElementById('wifi-password').focus();
+      } else {
+        document.getElementById('wifi-password-group').style.display = 'none';
+        document.getElementById('wifi-password').value = '';
+      }
+    }
+
+    // Connette alla rete Wi-Fi e passa allo Step 2 (Rilevamento Telecamere)
+    async function submitStep1() {
+      const hostnameInput = document.getElementById('hostname').value.trim();
+      const pwdInput = document.getElementById('wifi-password').value;
+
+      if (!hostnameInput) {
+        showAlert('error', 'Nome box obbligatorio.');
+        return;
+      }
+      if (!selectedSsid) {
+        showAlert('error', 'Seleziona una rete Wi-Fi prima di procedere.');
+        return;
+      }
+      if (selectedSsidIsSecured && !pwdInput) {
+        showAlert('error', 'La password è obbligatoria per le reti Wi-Fi protette.');
+        return;
+      }
+
+      const btn = document.getElementById('btn-step-1');
       btn.disabled = true;
-      loader.style.display = 'block';
-      btnText.innerText = 'Salvataggio in corso...';
+      btn.innerHTML = '<span class="spinner"></span> <span>Salvataggio hostname...</span>';
+      hideAlerts();
+
+      try {
+        // 1. Applica Hostname
+        const hostRes = await fetch('/api/system/hostname', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ hostname: hostnameInput })
+        });
+        const hostData = await hostRes.json();
+        if (!hostRes.ok || !hostData.success) {
+          throw new Error("Impossibile salvare l'hostname.");
+        }
+        config.hostname = hostnameInput;
+
+        // Memorizziamo le credenziali Wi-Fi localmente nella configurazione
+        config.wifi.ssid = selectedSsid;
+        config.wifi.password = pwdInput;
+
+        // Inizializza client supabase in modo facoltativo (non blocca se fallisce)
+        try {
+          if (window.supabase) {
+            supabaseClient = window.supabase.createClient(config.cloud.supabaseUrl, config.cloud.supabaseAnonKey);
+          }
+        } catch (e) {
+          console.warn("Impossibile inizializzare Supabase:", e);
+        }
+
+        // Carica telecamere esistenti in modo facoltativo
+        try {
+          if (supabaseClient) {
+            await loadExistingCameras();
+          }
+        } catch (e) {
+          console.warn("Impossibile caricare telecamere esistenti:", e);
+        }
+
+        // Passa allo step successivo
+        document.getElementById('step-1-content').classList.remove('active');
+        activeStep = 2;
+        document.getElementById('step-2-content').classList.add('active');
+        updateStepper();
+      } catch (err) {
+        showAlert('error', err.message);
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<span>Connetti e Continua</span> <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>';
+      }
+    }
+
+    // --- STEP 2: DISCOVERY TELECAMERE IP ---
+    // Carica telecamere precedentemente configurate nel database
+    async function loadExistingCameras() {
+      if (!supabaseClient) return;
+      try {
+        const { data, error } = await supabaseClient.from('cameras').select('*');
+        if (!error && data) {
+          config.cameras = data;
+          renderConfiguredCameras();
+        }
+      } catch (err) {
+        console.warn('Errore lettura telecamere esistenti:', err);
+      }
+    }
+
+    // Scansiona dispositivi sulla sottorete locale
+    async function discoverCameras() {
+      const loader = document.getElementById('cam-discover-loader');
+      const text = document.getElementById('cam-discover-text');
+      const list = document.getElementById('discovered-cams-list');
+
+      loader.style.display = 'inline-block';
+      text.innerText = 'Scansione in corso...';
+      list.innerHTML = '<div style="padding: 20px; text-align: center; width: 100%;"><span class="spinner"></span><div style="margin-top: 8px; font-size: 12px; color: var(--text-muted);">Scansione porte RTSP (554/8554) nella sottorete...</div></div>';
+
+      try {
+        const res = await fetch('/api/cameras/discover');
+        const data = await res.json();
+
+        if (res.ok && data.success) {
+          list.innerHTML = '';
+          if (data.cameras.length === 0) {
+            list.innerHTML = '<div style="padding: 15px; text-align: center; font-size: 12px; color: var(--text-muted); width: 100%;">Nessun dispositivo RTSP trovato. Puoi aggiungere un IP manualmente.</div>';
+            addManualIpOption();
+          } else {
+            data.cameras.forEach(ip => {
+              const item = document.createElement('div');
+              item.className = 'cam-ip-item';
+              item.onclick = () => selectCameraIp(ip, item);
+              item.innerHTML = `
+                <div style="display: flex; align-items: center; gap: 8px;">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#5c62ec" stroke-width="2"><rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18"></rect><line x1="7" y1="2" x2="7" y2="22"></line><line x1="17" y1="2" x2="17" y2="22"></line><line x1="2" y1="12" x2="22" y2="12"></line><line x1="2" y1="7" x2="7" y2="7"></line><line x1="2" y1="17" x2="7" y2="17"></line><line x1="17" y1="17" x2="22" y2="17"></line><line x1="17" y1="7" x2="22" y2="7"></line></svg>
+                  <span style="font-size: 13px; font-weight: 500;">Telecamera Rilevata</span>
+                </div>
+                <strong style="font-size: 13px; color: var(--primary);">${ip}</strong>
+              `;
+              list.appendChild(item);
+            });
+            addManualIpOption();
+          }
+        }
+      } catch (err) {
+        list.innerHTML = `<div style="padding: 15px; text-align: center; font-size: 12px; color: var(--error); width: 100%;">Scansione fallita: ${err.message}</div>`;
+      } finally {
+        loader.style.display = 'none';
+        text.innerText = 'Avvia Scansione IP';
+      }
+    }
+
+    // Aggiunge pulsante per inserire manualmente un IP
+    function addManualIpOption() {
+      const list = document.getElementById('discovered-cams-list');
+      const item = document.createElement('div');
+      item.className = 'cam-ip-item';
+      item.style.borderStyle = 'dashed';
+      item.onclick = () => {
+        const manualIp = prompt("Inserisci l'indirizzo IP della telecamera manualmente:", "192.168.1.");
+        if (manualIp && manualIp.trim()) {
+          selectCameraIp(manualIp.trim(), item);
+        }
+      };
+      item.innerHTML = `
+        <span style="font-size: 12px; color: var(--text-muted);">+ Aggiungi IP Telecamera manualmente...</span>
+        <span></span>
+      `;
+      list.appendChild(item);
+    }
+
+    // Seleziona un IP per configurarlo
+    function selectCameraIp(ip, element) {
+      selectedCamIp = ip;
+      document.querySelectorAll('.cam-ip-item').forEach(el => el.classList.remove('selected'));
+      if (element) element.classList.add('selected');
+
+      document.getElementById('active-cam-ip').innerText = ip;
+      document.getElementById('cam-config-panel').style.display = 'block';
+
+      document.getElementById('cam-name').value = `Telecamera ${ip.split('.').pop()}`;
+      document.getElementById('cam-location').value = 'Interno';
+      
+      document.getElementById('preview-container').innerHTML = `
+        <div class="preview-placeholder" id="preview-placeholder">
+          Inserisci i dati e clicca "Verifica Stream" per vedere il fotogramma di anteprima.
+        </div>
+      `;
+      
+      document.getElementById('cam-name').focus();
+    }
+
+    // Testa la connettività dello stream RTSP della telecamera
+    async function testCameraStream() {
+      const user = document.getElementById('cam-user').value.trim();
+      const pass = document.getElementById('cam-pass').value.trim();
+      const path = document.getElementById('cam-path').value.trim();
+      
+      if (!selectedCamIp) {
+        showAlert('error', 'Seleziona prima una telecamera.');
+        return;
+      }
+
+      let rtspUrl = '';
+      if (user && pass) {
+        rtspUrl = `rtsp://${user}:${pass}@${selectedCamIp}:554${path}`;
+      } else {
+        rtspUrl = `rtsp://${selectedCamIp}:554${path}`;
+      }
+
+      const loader = document.getElementById('test-stream-loader');
+      const container = document.getElementById('preview-container');
+      
+      loader.style.display = 'inline-block';
+      container.innerHTML = '<span class="spinner" style="width:30px; height:30px;"></span><div style="position:absolute; bottom:15px; font-size:11px; color:var(--text-muted);">Apertura flusso RTSP in corso...</div>';
+
+      try {
+        const res = await fetch('/api/cameras/test-stream', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ rtspUrl })
+        });
+        const data = await res.json();
+
+        if (res.ok && data.success && data.preview) {
+          container.innerHTML = `<img src="${data.preview}" class="preview-img" alt="Anteprima Stream">`;
+          showAlert('success', 'Flusso video agganciato con successo!');
+        } else {
+          container.innerHTML = `<div class="preview-placeholder" style="color:var(--error);">${data.error || "Impossibile caricare l'immagine."}</div>`;
+          showAlert('error', data.error || 'Impossibile connettersi alla telecamera.');
+        }
+      } catch (err) {
+        container.innerHTML = `<div class="preview-placeholder" style="color:var(--error);">${err.message}</div>`;
+        showAlert('error', err.message);
+      } finally {
+        loader.style.display = 'none';
+      }
+    }
+
+    // Salva la telecamera configurata su Supabase (in locale prima, e in background su Supabase se attivo)
+    async function saveActiveCamera() {
+      const name = document.getElementById('cam-name').value.trim();
+      const location = document.getElementById('cam-location').value.trim();
+      const user = document.getElementById('cam-user').value.trim();
+      const pass = document.getElementById('cam-pass').value.trim();
+      const path = document.getElementById('cam-path').value.trim();
+
+      if (!name) {
+        showAlert('error', 'Il nome della telecamera è obbligatorio.');
+        return;
+      }
+
+      let rtspUrl = '';
+      if (user && pass) {
+        rtspUrl = `rtsp://${user}:${pass}@${selectedCamIp}:554${path}`;
+      } else {
+        rtspUrl = `rtsp://${selectedCamIp}:554${path}`;
+      }
+
+      const camData = {
+        name,
+        location: location || 'Interno',
+        type: 'ip',
+        url: rtspUrl,
+        ip: selectedCamIp,
+        port: 554,
+        username: user || null,
+        password: pass || null,
+        rtspPath: path || '/stream1',
+        status: 'online',
+        enabledTriggers: ['intrusion', 'violence', 'fire', 'smoke', 'fall']
+      };
+
+      // Salviamo sempre in locale per l'invio finale
+      config.cameras.push(camData);
+      renderConfiguredCameras();
+      showAlert('success', `Telecamera "${name}" aggiunta in locale correttamente!`);
+
+      // Se il client database è attivo, proviamo il salvataggio immediato in background
+      if (supabaseClient) {
+        console.log("Tentativo di salvataggio telecamera nel database cloud...");
+        supabaseClient
+          .from('cameras')
+          .insert([camData])
+          .select()
+          .then(({ data, error }) => {
+            if (error) {
+              console.warn("Salvataggio cloud non riuscito (sarà riprovato al riavvio):", error.message);
+            } else if (data && data.length > 0) {
+              console.log("Telecamera salvata anche nel database cloud.");
+              // Sostituiamo l'elemento locale con quello del DB (che ha l'ID corretto)
+              const idx = config.cameras.indexOf(camData);
+              if (idx !== -1) {
+                config.cameras[idx] = data[0];
+              }
+            }
+          })
+          .catch(err => {
+            console.warn("Errore durante salvataggio cloud in background:", err);
+          });
+      }
+
+      document.getElementById('cam-config-panel').style.display = 'none';
+      selectedCamIp = '';
+      document.querySelectorAll('.cam-ip-item').forEach(el => el.classList.remove('selected'));
+    }
+
+    // Renderizza l'elenco delle telecamere configurate
+    function renderConfiguredCameras() {
+      const container = document.getElementById('configured-cams-container');
+      const section = document.getElementById('configured-list-section');
+
+      if (config.cameras.length === 0) {
+        section.style.display = 'none';
+        return;
+      }
+
+      section.style.display = 'block';
+      container.innerHTML = '';
+
+      config.cameras.forEach((cam, idx) => {
+        const item = document.createElement('div');
+        item.className = 'configured-item';
+        item.innerHTML = `
+          <div>
+            <strong>${cam.name}</strong> 
+            <span style="color:var(--text-muted); font-size:11px; margin-left: 5px;">(${cam.ip || 'RTSP'})</span>
+          </div>
+          <button type="button" class="btn-secondary" style="padding: 4px 8px; font-size: 11px; color:var(--error); border-color: rgba(239, 68, 68, 0.2);" onclick="removeCamera(${idx})">
+            Rimuovi
+          </button>
+        `;
+        container.appendChild(item);
+      });
+    }
+
+    // Rimuove una telecamera da configurazione locale e database
+    async function removeCamera(idx) {
+      const removedCam = config.cameras[idx];
+      config.cameras.splice(idx, 1);
+      renderConfiguredCameras();
+
+      if (removedCam && removedCam.id && supabaseClient) {
+        try {
+          const { error } = await supabaseClient.from('cameras').delete().eq('id', removedCam.id);
+          if (error) console.error("Errore eliminazione database:", error);
+        } catch (err) {
+          console.error("Errore rimozione:", err);
+        }
+      }
+    }
+
+    // Avanza allo Step 3 (Riepilogo)
+    function submitStep2() {
+      if (config.cameras.length === 0) {
+        const proceed = confirm("Non hai inserito alcuna telecamera nel database. Vuoi procedere comunque?");
+        if (!proceed) return;
+      }
+
+      document.getElementById('summary-hostname').innerText = config.hostname;
+      document.getElementById('summary-wifi').innerText = config.wifi.ssid;
+      document.getElementById('summary-cameras').innerText = config.cameras.length;
+
+      document.getElementById('step-2-content').classList.remove('active');
+      activeStep = 3;
+      document.getElementById('step-3-content').classList.add('active');
+      updateStepper();
+      hideAlerts();
+    }
+
+    // --- STEP 3: SALVATAGGIO FINALE E RIAVVIO ---
+    async function saveAndReboot() {
+      const btn = document.getElementById('btn-final-save');
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spinner"></span> <span>Salvataggio definitivo...</span>';
 
       try {
         const response = await fetch('/api/setup', {
@@ -374,46 +1338,211 @@
             'Content-Type': 'application/json'
           },
           body: JSON.stringify({
-            GEMINI_API_KEY: geminiKey,
-            VITE_GEMINI_API_KEY: geminiKey,
-            VITE_SUPABASE_URL: supabaseUrl,
-            VITE_SUPABASE_ANON_KEY: supabaseAnonKey,
-            EMAIL_USER: emailUser,
-            EMAIL_PASS: emailPass
+            GEMINI_API_KEY: config.cloud.geminiKey,
+            VITE_GEMINI_API_KEY: config.cloud.geminiKey,
+            VITE_SUPABASE_URL: config.cloud.supabaseUrl,
+            VITE_SUPABASE_ANON_KEY: config.cloud.supabaseAnonKey,
+            EMAIL_USER: config.email.user,
+            EMAIL_PASS: config.email.pass,
+            WIFI_SSID: config.wifi.ssid,
+            WIFI_PASSWORD: config.wifi.password,
+            cameras: config.cameras
           })
         });
 
         const result = await response.json();
 
         if (response.ok && result.success) {
-          // Hide form, show success
-          document.getElementById('setup-form-container').classList.add('hidden');
-          document.getElementById('success-container').classList.remove('hidden');
+          document.getElementById('step-3-content').style.display = 'none';
+          document.querySelector('.stepper').style.display = 'none';
+          document.getElementById('reboot-panel').style.display = 'block';
           
-          let timeLeft = 5;
-          const timerDisplay = document.getElementById('countdown-timer');
+          let timeLeft = 10;
+          const countdownEl = document.getElementById('reboot-countdown');
           
           const interval = setInterval(() => {
             timeLeft--;
-            timerDisplay.innerText = timeLeft;
+            countdownEl.innerText = timeLeft;
             if (timeLeft <= 0) {
               clearInterval(interval);
-              window.location.reload();
+              if (config.hostname) {
+                window.location.href = `http://${config.hostname}.local:3088/`;
+              } else {
+                window.location.reload();
+              }
             }
           }, 1000);
         } else {
-          throw new Error(result.error || 'Errore durante il salvataggio.');
+          throw new Error(result.error || 'Errore durante il salvataggio finale.');
         }
       } catch (err) {
-        errorAlert.innerText = err.message;
-        errorAlert.style.display = 'block';
-        
-        // Reset button
+        showAlert('error', 'Salvataggio finale fallito: ' + err.message);
         btn.disabled = false;
-        loader.style.display = 'none';
-        btnText.innerText = 'Salva e Avvia Sistema';
+        btn.innerHTML = '<span>Salva e Riavvia Vigil.AI</span>';
       }
     }
+
+    // --- TASTIERA VIRTUALE INTEGRATA ---
+    let activeInput = null;
+    let isShift = false;
+    let isSymbols = false;
+
+    const normalRows = [
+      ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '-', '_'],
+      ['q', 'w', 'e', 'r', 't', 'y', 'u', 'i', 'o', 'p', '.', '/'],
+      ['a', 's', 'd', 'f', 'g', 'h', 'j', 'k', 'l', '@', ':'],
+      ['Shift', 'z', 'x', 'c', 'v', 'b', 'n', 'm', 'Space', '?123'],
+      ['Canc', 'OK']
+    ];
+
+    const symbolRows = [
+      ['!', '@', '#', '$', '%', '^', '&', '*', '(', ')', '-', '_'],
+      ['+', '=', '{', '}', '[', ']', '|', '\\', ':', ';', '"', '\''],
+      ['<', '>', ',', '?', '/', '~', '`', '.', 'Space', 'ABC'],
+      ['Canc', 'OK']
+    ];
+
+    function setupVirtualKeyboard() {
+      if (document.getElementById('virtual-keyboard')) return;
+
+      const kb = document.createElement('div');
+      kb.id = 'virtual-keyboard';
+      kb.className = 'virtual-keyboard';
+      document.body.appendChild(kb);
+
+      renderKeyboard(normalRows);
+
+      // Seleziona in modo robusto tutti i tipi di input editabili (es. text, password, url, email, etc.)
+      const inputs = document.querySelectorAll('input:not([type="checkbox"]):not([type="radio"]):not([type="submit"]):not([type="button"]):not([type="file"])');
+      inputs.forEach(input => {
+        input.addEventListener('focus', () => {
+          activeInput = input;
+          kb.classList.add('active');
+          document.body.classList.add('keyboard-open');
+          setTimeout(() => {
+            input.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          }, 300);
+        });
+
+        input.addEventListener('click', () => {
+          activeInput = input;
+          kb.classList.add('active');
+          document.body.classList.add('keyboard-open');
+        });
+      });
+
+      const handleOutsideClick = (e) => {
+        const isInput = Array.from(inputs).some(input => input.contains(e.target));
+        const isKeyboard = kb.contains(e.target);
+        if (!isInput && !isKeyboard) {
+          kb.classList.remove('active');
+          document.body.classList.remove('keyboard-open');
+          if (activeInput) {
+            activeInput.blur();
+            activeInput = null;
+          }
+        }
+      };
+      // Utilizziamo mousedown/touchstart a livello document catturati in anticipo per non interferire con click di tastiera/input
+      document.addEventListener('mousedown', handleOutsideClick, true);
+      document.addEventListener('touchstart', handleOutsideClick, true);
+    }
+
+    function renderKeyboard(rows) {
+      const kb = document.getElementById('virtual-keyboard');
+      if (!kb) return;
+      kb.innerHTML = '';
+
+      rows.forEach(row => {
+        const rowEl = document.createElement('div');
+        rowEl.className = 'keyboard-row';
+
+        row.forEach(keyVal => {
+          const keyEl = document.createElement('div');
+          keyEl.className = 'key';
+          
+          let displayVal = keyVal;
+          if (keyVal === 'Shift') {
+            keyEl.classList.add('wide');
+            displayVal = '⇧';
+            if (isShift) keyEl.style.background = 'var(--primary)';
+          } else if (keyVal === 'Space') {
+            keyEl.classList.add('wide');
+            displayVal = 'Spazio';
+          } else if (keyVal === 'Canc') {
+            keyEl.classList.add('wide');
+            displayVal = '⌫';
+          } else if (keyVal === 'OK') {
+            keyEl.classList.add('wide', 'action-key');
+            displayVal = 'OK';
+          } else if (keyVal === '?123' || keyVal === 'ABC') {
+            keyEl.classList.add('wide');
+            displayVal = keyVal;
+          } else {
+            displayVal = isShift ? keyVal.toUpperCase() : keyVal.toLowerCase();
+          }
+
+          keyEl.innerText = displayVal;
+
+          const pressHandler = (e) => {
+            e.preventDefault();
+            handleKeyPress(keyVal);
+          };
+          
+          keyEl.addEventListener('mousedown', pressHandler);
+          keyEl.addEventListener('touchstart', pressHandler);
+
+          rowEl.appendChild(keyEl);
+        });
+
+        kb.appendChild(rowEl);
+      });
+    }
+
+    function handleKeyPress(key) {
+      if (!activeInput) return;
+
+      if (key === 'Shift') {
+        isShift = !isShift;
+        renderKeyboard(isSymbols ? symbolRows : normalRows);
+      } else if (key === '?123') {
+        isSymbols = true;
+        renderKeyboard(symbolRows);
+      } else if (key === 'ABC') {
+        isSymbols = false;
+        renderKeyboard(normalRows);
+      } else if (key === 'Space') {
+        activeInput.value += ' ';
+        activeInput.dispatchEvent(new Event('input', { bubbles: true }));
+        activeInput.dispatchEvent(new Event('change', { bubbles: true }));
+      } else if (key === 'Canc') {
+        const val = activeInput.value;
+        if (val.length > 0) {
+          activeInput.value = val.substring(0, val.length - 1);
+          activeInput.dispatchEvent(new Event('input', { bubbles: true }));
+          activeInput.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+      } else if (key === 'OK') {
+        document.getElementById('virtual-keyboard').classList.remove('active');
+        document.body.classList.remove('keyboard-open');
+        activeInput.blur();
+        activeInput = null;
+      } else {
+        const val = isShift ? key.toUpperCase() : key.toLowerCase();
+        activeInput.value += val;
+        activeInput.dispatchEvent(new Event('input', { bubbles: true }));
+        activeInput.dispatchEvent(new Event('change', { bubbles: true }));
+      }
+    }
+
+    // Carica hostname default all'avvio e inizializza tastiera virtuale
+    window.addEventListener('DOMContentLoaded', () => {
+      loadDefaultHostname();
+      setupVirtualKeyboard();
+      if (window.supabase) {
+        supabaseClient = window.supabase.createClient(config.cloud.supabaseUrl, config.cloud.supabaseAnonKey);
+      }
+    });
   </script>
 </body>
 </html>

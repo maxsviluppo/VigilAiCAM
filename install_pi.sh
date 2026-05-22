@@ -114,7 +114,7 @@ if [ -n "$DESKTOP_DIR" ]; then
 [Desktop Entry]
 Name=VigilAI Monitor
 Comment=Avvia il monitoraggio VigilAI
-Exec=$BROWSER_CMD --start-maximized http://localhost:3088
+Exec=$BROWSER_CMD --start-maximized --password-store=basic --use-mock-keychain --no-first-run --noerrdialogs --disable-infobars http://localhost:3088
 Icon=video-display
 Terminal=false
 Type=Application
@@ -126,6 +126,41 @@ EOF
 else
   echo -e "${YELLOW}Nessuna cartella Desktop rilevata (Desktop o Scrivania). Scorciatoia saltata.${CLEAR}"
 fi
+
+# 9. Setup Autostart in Kiosk Mode for Raspberry Pi Display
+echo -e "${YELLOW}Configurazione dell'avvio automatico in modalità Kiosk...${CLEAR}"
+AUTOSTART_DIR="$HOME/.config/autostart"
+mkdir -p "$AUTOSTART_DIR"
+BROWSER_CMD="chromium"
+if command -v chromium-browser &> /dev/null; then
+  BROWSER_CMD="chromium-browser"
+fi
+
+cat << EOF > "$AUTOSTART_DIR/vigilai-kiosk.desktop"
+[Desktop Entry]
+Type=Application
+Name=VigilAI Kiosk
+Exec=$BROWSER_CMD --kiosk --password-store=basic --use-mock-keychain --no-first-run --noerrdialogs --disable-infobars http://localhost:3088
+X-GNOME-Autostart-enabled=true
+EOF
+
+chmod 755 "$AUTOSTART_DIR/vigilai-kiosk.desktop"
+echo -e "${GREEN}Autostart Kiosk configurato con successo in: $AUTOSTART_DIR/vigilai-kiosk.desktop${CLEAR}"
+
+# 10. Sudoers permissions & scripts permissions
+echo -e "${YELLOW}Configurazione permessi script e regole sudoers per gestione rete...${CLEAR}"
+chmod +x "$CURRENT_DIR/scripts/setup_ap.sh"
+
+SUDOERS_FILE="/etc/sudoers.d/vigilai-network"
+cat << EOF > /tmp/vigilai-network
+# Vigil.AI Network and Hostname management rules for Node.js
+$CURRENT_USER ALL=(ALL) NOPASSWD: /usr/bin/nmcli, /usr/bin/hostnamectl, $CURRENT_DIR/scripts/setup_ap.sh
+EOF
+
+sudo chmod 440 /tmp/vigilai-network
+sudo chown root:root /tmp/vigilai-network
+sudo mv /tmp/vigilai-network $SUDOERS_FILE
+echo -e "${GREEN}Regole sudoers configurate correttamente in $SUDOERS_FILE${CLEAR}"
 
 echo -e "${GREEN}======================================================================${CLEAR}"
 echo -e "${GREEN}         INSTALLAZIONE E CONFIGURAZIONE DI Vigil.AI COMPLETATA!      ${CLEAR}"

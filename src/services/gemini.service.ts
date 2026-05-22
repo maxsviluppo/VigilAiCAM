@@ -8,6 +8,11 @@ export class GeminiService {
     private apiKey = '';
 
     private getApiKey(): string {
+        const localKey = typeof window !== 'undefined' ? localStorage.getItem("vigilai_gemini_key") : null;
+        if (localKey && localKey.trim() !== "") {
+            return localKey.trim();
+        }
+
         const env = (import.meta as any).env || {};
         const processEnv = (window as any).process?.env || {};
 

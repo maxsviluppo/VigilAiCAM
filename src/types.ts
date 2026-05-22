@@ -1,10 +1,12 @@
-export type AlertTrigger = 
-  | "intrusion" 
-  | "violence" 
-  | "fire" 
-  | "smoke" 
-  | "safety_gear" 
-  | "fall";
+export type AlertTrigger = string;
+
+export interface AlertTriggerItem {
+  id: string;
+  label: string;
+  description: string;
+  icon_name: string;
+  color_class: string;
+}
 
 export type ZoneType = "restricted" | "alert" | "privacy" | "excluded";
 
