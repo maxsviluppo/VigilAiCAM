@@ -468,6 +468,33 @@ export default function App() {
     fetch('/api/info').then(res => res.json()).then(setServerInfo).catch(console.error);
   }, []);
 
+  // Carica le impostazioni dal server Raspberry Pi all'avvio
+  useEffect(() => {
+    const loadServerSettings = async () => {
+      try {
+        const res = await fetch("/api/settings");
+        const data = await res.json();
+        if (res.ok && data.success) {
+          console.log("[Settings] Impostazioni caricate con successo dal server locale.");
+          setAppSettings({
+            geminiKey: data.geminiKey || "",
+            emailUser: data.emailUser || "",
+            emailPass: data.emailPass || "",
+          });
+          if (data.notificationEmails && data.notificationEmails.length > 0) {
+            setNotificationEmails(data.notificationEmails);
+          }
+          if (data.geminiKey) {
+            localStorage.setItem("vigilai_gemini_key", data.geminiKey);
+          }
+        }
+      } catch (err) {
+        console.warn("[Settings] Impossibile caricare le impostazioni dal server locale, uso fallback:", err);
+      }
+    };
+    loadServerSettings();
+  }, []);
+
   const handleLogout = async () => {
     const { error } = await supabase.auth.signOut();
     if (error) {
@@ -2673,17 +2700,61 @@ export default function App() {
                   </button>
 
                   <button 
-                    onClick={() => {
+                    onClick={async () => {
+                      setIsSaving(true);
+                      setSaveStatus(null);
+                      
+                      // 1. Salva in localStorage per cache locale
                       localStorage.setItem("vigilai_gemini_key", appSettings.geminiKey);
                       localStorage.setItem("vigilai_email_user", appSettings.emailUser);
                       localStorage.setItem("vigilai_email_pass", appSettings.emailPass);
                       localStorage.setItem("vigilai_model", aiModel);
                       localStorage.setItem("vigilai_notification_emails", JSON.stringify(notificationEmails));
-                      setShowSettings(false);
+
+                      // 2. Backup API Key su Supabase (se presente)
+                      await backupApiKeyToSupabase(appSettings.geminiKey);
+
+                      // 3. Salva sul server locale del Raspberry Pi
+                      try {
+                        const response = await fetch("/api/settings", {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({
+                            geminiKey: appSettings.geminiKey,
+                            emailUser: appSettings.emailUser,
+                            emailPass: appSettings.emailPass,
+                            notificationEmails: notificationEmails
+                          })
+                        });
+                        const data = await response.json();
+                        if (response.ok && data.success) {
+                          setSaveStatus({ type: 'success', message: 'Impostazioni salvate con successo sul server!' });
+                        } else {
+                          throw new Error(data.error || "Errore del server");
+                        }
+                      } catch (err: any) {
+                        console.error("[Settings Save Error]", err);
+                        setSaveStatus({ type: 'error', message: `Errore server: ${err.message}` });
+                      } finally {
+                        setIsSaving(false);
+                        // Chiudiamo dopo 1 secondo per mostrare il feedback
+                        setTimeout(() => {
+                          setShowSettings(false);
+                          setSaveStatus(null);
+                        }, 1000);
+                      }
                     }} 
-                    className="w-full py-4 bg-blue-600 rounded-2xl text-[10px] font-black uppercase tracking-widest text-white shadow-xl hover:bg-blue-500 transition-all"
+                    disabled={isSaving}
+                    className="w-full py-4 bg-blue-600 rounded-2xl text-[10px] font-black uppercase tracking-widest text-white shadow-xl hover:bg-blue-500 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
                   >
-                    Salva e Chiudi
+                    {isSaving ? (
+                      <>
+                        <div className="w-3.5 h-3.5 border-2 border-white/20 border-t-white rounded-full animate-spin" />
+                        <span>Salvataggio...</span>
+                      </>
+                    ) : (
+                      <span>Salva e Chiudi</span>
+                    )}
                   </button>
                 </div>
             </motion.div>

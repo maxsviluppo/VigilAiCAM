@@ -779,19 +779,69 @@
         </div>
         <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
           <span style="color: var(--text-muted);">Database Cloud:</span>
-          <strong style="color: var(--success);">Preimpostato</strong>
+          <strong style="color: var(--success);" id="summary-db">Preimpostato</strong>
         </div>
         <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
           <span style="color: var(--text-muted);">Gemini AI Key:</span>
-          <strong style="color: var(--success);">Preimpostata</strong>
+          <strong style="color: var(--success);" id="summary-ai-key">Preimpostata</strong>
         </div>
         <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
           <span style="color: var(--text-muted);">Email Mittente:</span>
-          <strong style="color: var(--success);">Preimpostata</strong>
+          <strong style="color: var(--success);" id="summary-email-sender">Preimpostata</strong>
         </div>
         <div style="display: flex; justify-content: space-between;">
           <span style="color: var(--text-muted);">Telecamere Aggiunte:</span>
           <strong id="summary-cameras">0</strong>
+        </div>
+      </div>
+
+      <!-- Configurazione Notifiche Allarmi Email -->
+      <div style="background: rgba(255,255,255,0.02); border: 1px solid var(--border-color); border-radius: 12px; padding: 16px; margin-bottom: 20px;">
+        <h3 style="font-size: 14px; font-weight: 700; margin-bottom: 12px; color: var(--primary); display: flex; align-items: center; gap: 8px;">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg>
+          Destinatari Notifiche Allarmi (Email)
+        </h3>
+        
+        <div class="form-group" style="margin-bottom: 12px;">
+          <label for="setup-recipients">Indirizzi Email Ricezione Allarmi</label>
+          <input type="text" id="setup-recipients" placeholder="es: castromassimo@gmail.com, cliente@email.com" value="castromassimo@gmail.com">
+          <p class="help-text">Inserisci una o più email separate da virgola dove ricevere i messaggi di allarme con fotogrammi.</p>
+        </div>
+
+        <div style="margin-top: 15px;">
+          <button type="button" class="btn-secondary" style="width: 100%; font-size: 11px; padding: 8px 12px;" onclick="toggleAdvancedSettings()">
+            <span id="advanced-toggle-text">Mostra Opzioni Avanzate (SMTP & Chiavi Cloud)</span>
+          </button>
+        </div>
+
+        <!-- Opzioni Avanzate Collassabili -->
+        <div id="advanced-settings-panel" style="display: none; margin-top: 15px; border-top: 1px solid var(--border-color); padding-top: 15px;">
+          <div class="form-group">
+            <label for="setup-gemini-key">Chiave API Gemini</label>
+            <input type="password" id="setup-gemini-key" placeholder="Gemini API Key" value="AIzaSyDznkSahzuLZIge6bruIMQk2J-WgMHEyHM">
+          </div>
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+            <div class="form-group">
+              <label for="setup-email-user">Mittente SMTP (Gmail)</label>
+              <input type="text" id="setup-email-user" placeholder="es: mittente@gmail.com" value="castromassimo@gmail.com">
+            </div>
+            <div class="form-group">
+              <label for="setup-email-pass">Password App SMTP</label>
+              <input type="password" id="setup-email-pass" placeholder="Password per le app" value="nlytzpqmdhwouonl">
+            </div>
+          </div>
+          <p class="help-text" style="margin-bottom: 12px;">Se utilizzi Gmail, inserisci una "Password per le app" a 16 caratteri generata dal tuo account Google.</p>
+
+          <div class="form-group">
+            <label for="setup-supabase-url">Supabase URL</label>
+            <input type="text" id="setup-supabase-url" placeholder="https://..." value="https://bdcryhunzdemuficudws.supabase.co">
+          </div>
+
+          <div class="form-group">
+            <label for="setup-supabase-key">Supabase Anon Key</label>
+            <input type="password" id="setup-supabase-key" placeholder="Anon Key" value="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJkY3J5aHVuemRlbXVmaWN1ZHdzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzgxODQ4MzcsImV4cCI6MjA5Mzc2MDgzN30.hlqDNRSqgV12o3lFDFnB7wL5ve04JIk8T_VyjydLGh0">
+          </div>
         </div>
       </div>
 
@@ -1325,11 +1375,31 @@
       hideAlerts();
     }
 
+    // Mostra/Nascondi le impostazioni avanzate
+    function toggleAdvancedSettings() {
+      const panel = document.getElementById('advanced-settings-panel');
+      const btnText = document.getElementById('advanced-toggle-text');
+      if (panel.style.display === 'none') {
+        panel.style.display = 'block';
+        btnText.innerText = 'Nascondi Opzioni Avanzate';
+      } else {
+        panel.style.display = 'none';
+        btnText.innerText = 'Mostra Opzioni Avanzate (SMTP & Chiavi Cloud)';
+      }
+    }
+
     // --- STEP 3: SALVATAGGIO FINALE E RIAVVIO ---
     async function saveAndReboot() {
       const btn = document.getElementById('btn-final-save');
       btn.disabled = true;
       btn.innerHTML = '<span class="spinner"></span> <span>Salvataggio definitivo...</span>';
+
+      const geminiKey = document.getElementById('setup-gemini-key').value.trim();
+      const emailUser = document.getElementById('setup-email-user').value.trim();
+      const emailPass = document.getElementById('setup-email-pass').value.trim();
+      const supabaseUrl = document.getElementById('setup-supabase-url').value.trim();
+      const supabaseAnonKey = document.getElementById('setup-supabase-key').value.trim();
+      const notificationEmails = document.getElementById('setup-recipients').value.trim();
 
       try {
         const response = await fetch('/api/setup', {
@@ -1338,12 +1408,13 @@
             'Content-Type': 'application/json'
           },
           body: JSON.stringify({
-            GEMINI_API_KEY: config.cloud.geminiKey,
-            VITE_GEMINI_API_KEY: config.cloud.geminiKey,
-            VITE_SUPABASE_URL: config.cloud.supabaseUrl,
-            VITE_SUPABASE_ANON_KEY: config.cloud.supabaseAnonKey,
-            EMAIL_USER: config.email.user,
-            EMAIL_PASS: config.email.pass,
+            GEMINI_API_KEY: geminiKey,
+            VITE_GEMINI_API_KEY: geminiKey,
+            VITE_SUPABASE_URL: supabaseUrl,
+            VITE_SUPABASE_ANON_KEY: supabaseAnonKey,
+            EMAIL_USER: emailUser,
+            EMAIL_PASS: emailPass,
+            NOTIFICATION_EMAILS: notificationEmails,
             WIFI_SSID: config.wifi.ssid,
             WIFI_PASSWORD: config.wifi.password,
             cameras: config.cameras

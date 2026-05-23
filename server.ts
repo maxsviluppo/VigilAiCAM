@@ -208,6 +208,7 @@ async function startServer() {
         VITE_SUPABASE_ANON_KEY, 
         EMAIL_USER, 
         EMAIL_PASS,
+        NOTIFICATION_EMAILS,
         WIFI_SSID,
         WIFI_PASSWORD,
         cameras
@@ -217,11 +218,23 @@ async function startServer() {
         return res.status(400).json({ success: false, error: "Tutti i campi sono obbligatori." });
       }
 
+      // Imposta immediatamente in memoria
+      process.env.GEMINI_API_KEY = GEMINI_API_KEY;
+      process.env.VITE_GEMINI_API_KEY = VITE_GEMINI_API_KEY;
+      process.env.EMAIL_USER = EMAIL_USER;
+      process.env.EMAIL_PASS = EMAIL_PASS;
+      process.env.VITE_SUPABASE_URL = VITE_SUPABASE_URL;
+      process.env.VITE_SUPABASE_ANON_KEY = VITE_SUPABASE_ANON_KEY;
+      if (NOTIFICATION_EMAILS) {
+        process.env.NOTIFICATION_EMAILS = NOTIFICATION_EMAILS;
+      }
+
       const envContent = [
         `GEMINI_API_KEY=${GEMINI_API_KEY}`,
         `VITE_GEMINI_API_KEY=${VITE_GEMINI_API_KEY}`,
         `EMAIL_USER=${EMAIL_USER}`,
         `EMAIL_PASS=${EMAIL_PASS}`,
+        `NOTIFICATION_EMAILS=${NOTIFICATION_EMAILS || "castromassimo@gmail.com"}`,
         `VITE_SUPABASE_URL=${VITE_SUPABASE_URL}`,
         `VITE_SUPABASE_ANON_KEY=${VITE_SUPABASE_ANON_KEY}`,
         `NODE_ENV=production` // Forza la modalità di produzione al riavvio
@@ -269,6 +282,65 @@ async function startServer() {
     } catch (err: any) {
       console.error("[Setup] Errore di salvataggio:", err);
       res.status(500).json({ success: false, error: err.message || "Impossibile salvare la configurazione." });
+    }
+  });
+
+  // API per leggere le impostazioni correnti (Gemini Key, SMTP e Email Destinatari)
+  app.get("/api/settings", (req, res) => {
+    try {
+      res.json({
+        success: true,
+        geminiKey: process.env.GEMINI_API_KEY || "",
+        emailUser: process.env.EMAIL_USER || "",
+        emailPass: process.env.EMAIL_PASS || "",
+        notificationEmails: process.env.NOTIFICATION_EMAILS 
+          ? process.env.NOTIFICATION_EMAILS.split(",").map(e => e.trim()).filter(Boolean)
+          : ["castromassimo@gmail.com"],
+        supabaseUrl: process.env.VITE_SUPABASE_URL || "",
+        supabaseAnonKey: process.env.VITE_SUPABASE_ANON_KEY || ""
+      });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // API per salvare le impostazioni dal pannello di controllo dell'app
+  app.post("/api/settings", (req, res) => {
+    try {
+      const { geminiKey, emailUser, emailPass, notificationEmails, supabaseUrl, supabaseAnonKey } = req.body;
+
+      if (geminiKey !== undefined) {
+        process.env.GEMINI_API_KEY = geminiKey;
+        process.env.VITE_GEMINI_API_KEY = geminiKey;
+      }
+      if (emailUser !== undefined) process.env.EMAIL_USER = emailUser;
+      if (emailPass !== undefined) process.env.EMAIL_PASS = emailPass;
+      if (notificationEmails !== undefined) {
+        process.env.NOTIFICATION_EMAILS = Array.isArray(notificationEmails)
+          ? notificationEmails.join(",")
+          : notificationEmails;
+      }
+      if (supabaseUrl !== undefined) process.env.VITE_SUPABASE_URL = supabaseUrl;
+      if (supabaseAnonKey !== undefined) process.env.VITE_SUPABASE_ANON_KEY = supabaseAnonKey;
+
+      const envContent = [
+        `GEMINI_API_KEY=${process.env.GEMINI_API_KEY || ""}`,
+        `VITE_GEMINI_API_KEY=${process.env.VITE_GEMINI_API_KEY || ""}`,
+        `EMAIL_USER=${process.env.EMAIL_USER || ""}`,
+        `EMAIL_PASS=${process.env.EMAIL_PASS || ""}`,
+        `NOTIFICATION_EMAILS=${process.env.NOTIFICATION_EMAILS || ""}`,
+        `VITE_SUPABASE_URL=${process.env.VITE_SUPABASE_URL || ""}`,
+        `VITE_SUPABASE_ANON_KEY=${process.env.VITE_SUPABASE_ANON_KEY || ""}`,
+        `NODE_ENV=${process.env.NODE_ENV || "production"}`
+      ].join("\n");
+
+      fs.writeFileSync(path.join(process.cwd(), ".env"), envContent, "utf-8");
+      console.log("[Settings] Impostazioni aggiornate e salvate in .env");
+
+      res.json({ success: true });
+    } catch (err: any) {
+      console.error("[Settings] Errore salvataggio impostazioni:", err);
+      res.status(500).json({ success: false, error: err.message || "Impossibile salvare le impostazioni." });
     }
   });
 
@@ -537,7 +609,14 @@ async function startServer() {
   app.post("/api/notify", async (req, res) => {
     const { screenshot, description, type, recipient, emailUser, emailPass } = req.body;
 
-    console.log(`[Notification] Sending ${type} alert to: ${Array.isArray(recipient) ? recipient.join(", ") : recipient}`);
+    const rawRecipients = recipient || process.env.NOTIFICATION_EMAILS;
+    const targetRecipients = Array.isArray(rawRecipients)
+      ? rawRecipients
+      : typeof rawRecipients === "string"
+        ? rawRecipients.split(",").map(e => e.trim()).filter(Boolean)
+        : ["castromassimo@gmail.com"];
+
+    console.log(`[Notification] Sending ${type} alert to: ${targetRecipients.join(", ")}`);
 
     try {
       if (type === "email") {
@@ -558,7 +637,7 @@ async function startServer() {
 
         const mailOptions = {
           from: `"Vigil.AI - Sistema di Sicurezza" <${user}>`,
-          to: recipient,
+          to: targetRecipients,
           subject: "🚨 ALLERTA SICUREZZA - Rilevamento Emergenza",
           text: `ATTENZIONE: Il sistema Vigil.AI ha rilevato una possibile emergenza.\n\nDettagli: ${description}\n\nData/Ora: ${new Date().toLocaleString('it-IT')}`,
           attachments: [
