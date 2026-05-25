@@ -828,9 +828,33 @@ async function startServer() {
     app.use(vite.middlewares);
   } else {
     const distPath = path.join(process.cwd(), "dist");
-    app.use(express.static(distPath));
+    // Serve static files but disable automatic index serving (e.g. for / or /index.html)
+    app.use(express.static(distPath, { index: false }));
+    
+    // Explicitly handle all routing paths to serve index.html with dynamically injected environment variables
     app.get("*", (req, res) => {
-      res.sendFile(path.join(distPath, "index.html"));
+      try {
+        const indexPath = path.join(distPath, "index.html");
+        if (fs.existsSync(indexPath)) {
+          let html = fs.readFileSync(indexPath, "utf-8");
+          
+          // Inject dynamic env script
+          const envScript = `<script>
+            window.__VIGILAI_ENV__ = {
+              VITE_SUPABASE_URL: ${JSON.stringify(process.env.VITE_SUPABASE_URL || "")},
+              VITE_SUPABASE_ANON_KEY: ${JSON.stringify(process.env.VITE_SUPABASE_ANON_KEY || "")}
+            };
+          </script>`;
+          
+          // Inject right after <head>
+          html = html.replace("<head>", `<head>\n  ${envScript}`);
+          res.send(html);
+        } else {
+          res.status(404).send("File index.html non trovato nella cartella dist. Controlla la compilazione.");
+        }
+      } catch (err: any) {
+        res.status(500).send("Errore nel caricamento dell'applicazione: " + err.message);
+      }
     });
   }
 

@@ -32,9 +32,17 @@ else
   echo -e "${GREEN}Node.js è già installato: $(node -v)${CLEAR}"
 fi
 
-# 3. Install System Fallbacks (FFmpeg and compiler tools)
-echo -e "${YELLOW}[2/6] Installazione di FFmpeg di sistema e strumenti di compilazione...${CLEAR}"
+# 3. Install System Fallbacks (FFmpeg, compile tools, and Tailscale VPN)
+echo -e "${YELLOW}[2/6] Installazione di FFmpeg, strumenti di compilazione e Tailscale...${CLEAR}"
 sudo apt-get install -y ffmpeg build-essential git
+
+if ! command -v tailscale &> /dev/null; then
+  echo -e "${YELLOW}Tailscale (VPN) non trovato. Installazione in corso...${CLEAR}"
+  curl -fsSL https://tailscale.com/install.sh | sh
+  echo -e "${GREEN}Tailscale installato con successo!${CLEAR}"
+else
+  echo -e "${GREEN}Tailscale (VPN) è già installato.${CLEAR}"
+fi
 
 # 4. Clean and Install npm dependencies
 echo -e "${YELLOW}[3/6] Preparazione delle dipendenze del progetto...${CLEAR}"
@@ -172,6 +180,8 @@ echo -e "  - Controllare lo stato del servizio:  ${BLUE}sudo systemctl status vi
 echo -e "  - Arrestare il servizio:              ${BLUE}sudo systemctl stop vigilai${CLEAR}"
 echo -e "  - Riavviare il servizio:              ${BLUE}sudo systemctl restart vigilai${CLEAR}"
 echo -e "  - Visualizzare i log in tempo reale:  ${BLUE}sudo journalctl -u vigilai -f${CLEAR}"
+echo -e "  - Configurare la VPN Tailscale:       ${BLUE}sudo tailscale up${CLEAR}"
+echo -e "  - Mostrare l'IP VPN di Tailscale:     ${BLUE}tailscale ip -4${CLEAR}"
 echo -e ""
 echo -e "Ora puoi connetterti all'IP del Raspberry sulla porta ${GREEN}3088${CLEAR} (es: http://<IP_DEL_RASPBERRY>:3088)"
 echo -e "======================================================================"

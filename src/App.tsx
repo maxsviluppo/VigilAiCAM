@@ -34,7 +34,8 @@ import {
   EyeOff,
   Key,
   ExternalLink,
-  Keyboard
+  Keyboard,
+  Globe
 } from "lucide-react";
 import * as Lucide from "lucide-react";
 import { motion, AnimatePresence, Reorder } from "framer-motion";
@@ -570,6 +571,16 @@ export default function App() {
 
   // Esegue il backup diviso della chiave API su Supabase
   const backupApiKeyToSupabase = async (key: string) => {
+    // 1. Salva sempre anche nei metadati dell'utente per un ripristino sicuro ed immediato senza tabelle
+    try {
+      await supabase.auth.updateUser({
+        data: { gemini_key: key }
+      });
+      console.log("[Backup API Key] Sincronizzato con successo nei metadati utente Supabase Auth.");
+    } catch (authErr) {
+      console.warn("[Backup API Key] Errore nel salvataggio dei metadati utente:", authErr);
+    }
+
     if (!key) {
       try {
         await supabase.from('settings').upsert({
@@ -580,7 +591,7 @@ export default function App() {
         });
         localStorage.setItem("vigilai_gemini_key_updated_at", new Date().toISOString());
       } catch (err) {
-        console.warn("[Backup API Key] Errore nella rimozione:", err);
+        console.warn("[Backup API Key] Errore nella rimozione dalla tabella settings:", err);
       }
       return;
     }
@@ -826,30 +837,48 @@ export default function App() {
   // Recupero e allineamento dell'API Key da Supabase all'avvio
   useEffect(() => {
     const syncApiKey = async () => {
+      if (!user) return;
       try {
         const localKey = localStorage.getItem("vigilai_gemini_key") || "";
         const localUpdatedAtStr = localStorage.getItem("vigilai_gemini_key_updated_at") || "";
         const localUpdatedAt = localUpdatedAtStr ? new Date(localUpdatedAtStr).getTime() : 0;
         
-        // 1. Proviamo a leggere il backup da Supabase
-        const { data, error } = await supabase
-          .from('settings')
-          .select('gemini_part1, gemini_part2, updated_at')
-          .eq('id', 'gemini_key_backup')
-          .maybeSingle();
+        // 1. Leggiamo la chiave dai metadati dell'utente Supabase Auth (come backup sicuro ed immediato)
+        const metadataKey = user.user_metadata?.gemini_key || "";
         
-        if (error) {
-          if (error.code === 'PGRST205') {
-            console.warn("[VigilAI Backup] Tabella 'settings' non trovata su Supabase. Crea la tabella tramite lo script SQL fornito.");
-          } else {
-            console.error("[VigilAI Backup] Errore nel recupero backup API Key:", error.message);
+        // 2. Leggiamo anche il backup della tabella settings da Supabase (se esistente)
+        let dbKey = "";
+        let dbUpdatedAt = 0;
+        let tableExists = true;
+        
+        try {
+          const { data, error } = await supabase
+            .from('settings')
+            .select('gemini_part1, gemini_part2, updated_at')
+            .eq('id', 'gemini_key_backup')
+            .maybeSingle();
+            
+          if (error) {
+            if (error.code === 'PGRST205') {
+              console.warn("[VigilAI Backup] Tabella 'settings' non trovata su Supabase. Uso solo backup metadati utente.");
+              tableExists = false;
+            } else {
+              console.error("[VigilAI Backup] Errore nel recupero backup dalla tabella settings:", error.message);
+            }
+          } else if (data) {
+            dbKey = ((data.gemini_part1 || '') + (data.gemini_part2 || '')).trim();
+            dbUpdatedAt = data.updated_at ? new Date(data.updated_at).getTime() : 0;
           }
-          return;
+        } catch (dbErr) {
+          console.warn("[VigilAI Backup] Errore di query su tabella settings, uso metadati:", dbErr);
+          tableExists = false;
         }
-        
-        const dbKey = data ? ((data.gemini_part1 || '') + (data.gemini_part2 || '')).trim() : '';
-        const dbUpdatedAt = data && data.updated_at ? new Date(data.updated_at).getTime() : 0;
-        
+
+        // Determiniamo qual è la chiave più recente tra tabella database e metadati utente
+        const finalCloudKey = dbKey || metadataKey;
+        // Se non abbiamo un timestamp per la tabella, consideriamo NOW o assumiamo sia recente
+        const finalCloudUpdatedAt = dbKey ? dbUpdatedAt : (metadataKey ? Date.now() : 0);
+
         const saveToLocalServer = (key: string) => {
           fetch("/api/settings", {
             method: "POST",
@@ -867,41 +896,58 @@ export default function App() {
           }).catch(err => console.warn("[VigilAI Backup] Impossibile salvare la chiave sul server locale:", err));
         };
 
-        if (dbKey && dbKey === localKey) {
+        if (finalCloudKey && finalCloudKey === localKey) {
           console.log("[VigilAI Backup] La chiave API Gemini locale è già allineata con il cloud.");
           return;
         }
 
-        if (dbKey && (!localKey || dbUpdatedAt > localUpdatedAt)) {
-          // Caso A: Cache locale vuota OR database aggiornato più recentemente -> Ripristina/Aggiorna localmente
-          console.log("[VigilAI Backup] Rilevata chiave API Gemini più recente nel database cloud. Ripristino/Allineamento in corso...");
-          localStorage.setItem("vigilai_gemini_key", dbKey);
-          localStorage.setItem("vigilai_gemini_key_updated_at", data?.updated_at || new Date().toISOString());
-          setAppSettings(prev => ({ ...prev, geminiKey: dbKey }));
-          setModalGeminiKey(dbKey);
-          saveToLocalServer(dbKey);
+        if (finalCloudKey && (!localKey || finalCloudUpdatedAt > localUpdatedAt)) {
+          // Caso A: Cache locale vuota OR database/metadati aggiornati più recentemente -> Ripristina/Aggiorna localmente
+          console.log("[VigilAI Backup] Rilevata chiave API Gemini più recente nel cloud. Ripristino/Allineamento in corso...");
+          localStorage.setItem("vigilai_gemini_key", finalCloudKey);
+          localStorage.setItem("vigilai_gemini_key_updated_at", new Date().toISOString());
+          setAppSettings(prev => ({ ...prev, geminiKey: finalCloudKey }));
+          setModalGeminiKey(finalCloudKey);
+          saveToLocalServer(finalCloudKey);
           
-          if (localKey !== dbKey) {
+          if (localKey !== finalCloudKey) {
             setGlobalModal({
               type: 'success',
               title: 'API Key Sincronizzata',
               message: 'La tua chiave API Gemini è stata allineata con successo con l\'ultimo backup del cloud.'
             });
           }
-        } else if (localKey && (!dbKey || localUpdatedAt > dbUpdatedAt)) {
-          // Caso B: Chiave presente in locale ma non su Supabase OR chiave locale più recente -> Carica su Supabase
-          console.log("[VigilAI Backup] Rilevata chiave API Gemini locale più recente. Allineamento backup database...");
-          const mid = Math.floor(localKey.length / 2);
-          const part1 = localKey.substring(0, mid);
-          const part2 = localKey.substring(mid);
-          const timestamp = localUpdatedAtStr || new Date().toISOString();
+        } else if (localKey && (!finalCloudKey || localUpdatedAt > finalCloudUpdatedAt)) {
+          // Caso B: Chiave presente in locale ma non nel cloud OR chiave locale più recente -> Carica su cloud
+          console.log("[VigilAI Backup] Rilevata chiave API Gemini locale più recente. Allineamento backup database e metadati utente...");
           
-          await supabase.from('settings').upsert({
-            id: 'gemini_key_backup',
-            gemini_part1: part1,
-            gemini_part2: part2,
-            updated_at: timestamp
-          });
+          // Backup nei metadati utente
+          try {
+            await supabase.auth.updateUser({
+              data: { gemini_key: localKey }
+            });
+          } catch (authErr) {
+            console.warn("[VigilAI Backup] Errore nel backup dei metadati utente:", authErr);
+          }
+
+          // Backup nella tabella settings (se disponibile)
+          if (tableExists) {
+            const mid = Math.floor(localKey.length / 2);
+            const part1 = localKey.substring(0, mid);
+            const part2 = localKey.substring(mid);
+            const timestamp = localUpdatedAtStr || new Date().toISOString();
+            
+            try {
+              await supabase.from('settings').upsert({
+                id: 'gemini_key_backup',
+                gemini_part1: part1,
+                gemini_part2: part2,
+                updated_at: timestamp
+              });
+            } catch (dbErr) {
+              console.warn("[VigilAI Backup] Errore nel salvataggio su tabella settings:", dbErr);
+            }
+          }
           
           saveToLocalServer(localKey);
         }
@@ -1900,17 +1946,30 @@ export default function App() {
             </motion.button>
 
             {serverInfo && (
-              <button 
-                onClick={() => setGlobalModal({
-                  type: 'info',
-                  title: 'Quick Connect',
-                  message: 'Scansiona il QR Code con il tablet per collegarlo istantaneamente.'
-                })}
-                className="p-3 bg-green-600/20 border border-green-500/30 text-green-400 rounded-xl lg:rounded-2xl hover:bg-green-600 hover:text-white transition-all shadow-lg shadow-green-500/10"
-                title="Collega Tablet"
-              >
-                <Scan size={20} />
-              </button>
+              <div className="flex items-center gap-2">
+                <button 
+                  onClick={() => setGlobalModal({
+                    type: 'info',
+                    title: 'Quick Connect',
+                    message: 'Scansiona il QR Code con il tablet per collegarlo istantaneamente sulla rete locale.'
+                  })}
+                  className="p-3 bg-green-600/20 border border-green-500/30 text-green-400 rounded-xl lg:rounded-2xl hover:bg-green-600 hover:text-white transition-all shadow-lg shadow-green-500/10"
+                  title="Collega Tablet (Wi-Fi Locale)"
+                >
+                  <Scan size={20} />
+                </button>
+                <button 
+                  onClick={() => setGlobalModal({
+                    type: 'info',
+                    title: 'Quick Connect',
+                    message: 'Scansiona il QR Code per accedere da remoto tramite VPN Tailscale.'
+                  })}
+                  className="p-3 bg-blue-600/20 border border-blue-500/30 text-blue-400 rounded-xl lg:rounded-2xl hover:bg-blue-600 hover:text-white transition-all shadow-lg shadow-blue-500/10"
+                  title="Collega VPN (Remoto)"
+                >
+                  <Globe size={20} />
+                </button>
+              </div>
             )}
           </div>
         </header>
@@ -3088,7 +3147,9 @@ export default function App() {
           >
             <motion.div 
               initial={{ scale: 0.9, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.9, y: 20 }}
-              className="glass max-w-sm w-full p-8 rounded-[40px] border-white/10 text-center space-y-6 shadow-2xl"
+              className={`glass w-full p-8 rounded-[40px] border-white/10 text-center space-y-6 shadow-2xl transition-all ${
+                globalModal.title === 'Quick Connect' ? 'max-w-2xl' : 'max-w-sm'
+              }`}
             >
               <div className={`w-16 h-16 rounded-3xl flex items-center justify-center mx-auto border ${
                 globalModal.type === 'error' ? 'bg-red-500/10 border-red-500/20 text-red-500' : 
@@ -3103,36 +3164,69 @@ export default function App() {
               </div>
 
               {globalModal.title === 'Quick Connect' && serverInfo && (
-                <div className="flex flex-col items-center gap-6 py-4">
-                  <div className="p-4 bg-white rounded-[32px] shadow-2xl shadow-blue-500/20">
+                <div className="flex flex-col items-center gap-6 py-4 w-full">
+                  <div className="flex flex-wrap justify-center gap-6 w-full">
+                    {/* Local QR Code */}
+                    <div className="flex flex-col items-center gap-2">
+                      <span className="text-[10px] text-green-400 font-black uppercase tracking-widest">Rete Locale (Wi-Fi)</span>
+                      <div className="p-4 bg-white rounded-[24px] shadow-2xl shadow-blue-500/20">
+                        {(() => {
+                          const priorityIp = serverInfo.ips.find(ip => ip.startsWith('192.168.') || ip.startsWith('10.') || ip.startsWith('172.')) || serverInfo.ips[0];
+                          return (
+                            <QRCodeCanvas 
+                              value={`http://${priorityIp}:${serverInfo.port}`}
+                              size={150}
+                              level="H"
+                              includeMargin={false}
+                            />
+                          );
+                        })()}
+                      </div>
+                      <code className="text-[9px] text-slate-400 font-mono">http://{serverInfo.ips.find(ip => ip.startsWith('192.168.') || ip.startsWith('10.') || ip.startsWith('172.')) || serverInfo.ips[0]}:{serverInfo.port}</code>
+                    </div>
+
+                    {/* VPN QR Code (Tailscale) */}
                     {(() => {
-                      const priorityIp = serverInfo.ips.find(ip => ip.startsWith('192.168.') || ip.startsWith('10.')) || serverInfo.ips[0];
-                      return (
-                        <QRCodeCanvas 
-                          value={`http://${priorityIp}:${serverInfo.port}`}
-                          size={200}
-                          level="H"
-                          includeMargin={false}
-                          imageSettings={{
-                            src: "/favicon.png",
-                            x: undefined,
-                            y: undefined,
-                            height: 40,
-                            width: 40,
-                            excavate: true,
-                          }}
-                        />
-                      );
+                      const vpnIp = serverInfo.ips.find(ip => ip.startsWith('100.'));
+                      if (vpnIp) {
+                        return (
+                          <div className="flex flex-col items-center gap-2">
+                            <span className="text-[10px] text-blue-400 font-black uppercase tracking-widest">VPN Remota (Tailscale)</span>
+                            <div className="p-4 bg-white rounded-[24px] shadow-2xl shadow-blue-500/20 border-2 border-blue-500/50">
+                              <QRCodeCanvas 
+                                value={`http://${vpnIp}:${serverInfo.port}`}
+                                size={150}
+                                level="H"
+                                includeMargin={false}
+                              />
+                            </div>
+                            <code className="text-[9px] text-blue-400 font-mono">http://{vpnIp}:{serverInfo.port}</code>
+                          </div>
+                        );
+                      } else {
+                        return (
+                          <div className="flex flex-col items-center justify-center p-6 bg-white/5 border border-dashed border-white/10 rounded-[24px] w-[182px] h-[206px] text-center">
+                            <Lock className="text-slate-500 mb-2" size={24} />
+                            <span className="text-[10px] text-slate-400 font-black uppercase tracking-wider block">VPN Non Attiva</span>
+                            <p className="text-[8px] text-slate-500 uppercase mt-1 leading-normal">Collega il box a Tailscale per abilitare l'accesso remoto sicuro.</p>
+                          </div>
+                        );
+                      }
                     })()}
                   </div>
-                  <div className="space-y-3 w-full">
+                  
+                  <div className="space-y-3 w-full max-w-sm">
                     <p className="text-[10px] text-blue-400 font-black uppercase tracking-widest text-center">Indirizzi Rilevati:</p>
-                    <div className="flex flex-col gap-2">
+                    <div className="flex flex-col gap-2 max-h-[120px] overflow-y-auto custom-scrollbar">
                       {serverInfo.ips.map(ip => (
                         <div key={ip} className="flex items-center justify-between bg-white/5 px-4 py-2 rounded-xl border border-white/5">
                           <code className="text-[10px] text-slate-300 font-mono">{ip}</code>
-                          <span className={`text-[8px] font-black uppercase px-2 py-0.5 rounded-full ${ip.startsWith('192.168.') || ip.startsWith('10.') ? 'bg-green-500/20 text-green-400' : 'bg-slate-700 text-slate-400'}`}>
-                            {ip.startsWith('192.168.') || ip.startsWith('10.') ? 'Consigliato' : 'Virtuale'}
+                          <span className={`text-[8px] font-black uppercase px-2 py-0.5 rounded-full ${
+                            ip.startsWith('100.') ? 'bg-blue-500/20 text-blue-400' :
+                            ip.startsWith('192.168.') || ip.startsWith('10.') ? 'bg-green-500/20 text-green-400' : 
+                            'bg-slate-700 text-slate-400'
+                          }`}>
+                            {ip.startsWith('100.') ? 'VPN' : ip.startsWith('192.168.') || ip.startsWith('10.') ? 'Locale' : 'Virtuale'}
                           </span>
                         </div>
                       ))}
