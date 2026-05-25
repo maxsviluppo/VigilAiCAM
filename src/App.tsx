@@ -342,32 +342,50 @@ const Auth = () => {
           </div>
         </div>
         <form onSubmit={handleAuth} className="space-y-4">
-          <input 
-            type="email" 
-            value={email} 
-            onChange={(e) => setEmail(e.target.value)} 
-            onFocus={() => setActiveField('email')}
-            className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 text-white focus:border-blue-500/50 outline-none transition-all" 
-            placeholder="Email" 
-            required 
-          />
+          <div className="relative">
+            <input 
+              type="email" 
+              value={email} 
+              onChange={(e) => setEmail(e.target.value)} 
+              className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 text-white focus:border-blue-500/50 outline-none transition-all pr-12" 
+              placeholder="Email" 
+              required 
+            />
+            <button 
+              type="button"
+              onClick={() => setActiveField(activeField === 'email' ? null : 'email')}
+              className={`absolute right-4 top-1/2 -translate-y-1/2 p-1.5 rounded-lg transition-colors ${activeField === 'email' ? 'text-blue-400 bg-blue-500/10' : 'text-slate-500 hover:text-white'}`}
+              title="Attiva tastiera virtuale"
+            >
+              <Keyboard size={16} />
+            </button>
+          </div>
           <div className="relative">
             <input 
               type={showPassword ? "text" : "password"} 
               value={password} 
               onChange={(e) => setPassword(e.target.value)} 
-              onFocus={() => setActiveField('password')}
-              className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 text-white focus:border-blue-500/50 outline-none transition-all pr-12" 
+              className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 text-white focus:border-blue-500/50 outline-none transition-all pr-20" 
               placeholder="Password" 
               required 
             />
-            <button 
-              type="button"
-              onClick={() => setShowPassword(!showPassword)}
-              className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white transition-colors"
-            >
-              {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-            </button>
+            <div className="absolute right-4 top-1/2 -translate-y-1/2 flex items-center gap-2">
+              <button 
+                type="button"
+                onClick={() => setActiveField(activeField === 'password' ? null : 'password')}
+                className={`p-1.5 rounded-lg transition-colors ${activeField === 'password' ? 'text-blue-400 bg-blue-500/10' : 'text-slate-500 hover:text-white'}`}
+                title="Attiva tastiera virtuale"
+              >
+                <Keyboard size={16} />
+              </button>
+              <button 
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="text-slate-500 hover:text-white transition-colors p-1"
+              >
+                {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+              </button>
+            </div>
           </div>
           <button type="submit" disabled={loading} className="w-full bg-blue-600 hover:bg-blue-500 text-white font-black uppercase py-4 rounded-2xl shadow-[0_0_20px_rgba(37,99,235,0.4)] disabled:opacity-50">{loading ? 'Caricamento...' : mode === 'login' ? 'Accedi' : 'Registrati'}</button>
         </form>
