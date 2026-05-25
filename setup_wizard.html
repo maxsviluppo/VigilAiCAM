@@ -875,6 +875,36 @@
 
   </div>
 
+  <!-- CUSTOM PROMPT MODAL -->
+  <div id="custom-prompt-modal" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.8); backdrop-filter: blur(8px); z-index: 20000; align-items: center; justify-content: center; padding: 20px;">
+    <div class="container" style="max-width: 400px; padding: 24px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); border: 1px solid var(--border-color); background: var(--panel-bg); backdrop-filter: blur(20px); border-radius: 20px;">
+      <h3 style="font-size: 16px; font-weight: 700; margin-bottom: 12px; color: var(--primary);">Aggiungi IP Telecamera</h3>
+      <p class="subtitle" style="font-size: 11px; margin-bottom: 16px;">Inserisci l'indirizzo IP locale della telecamera.</p>
+      
+      <div class="form-group" style="margin-bottom: 20px;">
+        <input type="text" id="custom-prompt-input" value="192.168.1.">
+      </div>
+      
+      <div style="display: flex; gap: 10px; justify-content: flex-end;">
+        <button type="button" class="btn-secondary" style="padding: 10px 16px; font-size: 13px;" onclick="closeCustomPrompt(false)">Annulla</button>
+        <button type="button" class="btn-primary" style="padding: 10px 16px; font-size: 13px;" onclick="closeCustomPrompt(true)">Conferma</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- CUSTOM CONFIRM MODAL -->
+  <div id="custom-confirm-modal" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.8); backdrop-filter: blur(8px); z-index: 20000; align-items: center; justify-content: center; padding: 20px;">
+    <div class="container" style="max-width: 400px; padding: 24px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); border: 1px solid var(--border-color); background: var(--panel-bg); backdrop-filter: blur(20px); border-radius: 20px;">
+      <h3 style="font-size: 16px; font-weight: 700; margin-bottom: 12px; color: var(--warning);">Nessuna Telecamera</h3>
+      <p class="subtitle" id="custom-confirm-message" style="font-size: 12px; margin-bottom: 20px; line-height: 1.4; color: var(--text);">Non hai inserito alcuna telecamera nel database. Vuoi procedere comunque?</p>
+      
+      <div style="display: flex; gap: 10px; justify-content: flex-end;">
+        <button type="button" class="btn-secondary" style="padding: 10px 16px; font-size: 13px;" onclick="closeCustomConfirm(false)">Annulla</button>
+        <button type="button" class="btn-primary" style="padding: 10px 16px; font-size: 13px; background: var(--warning); box-shadow: 0 4px 12px rgba(245, 158, 11, 0.3);" onclick="closeCustomConfirm(true)">Procedi</button>
+      </div>
+    </div>
+  </div>
+
   <script>
     // Configurazione dell'applicazione
     const config = {
@@ -1164,10 +1194,11 @@
       item.className = 'cam-ip-item';
       item.style.borderStyle = 'dashed';
       item.onclick = () => {
-        const manualIp = prompt("Inserisci l'indirizzo IP della telecamera manualmente:", "192.168.1.");
-        if (manualIp && manualIp.trim()) {
-          selectCameraIp(manualIp.trim(), item);
-        }
+        showCustomPrompt("192.168.1.", (manualIp) => {
+          if (manualIp && manualIp.trim()) {
+            selectCameraIp(manualIp.trim(), item);
+          }
+        });
       };
       item.innerHTML = `
         <span style="font-size: 12px; color: var(--text-muted);">+ Aggiungi IP Telecamera manualmente...</span>
@@ -1360,10 +1391,17 @@
     // Avanza allo Step 3 (Riepilogo)
     function submitStep2() {
       if (config.cameras.length === 0) {
-        const proceed = confirm("Non hai inserito alcuna telecamera nel database. Vuoi procedere comunque?");
-        if (!proceed) return;
+        showCustomConfirm("Non hai inserito alcuna telecamera nel database. Vuoi procedere comunque?", (proceed) => {
+          if (proceed) {
+            goToStep3();
+          }
+        });
+      } else {
+        goToStep3();
       }
+    }
 
+    function goToStep3() {
       document.getElementById('summary-hostname').innerText = config.hostname;
       document.getElementById('summary-wifi').innerText = config.wifi.ssid;
       document.getElementById('summary-cameras').innerText = config.cameras.length;
@@ -1457,6 +1495,7 @@
     let activeInput = null;
     let isShift = false;
     let isSymbols = false;
+    let useVirtualKeyboard = true;
 
     const normalRows = [
       ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '-', '_'],
@@ -1487,6 +1526,7 @@
       const inputs = document.querySelectorAll('input:not([type="checkbox"]):not([type="radio"]):not([type="submit"]):not([type="button"]):not([type="file"])');
       inputs.forEach(input => {
         input.addEventListener('focus', () => {
+          if (!useVirtualKeyboard) return;
           activeInput = input;
           kb.classList.add('active');
           document.body.classList.add('keyboard-open');
@@ -1496,6 +1536,7 @@
         });
 
         input.addEventListener('click', () => {
+          if (!useVirtualKeyboard) return;
           activeInput = input;
           kb.classList.add('active');
           document.body.classList.add('keyboard-open');
@@ -1517,6 +1558,15 @@
       // Utilizziamo mousedown/touchstart a livello document catturati in anticipo per non interferire con click di tastiera/input
       document.addEventListener('mousedown', handleOutsideClick, true);
       document.addEventListener('touchstart', handleOutsideClick, true);
+
+      // Nasconde e disattiva la tastiera virtuale se viene rilevata la digitazione da tastiera fisica
+      window.addEventListener('keydown', (e) => {
+        if (e.isTrusted && e.key.length === 1) {
+          useVirtualKeyboard = false;
+          kb.classList.remove('active');
+          document.body.classList.remove('keyboard-open');
+        }
+      });
     }
 
     function renderKeyboard(rows) {
@@ -1604,6 +1654,44 @@
         activeInput.dispatchEvent(new Event('input', { bubbles: true }));
         activeInput.dispatchEvent(new Event('change', { bubbles: true }));
       }
+    }
+
+    // Funzioni helper per i modali personalizzati
+    let customPromptCallback = null;
+    function showCustomPrompt(defaultValue, callback) {
+      document.getElementById('custom-prompt-input').value = defaultValue;
+      document.getElementById('custom-prompt-modal').style.display = 'flex';
+      customPromptCallback = callback;
+      
+      const input = document.getElementById('custom-prompt-input');
+      setTimeout(() => {
+        input.focus();
+        input.click(); // Forza l'attivazione della tastiera virtuale
+      }, 100);
+    }
+    
+    function closeCustomPrompt(success) {
+      document.getElementById('custom-prompt-modal').style.display = 'none';
+      if (success && customPromptCallback) {
+        const val = document.getElementById('custom-prompt-input').value.trim();
+        customPromptCallback(val);
+      }
+      customPromptCallback = null;
+    }
+
+    let customConfirmCallback = null;
+    function showCustomConfirm(message, callback) {
+      document.getElementById('custom-confirm-message').innerText = message;
+      document.getElementById('custom-confirm-modal').style.display = 'flex';
+      customConfirmCallback = callback;
+    }
+    
+    function closeCustomConfirm(proceed) {
+      document.getElementById('custom-confirm-modal').style.display = 'none';
+      if (customConfirmCallback) {
+        customConfirmCallback(proceed);
+      }
+      customConfirmCallback = null;
     }
 
     // Carica hostname default all'avvio e inizializza tastiera virtuale

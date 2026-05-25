@@ -28,7 +28,7 @@ import {
   X,
   AlertCircle,
   Move,
-  Gem,
+  // Gem,
   Lock,
   LogOut,
   EyeOff,
@@ -438,10 +438,15 @@ export default function App() {
   const [cameras, setCameras] = useState<Camera[]>([]);
   const [activeCameraId, setActiveCameraId] = useState<string | null>(null);
   const [incidents, setIncidents] = useState<Incident[]>([]);
-  const [isMonitoring, setIsMonitoring] = useState(false);
+  const [isMonitoring, setIsMonitoring] = useState(true);
   const [isAiEnabled, setIsAiEnabled] = useState(true);
   const [alertingCameraIds, setAlertingCameraIds] = useState<string[]>([]);
-  const [lastAnalysis, setLastAnalysis] = useState<DetectionResult | null>(null);
+  const [lastAnalysis, setLastAnalysis] = useState<DetectionResult | null>({
+    description: "🚀 Sincronizzazione motore AI in corso...",
+    isEmergency: false,
+    threatLevel: "low",
+    detectedEvents: []
+  });
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showPlans, setShowPlans] = useState(false);
@@ -555,6 +560,7 @@ export default function App() {
           gemini_part2: '',
           updated_at: new Date().toISOString()
         });
+        localStorage.setItem("vigilai_gemini_key_updated_at", new Date().toISOString());
       } catch (err) {
         console.warn("[Backup API Key] Errore nella rimozione:", err);
       }
@@ -581,6 +587,7 @@ export default function App() {
         }
       } else {
         console.log("[Backup API Key] Backup completato con successo su Supabase (diviso in due colonne).");
+        localStorage.setItem("vigilai_gemini_key_updated_at", new Date().toISOString());
       }
     } catch (err) {
       console.error("[Backup API Key] Errore inaspettato:", err);
@@ -803,11 +810,13 @@ export default function App() {
     const syncApiKey = async () => {
       try {
         const localKey = localStorage.getItem("vigilai_gemini_key") || "";
+        const localUpdatedAtStr = localStorage.getItem("vigilai_gemini_key_updated_at") || "";
+        const localUpdatedAt = localUpdatedAtStr ? new Date(localUpdatedAtStr).getTime() : 0;
         
         // 1. Proviamo a leggere il backup da Supabase
         const { data, error } = await supabase
           .from('settings')
-          .select('gemini_part1, gemini_part2')
+          .select('gemini_part1, gemini_part2, updated_at')
           .eq('id', 'gemini_key_backup')
           .maybeSingle();
         
@@ -821,58 +830,74 @@ export default function App() {
         }
         
         const dbKey = data ? ((data.gemini_part1 || '') + (data.gemini_part2 || '')).trim() : '';
+        const dbUpdatedAt = data && data.updated_at ? new Date(data.updated_at).getTime() : 0;
         
-        if (!localKey && dbKey) {
-          // Caso A: Cache locale cancellata ma chiave presente su Supabase -> Ripristina
-          console.log("[VigilAI Backup] API Key Gemini non trovata in locale ma presente nel database. Ripristino in corso...");
+        const saveToLocalServer = (key: string) => {
+          fetch("/api/settings", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              geminiKey: key,
+              emailUser: appSettings.emailUser,
+              emailPass: appSettings.emailPass,
+              notificationEmails: notificationEmails
+            })
+          }).then(res => res.json()).then(resData => {
+            if (resData.success) {
+              console.log("[VigilAI Backup] Chiave API Gemini allineata con successo sul server locale.");
+            }
+          }).catch(err => console.warn("[VigilAI Backup] Impossibile salvare la chiave sul server locale:", err));
+        };
+
+        if (dbKey && dbKey === localKey) {
+          console.log("[VigilAI Backup] La chiave API Gemini locale è già allineata con il cloud.");
+          return;
+        }
+
+        if (dbKey && (!localKey || dbUpdatedAt > localUpdatedAt)) {
+          // Caso A: Cache locale vuota OR database aggiornato più recentemente -> Ripristina/Aggiorna localmente
+          console.log("[VigilAI Backup] Rilevata chiave API Gemini più recente nel database cloud. Ripristino/Allineamento in corso...");
           localStorage.setItem("vigilai_gemini_key", dbKey);
+          localStorage.setItem("vigilai_gemini_key_updated_at", data?.updated_at || new Date().toISOString());
           setAppSettings(prev => ({ ...prev, geminiKey: dbKey }));
           setModalGeminiKey(dbKey);
-          setGlobalModal({
-            type: 'success',
-            title: 'API Key Ripristinata',
-            message: 'La tua chiave API Gemini è stata recuperata con successo dal backup del database cloud.'
-          });
-        } else if (localKey && !dbKey) {
-          // Caso B: Chiave presente in locale ma non su Supabase -> Effettua backup
-          console.log("[VigilAI Backup] API Key presente in locale ma non sul database. Allineamento backup in corso...");
+          saveToLocalServer(dbKey);
+          
+          if (localKey !== dbKey) {
+            setGlobalModal({
+              type: 'success',
+              title: 'API Key Sincronizzata',
+              message: 'La tua chiave API Gemini è stata allineata con successo con l\'ultimo backup del cloud.'
+            });
+          }
+        } else if (localKey && (!dbKey || localUpdatedAt > dbUpdatedAt)) {
+          // Caso B: Chiave presente in locale ma non su Supabase OR chiave locale più recente -> Carica su Supabase
+          console.log("[VigilAI Backup] Rilevata chiave API Gemini locale più recente. Allineamento backup database...");
           const mid = Math.floor(localKey.length / 2);
           const part1 = localKey.substring(0, mid);
           const part2 = localKey.substring(mid);
+          const timestamp = localUpdatedAtStr || new Date().toISOString();
+          
           await supabase.from('settings').upsert({
             id: 'gemini_key_backup',
             gemini_part1: part1,
             gemini_part2: part2,
-            updated_at: new Date().toISOString()
+            updated_at: timestamp
           });
-        } else if (localKey && dbKey && localKey !== dbKey) {
-          // Caso C: Disallineamento (l'utente ha cambiato chiave su un altro dispositivo o in locale)
-          // Diamo la precedenza alla chiave locale più recente o aggiorniamo Supabase
-          console.log("[VigilAI Backup] Rilevato disallineamento chiave locale/database. Allineamento database con chiave locale...");
-          const mid = Math.floor(localKey.length / 2);
-          const part1 = localKey.substring(0, mid);
-          const part2 = localKey.substring(mid);
-          await supabase.from('settings').upsert({
-            id: 'gemini_key_backup',
-            gemini_part1: part1,
-            gemini_part2: part2,
-            updated_at: new Date().toISOString()
-          });
+          
+          saveToLocalServer(localKey);
         }
       } catch (err) {
         console.error("[VigilAI Backup] Errore critico nel processo di sincronizzazione chiave:", err);
       }
     };
     
-    // Eseguiamo la sincronizzazione dopo un piccolo delay per assicurare che il client Supabase sia pronto
     const timer = setTimeout(() => {
       syncApiKey();
-    }, 1000);
+    }, 1500);
     return () => clearTimeout(timer);
-  }, []);
+  }, [user]);
 
-
-  
   const fetchUserData = useCallback(async () => {
 
     if (!user) return;
@@ -924,6 +949,49 @@ export default function App() {
   };
 
   useEffect(() => { if (user) fetchUserData(); }, [user, fetchUserData]);
+
+  // Sincronizza le telecamere create durante il wizard con l'account dell'utente loggato
+  useEffect(() => {
+    const syncLocalPendingCameras = async () => {
+      if (!user) return;
+      try {
+        const res = await fetch("/api/cameras/pending");
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data.success && data.cameras && data.cameras.length > 0) {
+          console.log("[Cameras Sync] Rilevate telecamere pendenti sul server:", data.cameras.length);
+          
+          // Associazioni con il nuovo user_id
+          const camerasToSync = data.cameras.map((c: any) => {
+            const { id, ...rest } = c; // Rimuove l'ID fittizio locale
+            return {
+              ...rest,
+              user_id: user.id,
+              enabled_triggers: c.enabledTriggers || c.enabled_triggers || ['intrusion', 'violence', 'fire', 'smoke', 'fall'],
+              rtsp_path: c.rtspPath || c.rtsp_path || '/stream1'
+            };
+          });
+
+          const { error } = await supabase.from('cameras').insert(camerasToSync);
+          if (error) {
+            console.error("[Cameras Sync] Errore inserimento in Supabase:", error.message);
+            return;
+          }
+
+          console.log("[Cameras Sync] Telecamere sincronizzate con successo su Supabase.");
+          // Cancella il file pending_cameras.json sul server
+          await fetch("/api/cameras/pending/clear", { method: "POST" });
+          
+          // Ricarica le telecamere
+          fetchUserData();
+        }
+      } catch (err) {
+        console.error("[Cameras Sync] Errore durante la sincronizzazione delle telecamere locali:", err);
+      }
+    };
+    
+    syncLocalPendingCameras();
+  }, [user, fetchUserData]);
 
 
 
@@ -1091,56 +1159,80 @@ export default function App() {
   };
 
   const sendManualTestAlarm = async () => {
-    if (!canvasRef.current || !activeCameraId) return;
+    if (!canvasRef.current) return;
     const canvas = canvasRef.current;
     const context = canvas.getContext("2d");
     if (!context) return;
 
-    const cam = cameras.find(c => c.id === activeCameraId);
-    if (!cam) return;
-
-    const img = imgRefs.current.get(cam.id);
-    const video = videoRefs.current.get(cam.id);
-    
-    let success = false;
-    if ((cam.type === 'ip' || cam.type === 'onvif') && img) {
-      canvas.width = img.naturalWidth || 1280;
-      canvas.height = img.naturalHeight || 720;
-      if (canvas.width > 0 && canvas.height > 0) {
-        context.drawImage(img, 0, 0, canvas.width, canvas.height);
-        success = true;
-      }
-    } else if (video && video.readyState >= 2) {
-      canvas.width = video.videoWidth || 640;
-      canvas.height = video.videoHeight || 480;
-      context.drawImage(video, 0, 0, canvas.width, canvas.height);
-      success = true;
+    if (!isMonitoring) {
+      setGlobalModal({
+        type: 'error',
+        title: 'Sistema Standby',
+        message: 'Per inviare un allarme di test con foto, devi prima avviare la vigilanza premendo il pulsante "VIGILA".'
+      });
+      return;
     }
 
-    if (success) {
-      const screenshot = canvas.toDataURL("image/jpeg", 0.6).split(",")[1];
-      await sendNotification(`[TEST MANUALE] Allarme inviato manualmente per verificare la ricezione delle immagini dalla camera: ${cam.name}`, screenshot);
-      
-      setIncidents(prev => [{
-        id: Math.random().toString(36).substr(2, 9),
-        timestamp: new Date(),
-        cameraId: cam.id,
-        cameraName: cam.name,
-        description: "[TEST MANUALE] Notifica inviata con successo",
-        threatLevel: "medium",
-        screenshot: canvas.toDataURL("image/jpeg", 0.8)
-      }, ...prev]);
-      
+    const activeCams = cameras.filter(c => activeCamStatuses[c.id]);
+    if (activeCams.length === 0) {
+      setGlobalModal({
+        type: 'error',
+        title: 'Nessuna Camera Attiva',
+        message: 'Non ci sono telecamere attive al momento. Assicurati che almeno una telecamera sia abilitata.'
+      });
+      return;
+    }
+
+    let sentCount = 0;
+
+    for (const cam of activeCams) {
+      const img = imgRefs.current.get(cam.id);
+      const video = videoRefs.current.get(cam.id);
+      let success = false;
+
+      if ((cam.type === 'ip' || cam.type === 'onvif') && img) {
+        canvas.width = img.naturalWidth || 1280;
+        canvas.height = img.naturalHeight || 720;
+        if (canvas.width > 0 && canvas.height > 0) {
+          context.drawImage(img, 0, 0, canvas.width, canvas.height);
+          success = true;
+        }
+      } else if ((cam.type === 'webcam' || cam.type === 'browser') && video && video.readyState >= 2) {
+        canvas.width = video.videoWidth || 640;
+        canvas.height = video.videoHeight || 480;
+        context.drawImage(video, 0, 0, canvas.width, canvas.height);
+        success = true;
+      }
+
+      if (success) {
+        const screenshot = canvas.toDataURL("image/jpeg", 0.6).split(",")[1];
+        await sendNotification(`[TEST MANUALE] Allarme inviato manualmente per verificare la ricezione delle immagini dalla camera: ${cam.name}`, screenshot);
+
+        setIncidents(prev => [{
+          id: Math.random().toString(36).substr(2, 9),
+          timestamp: new Date(),
+          cameraId: cam.id,
+          cameraName: cam.name,
+          description: `[TEST MANUALE] Notifica inviata con successo (${cam.name})`,
+          threatLevel: "medium",
+          screenshot: canvas.toDataURL("image/jpeg", 0.8)
+        }, ...prev]);
+
+        sentCount++;
+      }
+    }
+
+    if (sentCount > 0) {
       setGlobalModal({
         type: 'success',
         title: 'Test Inviato',
-        message: 'L\'allarme di test è stato inoltrato correttamente ai destinatari configurati.'
+        message: `L'allarme di test è stato inoltrato correttamente per ${sentCount} telecamere attive.`
       });
     } else {
       setGlobalModal({
         type: 'error',
         title: 'Errore Acquisizione',
-        message: 'Impossibile catturare l\'immagine della camera. Assicurati che il flusso video sia attivo.'
+        message: 'Impossibile catturare l\'immagine da alcuna telecamera attiva. Assicurati che i flussi video siano visibili sullo schermo.'
       });
     }
   };
@@ -1728,13 +1820,13 @@ export default function App() {
                 <Settings size={18} />
               </button>
 
-              <button 
+              {/* <button 
                 onClick={() => setShowPlans(true)}
                 className="p-3 glass border-white/5 text-slate-500 hover:text-white rounded-xl lg:rounded-2xl transition-all"
                 title="Piani e Costi"
               >
                 <Gem size={18} />
-              </button>
+              </button> */}
 
               <button 
                 onClick={handleLogout}
@@ -2706,6 +2798,7 @@ export default function App() {
                       
                       // 1. Salva in localStorage per cache locale
                       localStorage.setItem("vigilai_gemini_key", appSettings.geminiKey);
+                      localStorage.setItem("vigilai_gemini_key_updated_at", new Date().toISOString());
                       localStorage.setItem("vigilai_email_user", appSettings.emailUser);
                       localStorage.setItem("vigilai_email_pass", appSettings.emailPass);
                       localStorage.setItem("vigilai_model", aiModel);
@@ -3160,6 +3253,7 @@ export default function App() {
                     setAppSettings(prev => {
                       const next = { ...prev, geminiKey: modalGeminiKey };
                       localStorage.setItem("vigilai_gemini_key", modalGeminiKey);
+                      localStorage.setItem("vigilai_gemini_key_updated_at", new Date().toISOString());
                       return next;
                     });
                     backupApiKeyToSupabase(modalGeminiKey);

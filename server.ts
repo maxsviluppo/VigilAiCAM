@@ -334,13 +334,57 @@ async function startServer() {
         `NODE_ENV=${process.env.NODE_ENV || "production"}`
       ].join("\n");
 
-      fs.writeFileSync(path.join(process.cwd(), ".env"), envContent, "utf-8");
-      console.log("[Settings] Impostazioni aggiornate e salvate in .env");
+      const envPath = path.join(process.cwd(), ".env");
+      let existingEnv = "";
+      try {
+        if (fs.existsSync(envPath)) {
+          existingEnv = fs.readFileSync(envPath, "utf-8").replace(/\r\n/g, "\n");
+        }
+      } catch (readErr) {}
+
+      const normalizedNewEnv = envContent.replace(/\r\n/g, "\n");
+      if (existingEnv !== normalizedNewEnv) {
+        fs.writeFileSync(envPath, envContent, "utf-8");
+        console.log("[Settings] Impostazioni aggiornate e salvate in .env");
+      } else {
+        console.log("[Settings] Nessun cambiamento rilevato nelle impostazioni, .env non sovrascritto");
+      }
 
       res.json({ success: true });
     } catch (err: any) {
       console.error("[Settings] Errore salvataggio impostazioni:", err);
       res.status(500).json({ success: false, error: err.message || "Impossibile salvare le impostazioni." });
+    }
+  });
+
+  // API per leggere le telecamere pendenti non ancora sincronizzate con Supabase
+  app.get("/api/cameras/pending", (req, res) => {
+    const pendingFile = path.join(process.cwd(), "pending_cameras.json");
+    try {
+      if (fs.existsSync(pendingFile)) {
+        const dataStr = fs.readFileSync(pendingFile, "utf-8");
+        const cameras = JSON.parse(dataStr);
+        return res.json({ success: true, cameras });
+      }
+      res.json({ success: true, cameras: [] });
+    } catch (err: any) {
+      console.error("[Cameras Pending] Errore lettura:", err);
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // API per cancellare le telecamere pendenti una volta sincronizzate
+  app.post("/api/cameras/pending/clear", (req, res) => {
+    const pendingFile = path.join(process.cwd(), "pending_cameras.json");
+    try {
+      if (fs.existsSync(pendingFile)) {
+        fs.unlinkSync(pendingFile);
+        console.log("[Cameras Pending] File pending_cameras.json rimosso correttamente.");
+      }
+      res.json({ success: true });
+    } catch (err: any) {
+      console.error("[Cameras Pending] Errore rimozione:", err);
+      res.status(500).json({ success: false, error: err.message });
     }
   });
 
@@ -793,8 +837,8 @@ async function startServer() {
   app.listen(PORT, "0.0.0.0", () => {
     console.log(`Vigil.AI Server running on http://localhost:${PORT}`);
 
-    // Avvia la sincronizzazione delle telecamere pendenti su boot
-    syncPendingCameras();
+    // Avvia la sincronizzazione delle telecamere pendenti su boot (Disattivata: gestita dal client autenticato in App.tsx)
+    // syncPendingCameras();
 
     if (process.platform !== "win32") {
       if (!isConfigured()) {
