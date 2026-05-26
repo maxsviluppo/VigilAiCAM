@@ -25,6 +25,7 @@ import {
   ChevronRight,
   Maximize2,
   Scan,
+  Globe,
   X,
   AlertCircle,
   Move,
@@ -34,8 +35,7 @@ import {
   EyeOff,
   Key,
   ExternalLink,
-  Keyboard,
-  Globe
+  Keyboard
 } from "lucide-react";
 import * as Lucide from "lucide-react";
 import { motion, AnimatePresence, Reorder } from "framer-motion";
@@ -44,6 +44,66 @@ import { analyzeFrame, DetectionResult } from "./services/gemini";
 import { Camera, Incident, AlertTrigger, AlertTriggerItem, Zone, ZoneType, Point } from "./types";
 import { supabase } from "./supabase";
 import { User } from "@supabase/supabase-js";
+
+const RaspberryIcon = ({ size = 16, className = "" }: { size?: number; className?: string }) => (
+  <svg 
+    viewBox="0 0 24 24" 
+    width={size} 
+    height={size} 
+    fill="currentColor" 
+    className={`inline-block ${className}`}
+    style={{ verticalAlign: 'middle' }}
+  >
+    {/* Leaves */}
+    <path 
+      d="M12 1.5c-.3 0-.6.1-.8.3-.4.4-.3 1 .1 1.4.3.3.7.4 1.1.2.4.2.8.1 1.1-.2.4-.4.4-1 0-1.4-.3-.2-.5-.3-.8-.3-.2 0-.4 0-.6.1.1-.1.2-.1.2-.1z" 
+      fill="#22c55e" 
+    />
+    <path 
+      d="M9.7 3.8c-.3-.2-.7-.1-.9.2-.2.3-.1.7.2.9.2.1.4.1.6 0 .1.2.3.3.5.3.3 0 .6-.2.7-.5 0-.3-.2-.6-.5-.7-.2-.1-.4-.1-.6-.2z" 
+      fill="#22c55e" 
+    />
+    <path 
+      d="M14.3 3.8c-.2.1-.4.1-.6.2-.3.1-.5.4-.5.7 0 .3.3.5.7.5.2 0 .4-.1.5-.3.2.1.4.1.6 0 .3-.2.4-.6.2-.9-.2-.3-.6-.4-.9-.2z" 
+      fill="#22c55e" 
+    />
+    <path 
+      d="M12 4.5c-.5 0-1 .4-1 1s.5 1 1 1 1-.4 1-1-.5-1-1-1z" 
+      fill="#22c55e" 
+    />
+    {/* Raspberry druplets */}
+    <circle cx="12" cy="9.5" r="2.2" fill="#ef4444" />
+    <circle cx="9" cy="11.5" r="2.2" fill="#ef4444" />
+    <circle cx="15" cy="11.5" r="2.2" fill="#ef4444" />
+    <circle cx="7" cy="14.5" r="2.2" fill="#ef4444" />
+    <circle cx="11.5" cy="14.5" r="2.2" fill="#ef4444" />
+    <circle cx="16.5" cy="14.5" r="2.2" fill="#ef4444" />
+    <circle cx="9.5" cy="17.5" r="2.2" fill="#ef4444" />
+    <circle cx="14.5" cy="17.5" r="2.2" fill="#ef4444" />
+    <circle cx="12" cy="20.5" r="2.2" fill="#ef4444" />
+  </svg>
+);
+
+const TailscaleIcon = ({ size = 16, className = "" }: { size?: number; className?: string }) => (
+  <svg 
+    viewBox="0 0 24 24" 
+    width={size} 
+    height={size} 
+    fill="currentColor" 
+    className={`inline-block ${className}`}
+    style={{ verticalAlign: 'middle' }}
+  >
+    <circle cx="6" cy="6" r="2.5" fill="#3b82f6" />
+    <circle cx="12" cy="6" r="2.5" fill="#3b82f6" />
+    <circle cx="18" cy="6" r="2.5" fill="#3b82f6" />
+    <circle cx="6" cy="12" r="2.5" fill="#3b82f6" />
+    <circle cx="12" cy="12" r="2.5" fill="#3b82f6" />
+    <circle cx="18" cy="12" r="2.5" fill="#3b82f6" />
+    <circle cx="6" cy="18" r="2.5" fill="#3b82f6" />
+    <circle cx="12" cy="18" r="2.5" fill="#3b82f6" />
+    <circle cx="18" cy="18" r="2.5" fill="#3b82f6" />
+  </svg>
+);
 
 const IPCameraPlayer = ({ url, isAlertActive, isNightMode, imgRefCallback }: { 
   url: string; 
@@ -348,17 +408,17 @@ const Auth = () => {
               type="email" 
               value={email} 
               onChange={(e) => setEmail(e.target.value)} 
-              className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 text-white focus:border-blue-500/50 outline-none transition-all pr-12" 
+              className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 text-white focus:border-blue-500/50 outline-none transition-all pr-12 text-base" 
               placeholder="Email" 
               required 
             />
             <button 
               type="button"
               onClick={() => setActiveField(activeField === 'email' ? null : 'email')}
-              className={`absolute right-4 top-1/2 -translate-y-1/2 p-1.5 rounded-lg transition-colors ${activeField === 'email' ? 'text-blue-400 bg-blue-500/10' : 'text-slate-500 hover:text-white'}`}
-              title="Attiva tastiera virtuale"
+              className={`absolute right-4 top-1/2 -translate-y-1/2 transition-colors ${activeField === 'email' ? 'text-blue-400' : 'text-slate-500 hover:text-white'}`}
+              title="Tastiera Virtuale"
             >
-              <Keyboard size={16} />
+              <Keyboard size={18} />
             </button>
           </div>
           <div className="relative">
@@ -366,7 +426,7 @@ const Auth = () => {
               type={showPassword ? "text" : "password"} 
               value={password} 
               onChange={(e) => setPassword(e.target.value)} 
-              className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 text-white focus:border-blue-500/50 outline-none transition-all pr-20" 
+              className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 text-white focus:border-blue-500/50 outline-none transition-all pr-20 text-base" 
               placeholder="Password" 
               required 
             />
@@ -374,15 +434,15 @@ const Auth = () => {
               <button 
                 type="button"
                 onClick={() => setActiveField(activeField === 'password' ? null : 'password')}
-                className={`p-1.5 rounded-lg transition-colors ${activeField === 'password' ? 'text-blue-400 bg-blue-500/10' : 'text-slate-500 hover:text-white'}`}
-                title="Attiva tastiera virtuale"
+                className={`transition-colors ${activeField === 'password' ? 'text-blue-400' : 'text-slate-500 hover:text-white'}`}
+                title="Tastiera Virtuale"
               >
-                <Keyboard size={16} />
+                <Keyboard size={18} />
               </button>
               <button 
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
-                className="text-slate-500 hover:text-white transition-colors p-1"
+                className="text-slate-500 hover:text-white transition-colors"
               >
                 {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
               </button>
@@ -476,7 +536,7 @@ export default function App() {
   const [isNightMode, setIsNightMode] = useState(false);
   const [notificationEmails, setNotificationEmails] = useState<string[]>(() => {
     const saved = localStorage.getItem("vigilai_notification_emails");
-    return saved ? JSON.parse(saved) : ["castromassimo@gmail.com"];
+    return saved ? JSON.parse(saved) : ["allarme.vigilai@gmail.com"];
   });
   const [newEmail, setNewEmail] = useState("");
   const [isSimulating, setIsSimulating] = useState(false);
@@ -487,36 +547,39 @@ export default function App() {
   const [saveStatus, setSaveStatus] = useState<{ type: 'success' | 'error', message: string } | null>(null);
   const [globalModal, setGlobalModal] = useState<{ type: 'error' | 'success' | 'info', title: string, message: string } | null>(null);
   const [serverInfo, setServerInfo] = useState<{ ips: string[], port: number } | null>(null);
+  const [activeQrTab, setActiveQrTab] = useState<'local' | 'tailscale'>('local');
+  const [vpnStatus, setVpnStatus] = useState<{ installed: boolean, state: string, authUrl: string | null, ip: string | null } | null>(null);
+  const [loadingVpn, setLoadingVpn] = useState(false);
 
   useEffect(() => {
     fetch('/api/info').then(res => res.json()).then(setServerInfo).catch(console.error);
-  }, []);
 
-  // Carica le impostazioni dal server Raspberry Pi all'avvio
-  useEffect(() => {
-    const loadServerSettings = async () => {
-      try {
-        const res = await fetch("/api/settings");
-        const data = await res.json();
-        if (res.ok && data.success) {
-          console.log("[Settings] Impostazioni caricate con successo dal server locale.");
-          setAppSettings({
-            geminiKey: data.geminiKey || "",
-            emailUser: data.emailUser || "",
-            emailPass: data.emailPass || "",
-          });
-          if (data.notificationEmails && data.notificationEmails.length > 0) {
-            setNotificationEmails(data.notificationEmails);
-          }
+    // Recupera le impostazioni locali per allineare lo stato al file .env ed evitare sovrascritture vuote
+    fetch('/api/settings')
+      .then(res => res.json())
+      .then(data => {
+        if (data.success) {
           if (data.geminiKey) {
             localStorage.setItem("vigilai_gemini_key", data.geminiKey);
           }
+          if (data.emailUser) {
+            localStorage.setItem("vigilai_email_user", data.emailUser);
+          }
+          if (data.emailPass) {
+            localStorage.setItem("vigilai_email_pass", data.emailPass);
+          }
+          setAppSettings({
+            geminiKey: data.geminiKey || localStorage.getItem("vigilai_gemini_key") || "",
+            emailUser: data.emailUser || localStorage.getItem("vigilai_email_user") || "",
+            emailPass: data.emailPass || localStorage.getItem("vigilai_email_pass") || "",
+          });
+          if (data.notificationEmails) {
+            setNotificationEmails(data.notificationEmails);
+            localStorage.setItem("vigilai_notification_emails", JSON.stringify(data.notificationEmails));
+          }
         }
-      } catch (err) {
-        console.warn("[Settings] Impossibile caricare le impostazioni dal server locale, uso fallback:", err);
-      }
-    };
-    loadServerSettings();
+      })
+      .catch(console.error);
   }, []);
 
   const handleLogout = async () => {
@@ -551,6 +614,10 @@ export default function App() {
   const [showApiKeyModal, setShowApiKeyModal] = useState(false);
   const [modalGeminiKey, setModalGeminiKey] = useState(() => localStorage.getItem("vigilai_gemini_key") || "");
   const [showApiKeyHeaderInput, setShowApiKeyHeaderInput] = useState(false);
+
+  const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+  const isInAppBrowser = /FBAN|FBAV|Instagram|GSA|Line|MicroMessenger|Messenger|Snapchat/i.test(navigator.userAgent || '');
+
 
   useEffect(() => {
     const handlePhysicalKeyboard = (e: KeyboardEvent) => {
@@ -834,134 +901,126 @@ export default function App() {
     if (user) checkTable();
   }, [user]);
 
-  // Recupero e allineamento dell'API Key da Supabase all'avvio
+  // Recupero e allineamento delle impostazioni da Supabase all'avvio
   useEffect(() => {
-    const syncApiKey = async () => {
+    const syncAppSettings = async () => {
       if (!user) return;
       try {
         const localKey = localStorage.getItem("vigilai_gemini_key") || "";
-        const localUpdatedAtStr = localStorage.getItem("vigilai_gemini_key_updated_at") || "";
-        const localUpdatedAt = localUpdatedAtStr ? new Date(localUpdatedAtStr).getTime() : 0;
+        const localEmailUser = localStorage.getItem("vigilai_email_user") || "";
+        const localEmailPass = localStorage.getItem("vigilai_email_pass") || "";
+        const localRecipientsStr = localStorage.getItem("vigilai_notification_emails") || "";
         
-        // 1. Leggiamo la chiave dai metadati dell'utente Supabase Auth (come backup sicuro ed immediato)
-        const metadataKey = user.user_metadata?.gemini_key || "";
-        
-        // 2. Leggiamo anche il backup della tabella settings da Supabase (se esistente)
-        let dbKey = "";
-        let dbUpdatedAt = 0;
-        let tableExists = true;
-        
+        let localRecipients: string[] = ["allarme.vigilai@gmail.com"];
         try {
-          const { data, error } = await supabase
-            .from('settings')
-            .select('gemini_part1, gemini_part2, updated_at')
-            .eq('id', 'gemini_key_backup')
-            .maybeSingle();
-            
-          if (error) {
-            if (error.code === 'PGRST205') {
-              console.warn("[VigilAI Backup] Tabella 'settings' non trovata su Supabase. Uso solo backup metadati utente.");
-              tableExists = false;
-            } else {
-              console.error("[VigilAI Backup] Errore nel recupero backup dalla tabella settings:", error.message);
-            }
-          } else if (data) {
-            dbKey = ((data.gemini_part1 || '') + (data.gemini_part2 || '')).trim();
-            dbUpdatedAt = data.updated_at ? new Date(data.updated_at).getTime() : 0;
+          if (localRecipientsStr) {
+            localRecipients = JSON.parse(localRecipientsStr);
+            if (!Array.isArray(localRecipients)) localRecipients = ["allarme.vigilai@gmail.com"];
           }
-        } catch (dbErr) {
-          console.warn("[VigilAI Backup] Errore di query su tabella settings, uso metadati:", dbErr);
-          tableExists = false;
+        } catch (e) {}
+
+        const metadata = user.user_metadata || {};
+        const cloudKey = metadata.gemini_key || "";
+        const cloudEmailUser = metadata.email_user || "";
+        const cloudEmailPass = metadata.email_pass || "";
+        
+        let cloudRecipients: string[] = [];
+        if (metadata.notification_emails) {
+          if (Array.isArray(metadata.notification_emails)) {
+            cloudRecipients = metadata.notification_emails;
+          } else if (typeof metadata.notification_emails === "string") {
+            cloudRecipients = metadata.notification_emails.split(",").map((e: string) => e.trim()).filter(Boolean);
+          }
         }
 
-        // Determiniamo qual è la chiave più recente tra tabella database e metadati utente
-        const finalCloudKey = dbKey || metadataKey;
-        // Se non abbiamo un timestamp per la tabella, consideriamo NOW o assumiamo sia recente
-        const finalCloudUpdatedAt = dbKey ? dbUpdatedAt : (metadataKey ? Date.now() : 0);
+        const needsLocalUpdate = 
+          (!localKey && cloudKey) || 
+          (!localEmailUser && cloudEmailUser) || 
+          (!localEmailPass && cloudEmailPass) || 
+          (localRecipients.length === 1 && localRecipients[0] === "castromassimo@gmail.com" && cloudRecipients.length > 0);
 
-        const saveToLocalServer = (key: string) => {
+        const saveToLocalServer = (key: string, userMail: string, passMail: string, recs: string[]) => {
           fetch("/api/settings", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               geminiKey: key,
-              emailUser: appSettings.emailUser,
-              emailPass: appSettings.emailPass,
-              notificationEmails: notificationEmails
+              emailUser: userMail,
+              emailPass: passMail,
+              notificationEmails: recs
             })
           }).then(res => res.json()).then(resData => {
             if (resData.success) {
-              console.log("[VigilAI Backup] Chiave API Gemini allineata con successo sul server locale.");
+              console.log("[VigilAI Sync] Impostazioni allineate con successo sul server locale.");
             }
-          }).catch(err => console.warn("[VigilAI Backup] Impossibile salvare la chiave sul server locale:", err));
+          }).catch(err => console.warn("[VigilAI Sync] Impossibile salvare le impostazioni sul server locale:", err));
         };
 
-        if (finalCloudKey && finalCloudKey === localKey) {
-          console.log("[VigilAI Backup] La chiave API Gemini locale è già allineata con il cloud.");
-          return;
-        }
+        if (needsLocalUpdate) {
+          console.log("[VigilAI Sync] Rilevate impostazioni nel cloud. Ripristino in locale...");
+          
+          const finalKey = cloudKey || localKey;
+          const finalEmailUser = cloudEmailUser || localEmailUser;
+          const finalEmailPass = cloudEmailPass || localEmailPass;
+          const finalRecipients = cloudRecipients.length > 0 ? cloudRecipients : localRecipients;
 
-        if (finalCloudKey && (!localKey || finalCloudUpdatedAt > localUpdatedAt)) {
-          // Caso A: Cache locale vuota OR database/metadati aggiornati più recentemente -> Ripristina/Aggiorna localmente
-          console.log("[VigilAI Backup] Rilevata chiave API Gemini più recente nel cloud. Ripristino/Allineamento in corso...");
-          localStorage.setItem("vigilai_gemini_key", finalCloudKey);
+          localStorage.setItem("vigilai_gemini_key", finalKey);
           localStorage.setItem("vigilai_gemini_key_updated_at", new Date().toISOString());
-          setAppSettings(prev => ({ ...prev, geminiKey: finalCloudKey }));
-          setModalGeminiKey(finalCloudKey);
-          saveToLocalServer(finalCloudKey);
-          
-          if (localKey !== finalCloudKey) {
-            setGlobalModal({
-              type: 'success',
-              title: 'API Key Sincronizzata',
-              message: 'La tua chiave API Gemini è stata allineata con successo con l\'ultimo backup del cloud.'
-            });
-          }
-        } else if (localKey && (!finalCloudKey || localUpdatedAt > finalCloudUpdatedAt)) {
-          // Caso B: Chiave presente in locale ma non nel cloud OR chiave locale più recente -> Carica su cloud
-          console.log("[VigilAI Backup] Rilevata chiave API Gemini locale più recente. Allineamento backup database e metadati utente...");
-          
-          // Backup nei metadati utente
-          try {
-            await supabase.auth.updateUser({
-              data: { gemini_key: localKey }
-            });
-          } catch (authErr) {
-            console.warn("[VigilAI Backup] Errore nel backup dei metadati utente:", authErr);
-          }
+          localStorage.setItem("vigilai_email_user", finalEmailUser);
+          localStorage.setItem("vigilai_email_pass", finalEmailPass);
+          localStorage.setItem("vigilai_notification_emails", JSON.stringify(finalRecipients));
 
-          // Backup nella tabella settings (se disponibile)
-          if (tableExists) {
-            const mid = Math.floor(localKey.length / 2);
-            const part1 = localKey.substring(0, mid);
-            const part2 = localKey.substring(mid);
-            const timestamp = localUpdatedAtStr || new Date().toISOString();
-            
+          setAppSettings({
+            geminiKey: finalKey,
+            emailUser: finalEmailUser,
+            emailPass: finalEmailPass
+          });
+          setNotificationEmails(finalRecipients);
+          setModalGeminiKey(finalKey);
+
+          saveToLocalServer(finalKey, finalEmailUser, finalEmailPass, finalRecipients);
+
+          setGlobalModal({
+            type: 'success',
+            title: 'Impostazioni Sincronizzate',
+            message: 'Le impostazioni (API Key e SMTP) sono state allineate con successo con il tuo account cloud.'
+          });
+        } else {
+          const needsCloudUpdate = 
+            (localKey && !cloudKey) || 
+            (localEmailUser && !cloudEmailUser) || 
+            (localEmailPass && !cloudEmailPass);
+
+          if (needsCloudUpdate) {
+            console.log("[VigilAI Sync] Caricamento impostazioni locali su cloud (backup)...");
             try {
-              await supabase.from('settings').upsert({
-                id: 'gemini_key_backup',
-                gemini_part1: part1,
-                gemini_part2: part2,
-                updated_at: timestamp
+              await supabase.auth.updateUser({
+                data: {
+                  gemini_key: localKey,
+                  email_user: localEmailUser,
+                  email_pass: localEmailPass,
+                  notification_emails: localRecipients
+                }
               });
-            } catch (dbErr) {
-              console.warn("[VigilAI Backup] Errore nel salvataggio su tabella settings:", dbErr);
+              console.log("[VigilAI Sync] Backup completato nei metadati utente Supabase Auth.");
+            } catch (authErr) {
+              console.warn("[VigilAI Sync] Errore nel salvataggio dei metadati utente:", authErr);
             }
           }
-          
-          saveToLocalServer(localKey);
         }
       } catch (err) {
-        console.error("[VigilAI Backup] Errore critico nel processo di sincronizzazione chiave:", err);
+        console.error("[VigilAI Sync] Errore critico nel processo di sincronizzazione impostazioni:", err);
       }
     };
     
     const timer = setTimeout(() => {
-      syncApiKey();
+      syncAppSettings();
     }, 1500);
     return () => clearTimeout(timer);
   }, [user]);
 
+
+  
   const fetchUserData = useCallback(async () => {
 
     if (!user) return;
@@ -1014,49 +1073,6 @@ export default function App() {
 
   useEffect(() => { if (user) fetchUserData(); }, [user, fetchUserData]);
 
-  // Sincronizza le telecamere create durante il wizard con l'account dell'utente loggato
-  useEffect(() => {
-    const syncLocalPendingCameras = async () => {
-      if (!user) return;
-      try {
-        const res = await fetch("/api/cameras/pending");
-        if (!res.ok) return;
-        const data = await res.json();
-        if (data.success && data.cameras && data.cameras.length > 0) {
-          console.log("[Cameras Sync] Rilevate telecamere pendenti sul server:", data.cameras.length);
-          
-          // Associazioni con il nuovo user_id
-          const camerasToSync = data.cameras.map((c: any) => {
-            const { id, ...rest } = c; // Rimuove l'ID fittizio locale
-            return {
-              ...rest,
-              user_id: user.id,
-              enabled_triggers: c.enabledTriggers || c.enabled_triggers || ['intrusion', 'violence', 'fire', 'smoke', 'fall'],
-              rtsp_path: c.rtspPath || c.rtsp_path || '/stream1'
-            };
-          });
-
-          const { error } = await supabase.from('cameras').insert(camerasToSync);
-          if (error) {
-            console.error("[Cameras Sync] Errore inserimento in Supabase:", error.message);
-            return;
-          }
-
-          console.log("[Cameras Sync] Telecamere sincronizzate con successo su Supabase.");
-          // Cancella il file pending_cameras.json sul server
-          await fetch("/api/cameras/pending/clear", { method: "POST" });
-          
-          // Ricarica le telecamere
-          fetchUserData();
-        }
-      } catch (err) {
-        console.error("[Cameras Sync] Errore durante la sincronizzazione delle telecamere locali:", err);
-      }
-    };
-    
-    syncLocalPendingCameras();
-  }, [user, fetchUserData]);
-
 
 
 
@@ -1074,9 +1090,9 @@ export default function App() {
   const activeCamera = cameras.find(c => c.id === activeCameraId);
 
   // Notification function
-  const sendNotification = async (description: string, screenshot: string) => {
+  const sendNotification = async (description: string, screenshot: string): Promise<{ success: boolean; error?: string }> => {
     try {
-      await fetch("/api/notify", {
+      const response = await fetch("/api/notify", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -1088,9 +1104,15 @@ export default function App() {
           emailPass: appSettings.emailPass
         })
       });
+      const data = await response.json();
+      if (!response.ok || !data.success) {
+        return { success: false, error: data.error || "Errore del server" };
+      }
       console.log("Notification request sent to:", notificationEmails.join(", "));
-    } catch (e) {
+      return { success: true };
+    } catch (e: any) {
       console.error("Failed to send notification request", e);
+      return { success: false, error: e.message || "Errore di connessione" };
     }
   };
 
@@ -1248,6 +1270,7 @@ export default function App() {
     }
 
     let sentCount = 0;
+    let lastErrorMsg = "";
 
     for (const cam of activeCams) {
       const img = imgRefs.current.get(cam.id);
@@ -1270,19 +1293,23 @@ export default function App() {
 
       if (success) {
         const screenshot = canvas.toDataURL("image/jpeg", 0.6).split(",")[1];
-        await sendNotification(`[TEST MANUALE] Allarme inviato manualmente per verificare la ricezione delle immagini dalla camera: ${cam.name}`, screenshot);
+        const res = await sendNotification(`[TEST MANUALE] Allarme inviato manualmente per verificare la ricezione delle immagini dalla camera: ${cam.name}`, screenshot);
 
-        setIncidents(prev => [{
-          id: Math.random().toString(36).substr(2, 9),
-          timestamp: new Date(),
-          cameraId: cam.id,
-          cameraName: cam.name,
-          description: `[TEST MANUALE] Notifica inviata con successo (${cam.name})`,
-          threatLevel: "medium",
-          screenshot: canvas.toDataURL("image/jpeg", 0.8)
-        }, ...prev]);
+        if (res.success) {
+          setIncidents(prev => [{
+            id: Math.random().toString(36).substr(2, 9),
+            timestamp: new Date(),
+            cameraId: cam.id,
+            cameraName: cam.name,
+            description: `[TEST MANUALE] Notifica inviata con successo (${cam.name})`,
+            threatLevel: "medium",
+            screenshot: canvas.toDataURL("image/jpeg", 0.8)
+          }, ...prev]);
 
-        sentCount++;
+          sentCount++;
+        } else {
+          lastErrorMsg = res.error || "Errore sconosciuto";
+        }
       }
     }
 
@@ -1295,8 +1322,10 @@ export default function App() {
     } else {
       setGlobalModal({
         type: 'error',
-        title: 'Errore Acquisizione',
-        message: 'Impossibile catturare l\'immagine da alcuna telecamera attiva. Assicurati che i flussi video siano visibili sullo schermo.'
+        title: 'Errore Invio Allarme',
+        message: lastErrorMsg 
+          ? `Impossibile inviare la notifica email. Dettaglio errore: ${lastErrorMsg}`
+          : 'Impossibile catturare l\'immagine da alcuna telecamera attiva. Assicurati che i flussi video siano visibili sullo schermo.'
       });
     }
   };
@@ -1946,30 +1975,52 @@ export default function App() {
             </motion.button>
 
             {serverInfo && (
-              <div className="flex items-center gap-2">
+              <>
                 <button 
-                  onClick={() => setGlobalModal({
-                    type: 'info',
-                    title: 'Quick Connect',
-                    message: 'Scansiona il QR Code con il tablet per collegarlo istantaneamente sulla rete locale.'
-                  })}
+                  onClick={() => {
+                    setActiveQrTab('local');
+                    setGlobalModal({
+                      type: 'info',
+                      title: 'Quick Connect',
+                      message: 'Scansiona il QR Code con il tablet per collegarlo istantaneamente.'
+                    });
+                    // Pre-carica lo stato VPN in background
+                    fetch('/api/vpn/status')
+                      .then(res => res.json())
+                      .then(data => {
+                        if (data.success) setVpnStatus(data);
+                      })
+                      .catch(console.error);
+                  }}
                   className="p-3 bg-green-600/20 border border-green-500/30 text-green-400 rounded-xl lg:rounded-2xl hover:bg-green-600 hover:text-white transition-all shadow-lg shadow-green-500/10"
-                  title="Collega Tablet (Wi-Fi Locale)"
+                  title="Collega Tablet (Locale)"
                 >
                   <Scan size={20} />
                 </button>
+
                 <button 
-                  onClick={() => setGlobalModal({
-                    type: 'info',
-                    title: 'Quick Connect',
-                    message: 'Scansiona il QR Code per accedere da remoto tramite VPN Tailscale.'
-                  })}
-                  className="p-3 bg-blue-600/20 border border-blue-500/30 text-blue-400 rounded-xl lg:rounded-2xl hover:bg-blue-600 hover:text-white transition-all shadow-lg shadow-blue-500/10"
-                  title="Collega VPN (Remoto)"
+                  onClick={() => {
+                    setActiveQrTab('tailscale');
+                    setGlobalModal({
+                      type: 'info',
+                      title: 'Quick Connect',
+                      message: 'Configurazione e autorizzazione della VPN Tailscale per connessione remota.'
+                    });
+                    setLoadingVpn(true);
+                    fetch('/api/vpn/status')
+                      .then(res => res.json())
+                      .then(data => {
+                        if (data.success) setVpnStatus(data);
+                      })
+                      .catch(console.error)
+                      .finally(() => setLoadingVpn(false));
+                  }}
+                  className="p-3 bg-blue-600/20 border border-blue-500/30 text-blue-400 rounded-xl lg:rounded-2xl hover:bg-blue-600 hover:text-white transition-all shadow-lg shadow-blue-500/10 flex items-center justify-center"
+                  title="VPN Remota (Tailscale)"
                 >
                   <Globe size={20} />
                 </button>
-              </div>
+              </>
             )}
           </div>
         </header>
@@ -2757,7 +2808,7 @@ export default function App() {
                 <div className="space-y-3">
                   <div className="flex justify-between items-end">
                     <label className="text-[9px] font-black uppercase tracking-widest text-slate-500">Motore AI (Gemini 1.5)</label>
-                    <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noreferrer" className="text-[8px] text-blue-400 hover:text-blue-300 uppercase font-black tracking-widest flex items-center gap-1">Ottieni API Key <ChevronRight size={10}/></a>
+                    <button type="button" onClick={() => setShowApiKeyModal(true)} className="text-[8px] text-blue-400 hover:text-blue-300 uppercase font-black tracking-widest flex items-center gap-1">Ottieni API Key <ChevronRight size={10}/></button>
                   </div>
                   <div className="bg-blue-500/5 border border-blue-500/10 p-4 rounded-2xl space-y-4">
                     <div className="space-y-4">
@@ -2786,6 +2837,7 @@ export default function App() {
                       onFocus={() => { if (useVirtualKeyboard) setKeyboardTarget({ id: 'settingsGeminiKey', title: 'Chiave API Gemini' }); }}
                       onBlur={() => backupApiKeyToSupabase(appSettings.geminiKey)}
                       placeholder="Chiave API (AIzaSy...)"
+                      autoComplete="new-password"
                       className="w-full bg-black/20 border border-white/5 px-4 py-3 rounded-xl text-xs text-white outline-none focus:border-blue-500/50 transition-all font-mono"
                     />
                   </div>
@@ -2805,7 +2857,8 @@ export default function App() {
                       value={appSettings.emailUser} 
                       onChange={(e) => setAppSettings({...appSettings, emailUser: e.target.value})}
                       onFocus={() => { if (useVirtualKeyboard) setKeyboardTarget({ id: 'settingsEmailUser', title: 'Email SMTP Mittente' }); }}
-                      placeholder="tua.email@gmail.com"
+                      placeholder="Email mittente (lascia vuoto per default)"
+                      autoComplete="new-password"
                       className="w-full sm:flex-1 bg-white/5 border border-white/10 px-4 py-3 rounded-xl text-xs text-white outline-none focus:border-blue-500 transition-colors"
                     />
                     <input 
@@ -2813,7 +2866,8 @@ export default function App() {
                       value={appSettings.emailPass} 
                       onChange={(e) => setAppSettings({...appSettings, emailPass: e.target.value})}
                       onFocus={() => { if (useVirtualKeyboard) setKeyboardTarget({ id: 'settingsEmailPass', title: 'Password App SMTP' }); }}
-                      placeholder="Password App (16 car.)"
+                      placeholder="Password App (lascia vuoto per default)"
+                      autoComplete="new-password"
                       className="w-full sm:flex-1 bg-white/5 border border-white/10 px-4 py-3 rounded-xl text-xs text-white outline-none focus:border-blue-500 transition-colors"
                     />
                   </div>
@@ -2869,62 +2923,48 @@ export default function App() {
                   </button>
 
                   <button 
-                    onClick={async () => {
-                      setIsSaving(true);
-                      setSaveStatus(null);
-                      
-                      // 1. Salva in localStorage per cache locale
+                    onClick={() => {
                       localStorage.setItem("vigilai_gemini_key", appSettings.geminiKey);
                       localStorage.setItem("vigilai_gemini_key_updated_at", new Date().toISOString());
                       localStorage.setItem("vigilai_email_user", appSettings.emailUser);
                       localStorage.setItem("vigilai_email_pass", appSettings.emailPass);
                       localStorage.setItem("vigilai_model", aiModel);
                       localStorage.setItem("vigilai_notification_emails", JSON.stringify(notificationEmails));
-
-                      // 2. Backup API Key su Supabase (se presente)
-                      await backupApiKeyToSupabase(appSettings.geminiKey);
-
-                      // 3. Salva sul server locale del Raspberry Pi
-                      try {
-                        const response = await fetch("/api/settings", {
-                          method: "POST",
-                          headers: { "Content-Type": "application/json" },
-                          body: JSON.stringify({
-                            geminiKey: appSettings.geminiKey,
-                            emailUser: appSettings.emailUser,
-                            emailPass: appSettings.emailPass,
-                            notificationEmails: notificationEmails
-                          })
-                        });
-                        const data = await response.json();
-                        if (response.ok && data.success) {
-                          setSaveStatus({ type: 'success', message: 'Impostazioni salvate con successo sul server!' });
-                        } else {
-                          throw new Error(data.error || "Errore del server");
+                      
+                      // Salva le impostazioni sul server locale per persisterle nel file .env
+                      fetch("/api/settings", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                          geminiKey: appSettings.geminiKey,
+                          emailUser: appSettings.emailUser,
+                          emailPass: appSettings.emailPass,
+                          notificationEmails: notificationEmails
+                        })
+                      }).then(res => res.json()).then(resData => {
+                        if (resData.success) {
+                          console.log("[Settings] Impostazioni salvate sul server locale.");
                         }
-                      } catch (err: any) {
-                        console.error("[Settings Save Error]", err);
-                        setSaveStatus({ type: 'error', message: `Errore server: ${err.message}` });
-                      } finally {
-                        setIsSaving(false);
-                        // Chiudiamo dopo 1 secondo per mostrare il feedback
-                        setTimeout(() => {
-                          setShowSettings(false);
-                          setSaveStatus(null);
-                        }, 1000);
+                      }).catch(err => console.error("[Settings] Errore salvataggio server locale:", err));
+
+                      // Backup immediato della chiave Gemini su Supabase
+                      backupApiKeyToSupabase(appSettings.geminiKey);
+                      if (user) {
+                        supabase.auth.updateUser({
+                          data: {
+                            gemini_key: appSettings.geminiKey,
+                            email_user: appSettings.emailUser,
+                            email_pass: appSettings.emailPass,
+                            notification_emails: notificationEmails
+                          }
+                        }).catch((err: any) => console.warn("[Settings] Errore backup cloud:", err));
                       }
+
+                      setShowSettings(false);
                     }} 
-                    disabled={isSaving}
-                    className="w-full py-4 bg-blue-600 rounded-2xl text-[10px] font-black uppercase tracking-widest text-white shadow-xl hover:bg-blue-500 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                    className="w-full py-4 bg-blue-600 rounded-2xl text-[10px] font-black uppercase tracking-widest text-white shadow-xl hover:bg-blue-500 transition-all"
                   >
-                    {isSaving ? (
-                      <>
-                        <div className="w-3.5 h-3.5 border-2 border-white/20 border-t-white rounded-full animate-spin" />
-                        <span>Salvataggio...</span>
-                      </>
-                    ) : (
-                      <span>Salva e Chiudi</span>
-                    )}
+                    Salva e Chiudi
                   </button>
                 </div>
             </motion.div>
@@ -3147,9 +3187,7 @@ export default function App() {
           >
             <motion.div 
               initial={{ scale: 0.9, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.9, y: 20 }}
-              className={`glass w-full p-8 rounded-[40px] border-white/10 text-center space-y-6 shadow-2xl transition-all ${
-                globalModal.title === 'Quick Connect' ? 'max-w-2xl' : 'max-w-sm'
-              }`}
+              className="glass max-w-sm w-full p-8 rounded-[40px] border-white/10 text-center space-y-6 shadow-2xl"
             >
               <div className={`w-16 h-16 rounded-3xl flex items-center justify-center mx-auto border ${
                 globalModal.type === 'error' ? 'bg-red-500/10 border-red-500/20 text-red-500' : 
@@ -3164,69 +3202,227 @@ export default function App() {
               </div>
 
               {globalModal.title === 'Quick Connect' && serverInfo && (
-                <div className="flex flex-col items-center gap-6 py-4 w-full">
-                  <div className="flex flex-wrap justify-center gap-6 w-full">
-                    {/* Local QR Code */}
-                    <div className="flex flex-col items-center gap-2">
-                      <span className="text-[10px] text-green-400 font-black uppercase tracking-widest">Rete Locale (Wi-Fi)</span>
-                      <div className="p-4 bg-white rounded-[24px] shadow-2xl shadow-blue-500/20">
-                        {(() => {
-                          const priorityIp = serverInfo.ips.find(ip => ip.startsWith('192.168.') || ip.startsWith('10.') || ip.startsWith('172.')) || serverInfo.ips[0];
-                          return (
+                <div className="flex flex-col items-center gap-4 py-2 w-full">
+                  {/* Selector Tabs */}
+                  <div className="flex bg-slate-950/40 p-1 rounded-xl border border-white/5 w-full">
+                    <button
+                      onClick={() => setActiveQrTab('local')}
+                      className={`flex-1 py-2 px-3 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 ${
+                        activeQrTab === 'local' 
+                          ? 'bg-blue-600 text-white shadow-md' 
+                          : 'text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      <RaspberryIcon size={12} className={activeQrTab === 'local' ? 'text-white' : 'text-green-400'} />
+                      Sito Locale
+                    </button>
+                    <button
+                      onClick={() => {
+                        setActiveQrTab('tailscale');
+                        setLoadingVpn(true);
+                        fetch('/api/vpn/status')
+                          .then(res => res.json())
+                          .then(data => {
+                            if (data.success) setVpnStatus(data);
+                          })
+                          .catch(console.error)
+                          .finally(() => setLoadingVpn(false));
+                      }}
+                      className={`flex-1 py-2 px-3 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 ${
+                        activeQrTab === 'tailscale' 
+                          ? 'bg-blue-600 text-white shadow-md' 
+                          : 'text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      <TailscaleIcon size={12} className={activeQrTab === 'tailscale' ? 'text-white' : 'text-blue-400'} />
+                      Tailscale VPN
+                    </button>
+                  </div>
+
+                  {/* Tab Contents */}
+                  {(() => {
+                    const localIp = serverInfo.ips.find(ip => (ip.startsWith('192.168.') || ip.startsWith('10.')) && ip !== '10.42.0.1') || serverInfo.ips.find(ip => !ip.startsWith('100.')) || serverInfo.ips[0];
+                    const tailscaleIp = serverInfo.ips.find(ip => ip.startsWith('100.'));
+
+                    if (activeQrTab === 'local') {
+                      return (
+                        <div className="flex flex-col items-center gap-4 w-full">
+                          <div className="p-4 bg-white rounded-[32px] shadow-2xl shadow-blue-500/20">
                             <QRCodeCanvas 
-                              value={`http://${priorityIp}:${serverInfo.port}`}
-                              size={150}
+                              value={`http://${localIp}:${serverInfo.port}`}
+                              size={180}
                               level="H"
                               includeMargin={false}
+                              imageSettings={{
+                                src: "/favicon.png",
+                                x: undefined,
+                                y: undefined,
+                                height: 36,
+                                width: 36,
+                                excavate: true,
+                              }}
                             />
-                          );
-                        })()}
-                      </div>
-                      <code className="text-[9px] text-slate-400 font-mono">http://{serverInfo.ips.find(ip => ip.startsWith('192.168.') || ip.startsWith('10.') || ip.startsWith('172.')) || serverInfo.ips[0]}:{serverInfo.port}</code>
-                    </div>
-
-                    {/* VPN QR Code (Tailscale) */}
-                    {(() => {
-                      const vpnIp = serverInfo.ips.find(ip => ip.startsWith('100.'));
-                      if (vpnIp) {
-                        return (
-                          <div className="flex flex-col items-center gap-2">
-                            <span className="text-[10px] text-blue-400 font-black uppercase tracking-widest">VPN Remota (Tailscale)</span>
-                            <div className="p-4 bg-white rounded-[24px] shadow-2xl shadow-blue-500/20 border-2 border-blue-500/50">
-                              <QRCodeCanvas 
-                                value={`http://${vpnIp}:${serverInfo.port}`}
-                                size={150}
-                                level="H"
-                                includeMargin={false}
-                              />
-                            </div>
-                            <code className="text-[9px] text-blue-400 font-mono">http://{vpnIp}:{serverInfo.port}</code>
                           </div>
-                        );
-                      } else {
+                          <p className="text-[9px] text-slate-400 uppercase font-bold text-center">
+                            Connessione diretta tramite WiFi locale
+                          </p>
+                          <div className="bg-white/5 px-4 py-2.5 rounded-xl border border-white/5 w-full flex justify-between items-center">
+                            <code className="text-[10px] text-slate-300 font-mono">http://{localIp}:{serverInfo.port}</code>
+                            <span className="text-[8px] font-black uppercase px-2 py-0.5 rounded-full bg-green-500/20 text-green-400 flex items-center gap-1">
+                              <RaspberryIcon size={8} /> Consigliato
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    } else {
+                      if (loadingVpn) {
                         return (
-                          <div className="flex flex-col items-center justify-center p-6 bg-white/5 border border-dashed border-white/10 rounded-[24px] w-[182px] h-[206px] text-center">
-                            <Lock className="text-slate-500 mb-2" size={24} />
-                            <span className="text-[10px] text-slate-400 font-black uppercase tracking-wider block">VPN Non Attiva</span>
-                            <p className="text-[8px] text-slate-500 uppercase mt-1 leading-normal">Collega il box a Tailscale per abilitare l'accesso remoto sicuro.</p>
+                          <div className="flex flex-col items-center gap-3 py-10 w-full text-center">
+                            <span className="animate-spin rounded-full h-8 w-8 border-2 border-blue-500 border-t-transparent" />
+                            <p className="text-[9px] text-slate-400 uppercase font-bold">Verifica dello stato VPN...</p>
                           </div>
                         );
                       }
-                    })()}
-                  </div>
+
+                      const activeVpnIp = vpnStatus?.ip || tailscaleIp;
+                      const isVpnRunning = vpnStatus?.state === "Running" && activeVpnIp;
+
+                      if (isVpnRunning) {
+                        return (
+                          <div className="flex flex-col items-center gap-4 w-full">
+                            <div className="p-4 bg-white rounded-[32px] shadow-2xl shadow-blue-500/20">
+                              <QRCodeCanvas 
+                                value={`http://${activeVpnIp}:${serverInfo.port}`}
+                                size={180}
+                                level="H"
+                                includeMargin={false}
+                                imageSettings={{
+                                  src: "/favicon.png",
+                                  x: undefined,
+                                  y: undefined,
+                                  height: 36,
+                                  width: 36,
+                                  excavate: true,
+                                }}
+                              />
+                            </div>
+                            <p className="text-[9px] text-slate-400 uppercase font-bold text-center">
+                              Connessione remota sicura tramite VPN Tailscale
+                            </p>
+                            <div className="bg-white/5 px-4 py-2.5 rounded-xl border border-white/5 w-full flex justify-between items-center">
+                              <code className="text-[10px] text-slate-300 font-mono">http://{activeVpnIp}:{serverInfo.port}</code>
+                              <span className="text-[8px] font-black uppercase px-2 py-0.5 rounded-full bg-green-500/20 text-green-400">
+                                Connesso
+                              </span>
+                            </div>
+                          </div>
+                        );
+                      } else if (vpnStatus?.state === "NeedsLogin" && vpnStatus?.authUrl) {
+                        return (
+                          <div className="flex flex-col items-center gap-4 w-full">
+                            <div className="p-4 bg-white rounded-[32px] shadow-2xl shadow-blue-500/20">
+                              <QRCodeCanvas 
+                                value={vpnStatus.authUrl}
+                                size={180}
+                                level="H"
+                                includeMargin={false}
+                                imageSettings={{
+                                  src: "/favicon.png",
+                                  x: undefined,
+                                  y: undefined,
+                                  height: 36,
+                                  width: 36,
+                                  excavate: true,
+                                }}
+                              />
+                            </div>
+                            <div className="text-center space-y-1">
+                              <h4 className="text-[10px] font-black text-blue-400 uppercase tracking-widest">Associazione Richiesta</h4>
+                              <p className="text-[8px] text-slate-400 uppercase font-bold leading-relaxed max-w-[240px] mx-auto">
+                                Scansiona questo QR Code per associare il Raspberry Pi al tuo account Tailscale.
+                              </p>
+                            </div>
+                            <div className="flex gap-2 w-full">
+                              <a 
+                                href={vpnStatus.authUrl} 
+                                target="_blank" 
+                                rel="noopener noreferrer"
+                                className="flex-1 py-3 bg-blue-600 rounded-xl text-[9px] font-black uppercase tracking-widest text-white text-center hover:bg-blue-500 transition-all flex items-center justify-center gap-1.5"
+                              >
+                                <ExternalLink size={12} /> Apri Link
+                              </a>
+                              <button 
+                                onClick={() => {
+                                  setLoadingVpn(true);
+                                  fetch('/api/vpn/status')
+                                    .then(res => res.json())
+                                    .then(data => {
+                                      if (data.success) setVpnStatus(data);
+                                    })
+                                    .catch(console.error)
+                                    .finally(() => setLoadingVpn(false));
+                                }}
+                                className="px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-[9px] font-black uppercase tracking-widest text-slate-300 hover:bg-white/10 transition-all"
+                              >
+                                Verifica
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      } else {
+                        const isInstalled = vpnStatus?.installed !== false;
+                        return (
+                          <div className="flex flex-col items-center gap-3 py-6 px-4 bg-white/5 rounded-2xl border border-white/5 w-full text-center">
+                            <div className="w-10 h-10 rounded-full bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-500 mb-1">
+                              <AlertTriangle size={18} />
+                            </div>
+                            <h4 className="text-[10px] font-black text-amber-400 uppercase tracking-widest">
+                              {isInstalled ? 'VPN Disconnessa' : 'VPN non Rilevata'}
+                            </h4>
+                            <p className="text-[8px] text-slate-400 uppercase font-bold leading-relaxed max-w-[240px] mx-auto">
+                              {isInstalled 
+                                ? 'Tailscale è installato ma non è attivo o non è autenticato. Clicca su "Attiva VPN" per avviarlo.'
+                                : 'Tailscale non è installato sul Raspberry Pi. Installa il pacchetto tailscale per attivare il collegamento remoto.'}
+                            </p>
+                            {isInstalled && (
+                              <button 
+                                onClick={() => {
+                                  setLoadingVpn(true);
+                                  fetch('/api/vpn/activate', { method: 'POST' })
+                                    .then(res => res.json())
+                                    .then(data => {
+                                      if (data.success) {
+                                        setVpnStatus(data);
+                                      }
+                                    })
+                                    .catch(console.error)
+                                    .finally(() => setLoadingVpn(false));
+                                }}
+                                className="w-full mt-2 py-3 bg-blue-600 rounded-xl text-[9px] font-black uppercase tracking-widest text-white hover:bg-blue-500 transition-all"
+                              >
+                                Attiva VPN
+                              </button>
+                            )}
+                          </div>
+                        );
+                      }
+                    }
+                  })()}
                   
-                  <div className="space-y-3 w-full max-w-sm">
-                    <p className="text-[10px] text-blue-400 font-black uppercase tracking-widest text-center">Indirizzi Rilevati:</p>
-                    <div className="flex flex-col gap-2 max-h-[120px] overflow-y-auto custom-scrollbar">
+                  {/* List of other detected IPs */}
+                  <div className="space-y-2 w-full pt-2 border-t border-white/5">
+                    <p className="text-[9px] text-slate-500 font-black uppercase tracking-widest text-center">Tutti gli indirizzi rilevati:</p>
+                    <div className="flex flex-col gap-1.5 max-h-[80px] overflow-y-auto custom-scrollbar pr-1">
                       {serverInfo.ips.map(ip => (
-                        <div key={ip} className="flex items-center justify-between bg-white/5 px-4 py-2 rounded-xl border border-white/5">
-                          <code className="text-[10px] text-slate-300 font-mono">{ip}</code>
-                          <span className={`text-[8px] font-black uppercase px-2 py-0.5 rounded-full ${
+                        <div key={ip} className="flex items-center justify-between bg-black/20 px-3 py-1.5 rounded-lg border border-white/5">
+                          <code className="text-[9px] text-slate-400 font-mono">{ip}</code>
+                          <span className={`text-[7px] font-black uppercase px-1.5 py-0.5 rounded-full ${
                             ip.startsWith('100.') ? 'bg-blue-500/20 text-blue-400' :
-                            ip.startsWith('192.168.') || ip.startsWith('10.') ? 'bg-green-500/20 text-green-400' : 
-                            'bg-slate-700 text-slate-400'
+                            ip.startsWith('192.168.') || ip.startsWith('10.') ? 'bg-green-500/20 text-green-400' :
+                            'bg-slate-800 text-slate-500'
                           }`}>
-                            {ip.startsWith('100.') ? 'VPN' : ip.startsWith('192.168.') || ip.startsWith('10.') ? 'Locale' : 'Virtuale'}
+                            {ip.startsWith('100.') ? 'Tailscale' :
+                             ip.startsWith('192.168.') || ip.startsWith('10.') ? 'WiFi' : 'Altro'}
                           </span>
                         </div>
                       ))}
@@ -3280,14 +3476,15 @@ export default function App() {
 
               {/* Modal Body */}
               <div className="flex-1 overflow-y-auto space-y-6 pr-2 custom-scrollbar">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
+                <div className="flex flex-col items-center justify-center gap-6">
                   
-                  {/* Left Column: QR Code & Direct Link */}
-                  <div className="glass bg-white/5 border border-white/5 p-6 rounded-3xl space-y-4 flex flex-col items-center text-center">
+                  {/* QR Code & Direct Link */}
+                  <div className="glass bg-white/5 border border-white/5 p-6 rounded-3xl space-y-4 flex flex-col items-center text-center max-w-md w-full animate-fade-in">
                     <h4 className="text-xs font-black text-white uppercase tracking-wider">Scansiona con Smartphone / Tablet</h4>
                     <p className="text-[10px] text-slate-400 uppercase font-bold leading-relaxed">
                       Scansiona il codice QR per generare e copiare la chiave sul tuo telefono. Puoi incollarla qui usando la tastiera virtuale, oppure puoi aprire l'app dal browser del tuo telefono all'indirizzo <span className="text-blue-400 font-mono select-all lowercase">{window.location.origin}</span> per incollarla direttamente da lì.
                     </p>
+                    
                     <div className="p-4 bg-white rounded-[24px] shadow-2xl shadow-blue-500/10">
                       <QRCodeCanvas
                         value="https://aistudio.google.com/app/apikey"
@@ -3296,6 +3493,11 @@ export default function App() {
                         includeMargin={false}
                       />
                     </div>
+
+                    <p className="text-[9px] text-amber-400 uppercase font-black tracking-wider leading-relaxed bg-amber-500/10 border border-amber-500/20 px-3 py-2 rounded-xl w-full">
+                      ⚠️ IMPORTANTE: Usa la fotocamera standard del cellulare. NON scansionare con l'App Google o Google Lens per evitare blocchi del login.
+                    </p>
+
                     <div className="w-full pt-2">
                       <a
                         href="https://aistudio.google.com/app/apikey"
@@ -3308,22 +3510,36 @@ export default function App() {
                     </div>
                   </div>
 
-                  {/* Right Column: Google AI Studio in-app viewer (Iframe) */}
-                  <div className="glass bg-white/5 border border-white/5 p-6 rounded-3xl space-y-4 flex flex-col h-full">
-                    <h4 className="text-xs font-black text-white uppercase tracking-wider">In-App Google AI Studio</h4>
-                    <p className="text-[10px] text-slate-400 uppercase font-bold leading-relaxed">
-                      Puoi accedere direttamente alla console di Google da questa finestra per copiare la chiave. 
-                      <span className="text-amber-400 block mt-1">Nota: Se la finestra sotto rimane vuota, Google blocca il caricamento in iframe. Usa il QR Code a sinistra.</span>
-                    </p>
-                    <div className="flex-1 min-h-[220px] rounded-2xl overflow-hidden border border-white/10 bg-slate-950 relative">
-                      <iframe
-                        src="https://aistudio.google.com/app/apikey"
-                        className="w-full h-full border-none"
-                        title="Google AI Studio Key Page"
-                        sandbox="allow-same-origin allow-scripts allow-popups allow-forms"
-                      />
+                  {/* Warning Alerts */}
+                  {isInAppBrowser && (
+                    <div className="bg-amber-500/15 border border-amber-500/30 p-5 rounded-[24px] text-left space-y-2 max-w-md w-full shadow-lg shadow-amber-500/5">
+                      <div className="flex items-center gap-2 text-amber-400 text-[10px] font-black uppercase tracking-wider">
+                        <AlertTriangle size={14} className="shrink-0" /> Browser Interno Rilevato
+                      </div>
+                      <p className="text-[9px] text-slate-300 font-bold uppercase tracking-wide leading-relaxed">
+                        Stai visualizzando l'applicazione all'interno dell'app Google o di un browser interno (es. Facebook, Instagram).
+                      </p>
+                      <p className="text-[9px] text-slate-400 font-medium leading-relaxed">
+                        Google blocca l'accesso a Google AI Studio da questi browser interni (in-app). 
+                        Per risolvere, <span className="text-amber-400 font-bold">apri VigilAI direttamente nel browser principale del tuo telefono</span> (es. <span className="text-white font-bold">Google Chrome</span> su Android o <span className="text-white font-bold">Safari</span> su iOS) inserendo questo indirizzo: <span className="text-blue-400 font-mono select-all break-all">{window.location.origin}</span>.
+                      </p>
                     </div>
-                  </div>
+                  )}
+
+                  {isLocalhost && (
+                    <div className="bg-blue-500/15 border border-blue-500/30 p-5 rounded-[24px] text-left space-y-2 max-w-md w-full shadow-lg shadow-blue-500/5">
+                      <div className="flex items-center gap-2 text-blue-400 text-[10px] font-black uppercase tracking-wider">
+                        <Monitor size={14} className="shrink-0" /> Monitor Raspberry Pi Local
+                      </div>
+                      <p className="text-[9px] text-slate-300 font-bold uppercase tracking-wide leading-relaxed">
+                        Sei sul display fisico del Raspberry Pi.
+                      </p>
+                      <p className="text-[9px] text-slate-400 font-medium leading-relaxed">
+                        Non fare clic sul pulsante "Apri Google AI Studio" direttamente da questo schermo, poiché non dispone di un browser completo con supporto al login Google. Scansiona invece il codice QR sopra con il tuo telefono.
+                      </p>
+                    </div>
+                  )}
+
 
                 </div>
 

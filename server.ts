@@ -51,14 +51,15 @@ async function startServer() {
 
   app.use(bodyParser.json({ limit: "10mb" }));
 
-  // Controlla se le variabili essenziali nel file .env sono configurate
+  // Credenziali SMTP di default pre-configurate per l'invio delle notifiche (facilmente modificabili qui)
+  const DEFAULT_SMTP_USER = "allarme.vigilai@gmail.com";
+  const DEFAULT_SMTP_PASS = "jkcrqzcfbkjpsych";
+
+  // Controlla se le chiavi Supabase nel file .env sono state configurate
   const isConfigured = () => {
     return !!(
-      process.env.GEMINI_API_KEY &&
       process.env.VITE_SUPABASE_URL &&
-      process.env.VITE_SUPABASE_ANON_KEY &&
-      process.env.EMAIL_USER &&
-      process.env.EMAIL_PASS
+      process.env.VITE_SUPABASE_ANON_KEY
     );
   };
 
@@ -214,29 +215,21 @@ async function startServer() {
         cameras
       } = req.body;
       
-      if (!GEMINI_API_KEY || !VITE_SUPABASE_URL || !VITE_SUPABASE_ANON_KEY || !EMAIL_USER || !EMAIL_PASS) {
-        return res.status(400).json({ success: false, error: "Tutti i campi sono obbligatori." });
-      }
+      const supabaseUrl = VITE_SUPABASE_URL || "https://bdcryhunzdemuficudws.supabase.co";
+      const supabaseAnonKey = VITE_SUPABASE_ANON_KEY || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJkY3J5aHVuemRlbXVmaWN1ZHdzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzgxODQ4MzcsImV4cCI6MjA5Mzc2MDgzN30.hlqDNRSqgV12o3lFDFnB7wL5ve04JIk8T_VyjydLGh0";
 
-      // Imposta immediatamente in memoria
-      process.env.GEMINI_API_KEY = GEMINI_API_KEY;
-      process.env.VITE_GEMINI_API_KEY = VITE_GEMINI_API_KEY;
-      process.env.EMAIL_USER = EMAIL_USER;
-      process.env.EMAIL_PASS = EMAIL_PASS;
-      process.env.VITE_SUPABASE_URL = VITE_SUPABASE_URL;
-      process.env.VITE_SUPABASE_ANON_KEY = VITE_SUPABASE_ANON_KEY;
-      if (NOTIFICATION_EMAILS) {
-        process.env.NOTIFICATION_EMAILS = NOTIFICATION_EMAILS;
-      }
+      // Usa sempre le credenziali SMTP di default se il cliente non ne ha inserite di personalizzate
+      const finalEmailUser = EMAIL_USER || DEFAULT_SMTP_USER;
+      const finalEmailPass = EMAIL_PASS || DEFAULT_SMTP_PASS;
 
       const envContent = [
-        `GEMINI_API_KEY=${GEMINI_API_KEY}`,
-        `VITE_GEMINI_API_KEY=${VITE_GEMINI_API_KEY}`,
-        `EMAIL_USER=${EMAIL_USER}`,
-        `EMAIL_PASS=${EMAIL_PASS}`,
-        `NOTIFICATION_EMAILS=${NOTIFICATION_EMAILS || "castromassimo@gmail.com"}`,
-        `VITE_SUPABASE_URL=${VITE_SUPABASE_URL}`,
-        `VITE_SUPABASE_ANON_KEY=${VITE_SUPABASE_ANON_KEY}`,
+        `GEMINI_API_KEY=${GEMINI_API_KEY || ""}`,
+        `VITE_GEMINI_API_KEY=${VITE_GEMINI_API_KEY || ""}`,
+        `EMAIL_USER=${finalEmailUser}`,
+        `EMAIL_PASS=${finalEmailPass}`,
+        `NOTIFICATION_EMAILS=${NOTIFICATION_EMAILS || ""}`,
+        `VITE_SUPABASE_URL=${supabaseUrl}`,
+        `VITE_SUPABASE_ANON_KEY=${supabaseAnonKey}`,
         `NODE_ENV=production` // Forza la modalità di produzione al riavvio
       ].join("\n");
 
@@ -282,109 +275,6 @@ async function startServer() {
     } catch (err: any) {
       console.error("[Setup] Errore di salvataggio:", err);
       res.status(500).json({ success: false, error: err.message || "Impossibile salvare la configurazione." });
-    }
-  });
-
-  // API per leggere le impostazioni correnti (Gemini Key, SMTP e Email Destinatari)
-  app.get("/api/settings", (req, res) => {
-    try {
-      res.json({
-        success: true,
-        geminiKey: process.env.GEMINI_API_KEY || "",
-        emailUser: process.env.EMAIL_USER || "",
-        emailPass: process.env.EMAIL_PASS || "",
-        notificationEmails: process.env.NOTIFICATION_EMAILS 
-          ? process.env.NOTIFICATION_EMAILS.split(",").map(e => e.trim()).filter(Boolean)
-          : ["castromassimo@gmail.com"],
-        supabaseUrl: process.env.VITE_SUPABASE_URL || "",
-        supabaseAnonKey: process.env.VITE_SUPABASE_ANON_KEY || ""
-      });
-    } catch (err: any) {
-      res.status(500).json({ success: false, error: err.message });
-    }
-  });
-
-  // API per salvare le impostazioni dal pannello di controllo dell'app
-  app.post("/api/settings", (req, res) => {
-    try {
-      const { geminiKey, emailUser, emailPass, notificationEmails, supabaseUrl, supabaseAnonKey } = req.body;
-
-      if (geminiKey !== undefined) {
-        process.env.GEMINI_API_KEY = geminiKey;
-        process.env.VITE_GEMINI_API_KEY = geminiKey;
-      }
-      if (emailUser !== undefined) process.env.EMAIL_USER = emailUser;
-      if (emailPass !== undefined) process.env.EMAIL_PASS = emailPass;
-      if (notificationEmails !== undefined) {
-        process.env.NOTIFICATION_EMAILS = Array.isArray(notificationEmails)
-          ? notificationEmails.join(",")
-          : notificationEmails;
-      }
-      if (supabaseUrl !== undefined) process.env.VITE_SUPABASE_URL = supabaseUrl;
-      if (supabaseAnonKey !== undefined) process.env.VITE_SUPABASE_ANON_KEY = supabaseAnonKey;
-
-      const envContent = [
-        `GEMINI_API_KEY=${process.env.GEMINI_API_KEY || ""}`,
-        `VITE_GEMINI_API_KEY=${process.env.VITE_GEMINI_API_KEY || ""}`,
-        `EMAIL_USER=${process.env.EMAIL_USER || ""}`,
-        `EMAIL_PASS=${process.env.EMAIL_PASS || ""}`,
-        `NOTIFICATION_EMAILS=${process.env.NOTIFICATION_EMAILS || ""}`,
-        `VITE_SUPABASE_URL=${process.env.VITE_SUPABASE_URL || ""}`,
-        `VITE_SUPABASE_ANON_KEY=${process.env.VITE_SUPABASE_ANON_KEY || ""}`,
-        `NODE_ENV=${process.env.NODE_ENV || "production"}`
-      ].join("\n");
-
-      const envPath = path.join(process.cwd(), ".env");
-      let existingEnv = "";
-      try {
-        if (fs.existsSync(envPath)) {
-          existingEnv = fs.readFileSync(envPath, "utf-8").replace(/\r\n/g, "\n");
-        }
-      } catch (readErr) {}
-
-      const normalizedNewEnv = envContent.replace(/\r\n/g, "\n");
-      if (existingEnv !== normalizedNewEnv) {
-        fs.writeFileSync(envPath, envContent, "utf-8");
-        console.log("[Settings] Impostazioni aggiornate e salvate in .env");
-      } else {
-        console.log("[Settings] Nessun cambiamento rilevato nelle impostazioni, .env non sovrascritto");
-      }
-
-      res.json({ success: true });
-    } catch (err: any) {
-      console.error("[Settings] Errore salvataggio impostazioni:", err);
-      res.status(500).json({ success: false, error: err.message || "Impossibile salvare le impostazioni." });
-    }
-  });
-
-  // API per leggere le telecamere pendenti non ancora sincronizzate con Supabase
-  app.get("/api/cameras/pending", (req, res) => {
-    const pendingFile = path.join(process.cwd(), "pending_cameras.json");
-    try {
-      if (fs.existsSync(pendingFile)) {
-        const dataStr = fs.readFileSync(pendingFile, "utf-8");
-        const cameras = JSON.parse(dataStr);
-        return res.json({ success: true, cameras });
-      }
-      res.json({ success: true, cameras: [] });
-    } catch (err: any) {
-      console.error("[Cameras Pending] Errore lettura:", err);
-      res.status(500).json({ success: false, error: err.message });
-    }
-  });
-
-  // API per cancellare le telecamere pendenti una volta sincronizzate
-  app.post("/api/cameras/pending/clear", (req, res) => {
-    const pendingFile = path.join(process.cwd(), "pending_cameras.json");
-    try {
-      if (fs.existsSync(pendingFile)) {
-        fs.unlinkSync(pendingFile);
-        console.log("[Cameras Pending] File pending_cameras.json rimosso correttamente.");
-      }
-      res.json({ success: true });
-    } catch (err: any) {
-      console.error("[Cameras Pending] Errore rimozione:", err);
-      res.status(500).json({ success: false, error: err.message });
     }
   });
 
@@ -469,6 +359,166 @@ async function startServer() {
     });
   });
 
+  // API per leggere le impostazioni correnti (Gemini Key, SMTP e Email Destinatari)
+  app.get("/api/settings", (req, res) => {
+    try {
+      res.json({
+        success: true,
+        geminiKey: process.env.GEMINI_API_KEY || "",
+        emailUser: process.env.EMAIL_USER || "",
+        emailPass: process.env.EMAIL_PASS || "",
+        notificationEmails: process.env.NOTIFICATION_EMAILS 
+          ? process.env.NOTIFICATION_EMAILS.split(",").map(e => e.trim()).filter(Boolean)
+          : ["allarme.vigilai@gmail.com"],
+        supabaseUrl: process.env.VITE_SUPABASE_URL || "",
+        supabaseAnonKey: process.env.VITE_SUPABASE_ANON_KEY || ""
+      });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // API per salvare le impostazioni dal pannello di controllo dell'app
+  app.post("/api/settings", (req, res) => {
+    try {
+      const { geminiKey, emailUser, emailPass, notificationEmails, supabaseUrl, supabaseAnonKey } = req.body;
+
+      if (geminiKey !== undefined && geminiKey.trim() !== "") {
+        process.env.GEMINI_API_KEY = geminiKey;
+        process.env.VITE_GEMINI_API_KEY = geminiKey;
+      }
+      if (emailUser !== undefined && emailUser.trim() !== "") process.env.EMAIL_USER = emailUser;
+      if (emailPass !== undefined && emailPass.trim() !== "") process.env.EMAIL_PASS = emailPass;
+      if (notificationEmails !== undefined) {
+        process.env.NOTIFICATION_EMAILS = Array.isArray(notificationEmails)
+          ? notificationEmails.join(",")
+          : notificationEmails;
+      }
+      if (supabaseUrl !== undefined && supabaseUrl.trim() !== "") process.env.VITE_SUPABASE_URL = supabaseUrl;
+      if (supabaseAnonKey !== undefined && supabaseAnonKey.trim() !== "") process.env.VITE_SUPABASE_ANON_KEY = supabaseAnonKey;
+
+      const envContent = [
+        `GEMINI_API_KEY=${process.env.GEMINI_API_KEY || ""}`,
+        `VITE_GEMINI_API_KEY=${process.env.VITE_GEMINI_API_KEY || ""}`,
+        `EMAIL_USER=${process.env.EMAIL_USER || ""}`,
+        `EMAIL_PASS=${process.env.EMAIL_PASS || ""}`,
+        `NOTIFICATION_EMAILS=${process.env.NOTIFICATION_EMAILS || ""}`,
+        `VITE_SUPABASE_URL=${process.env.VITE_SUPABASE_URL || ""}`,
+        `VITE_SUPABASE_ANON_KEY=${process.env.VITE_SUPABASE_ANON_KEY || ""}`,
+        `NODE_ENV=${process.env.NODE_ENV || "production"}`
+      ].join("\n");
+
+      const envPath = path.join(process.cwd(), ".env");
+      let existingEnv = "";
+      try {
+        if (fs.existsSync(envPath)) {
+          existingEnv = fs.readFileSync(envPath, "utf-8").replace(/\r\n/g, "\n");
+        }
+      } catch (readErr) {}
+
+      const normalizedNewEnv = envContent.replace(/\r\n/g, "\n");
+      if (existingEnv !== normalizedNewEnv) {
+        fs.writeFileSync(envPath, envContent, "utf-8");
+        console.log("[Settings] Impostazioni aggiornate e salvate in .env");
+      } else {
+        console.log("[Settings] Nessun cambiamento rilevato nelle impostazioni, .env non sovrascritto");
+      }
+
+      res.json({ success: true });
+    } catch (err: any) {
+      console.error("[Settings] Errore salvataggio impostazioni:", err);
+      res.status(500).json({ success: false, error: err.message || "Impossibile salvare le impostazioni." });
+    }
+  });
+
+  // API per leggere lo stato della VPN Tailscale ed il link di associazione
+  app.get("/api/vpn/status", (req, res) => {
+    if (process.platform === "win32") {
+      return res.json({
+        success: true,
+        installed: true,
+        state: "NeedsLogin",
+        authUrl: "https://login.tailscale.com/a/mock-login-url",
+        ip: null
+      });
+    }
+
+    const checkStatus = (retryOnNeedLogin = true) => {
+      exec("tailscale status --json", (err, stdout) => {
+        if (err) {
+          return res.json({
+            success: true,
+            installed: false,
+            state: "NotInstalled",
+            authUrl: null,
+            ip: null
+          });
+        }
+
+        try {
+          const status = JSON.parse(stdout);
+          const state = status.BackendState || "Unknown";
+          const authUrl = status.AuthURL || null;
+          const selfIp = status.Self && status.Self.TailscaleIPs ? status.Self.TailscaleIPs[0] : null;
+
+          if (state === "NeedsLogin" && !authUrl && retryOnNeedLogin) {
+            console.log("[VPN] Stato NeedsLogin senza AuthURL, lancio tailscale up...");
+            exec("sudo tailscale up", () => {
+              setTimeout(() => checkStatus(false), 1500);
+            });
+            return;
+          }
+
+          res.json({
+            success: true,
+            installed: true,
+            state,
+            authUrl,
+            ip: selfIp
+          });
+        } catch (parseErr) {
+          res.json({
+            success: true,
+            installed: true,
+            state: "Error",
+            authUrl: null,
+            ip: null
+          });
+        }
+      });
+    };
+
+    checkStatus();
+  });
+
+  // API per attivare manualmente Tailscale
+  app.post("/api/vpn/activate", (req, res) => {
+    if (process.platform === "win32") {
+      return res.json({ success: true, state: "NeedsLogin", authUrl: "https://login.tailscale.com/a/mock-login-url" });
+    }
+
+    console.log("[VPN] Attivazione manuale Tailscale richiesta...");
+    exec("sudo tailscale up", () => {
+      setTimeout(() => {
+        exec("tailscale status --json", (err, stdout) => {
+          if (err) return res.status(500).json({ success: false, error: "Impossibile attivare Tailscale." });
+          try {
+            const status = JSON.parse(stdout);
+            res.json({
+              success: true,
+              installed: true,
+              state: status.BackendState || "Unknown",
+              authUrl: status.AuthURL || null,
+              ip: status.Self && status.Self.TailscaleIPs ? status.Self.TailscaleIPs[0] : null
+            });
+          } catch (e: any) {
+            res.status(500).json({ success: false, error: e.message });
+          }
+        });
+      }, 1500);
+    });
+  });
+
   // API per leggere l'hostname di sistema
   app.get("/api/system/hostname", (req, res) => {
     if (process.platform === "win32") {
@@ -507,6 +557,22 @@ async function startServer() {
       console.log(`[System] Hostname impostato a: ${cleanHostname}`);
       res.json({ success: true, hostname: cleanHostname });
     });
+  });
+
+  // API per il riavvio del box Raspberry Pi o simulazione su Windows
+  app.post("/api/system/reboot", (req, res) => {
+    console.log("[System] Comando riavvio ricevuto...");
+    res.json({ success: true, message: "Sistema in riavvio..." });
+    setTimeout(() => {
+      if (process.platform !== "win32") {
+        exec("sudo reboot", (err) => {
+          if (err) console.error("[System] Errore riavvio:", err);
+        });
+      } else {
+        console.log("[System] Riavvio simulato (Windows). Termino il processo.");
+        process.exit(0);
+      }
+    }, 1000);
   });
 
   // API per la scansione automatica delle telecamere IP sulla sottorete locale
@@ -624,7 +690,18 @@ async function startServer() {
   app.use((req, res, next) => {
     const host = req.headers.host || "";
     const isBackdoor = host.includes("10.42.0.1");
-    if ((!isConfigured() || isBackdoor) && !req.path.startsWith("/api/")) {
+    const configured = isConfigured();
+
+    if (!configured && !req.path.startsWith("/api/")) {
+      console.log(`[Setup Diagnostic] Redirect di ${req.method} ${req.path} al Setup Wizard. host=${host}, isBackdoor=${isBackdoor}`);
+      console.log(`  - GEMINI_API_KEY: ${process.env.GEMINI_API_KEY ? "Presente" : "Mancante"}`);
+      console.log(`  - VITE_SUPABASE_URL: ${process.env.VITE_SUPABASE_URL ? "Presente" : "Mancante"}`);
+      console.log(`  - VITE_SUPABASE_ANON_KEY: ${process.env.VITE_SUPABASE_ANON_KEY ? "Presente" : "Mancante"}`);
+      console.log(`  - EMAIL_USER: ${process.env.EMAIL_USER ? "Presente" : "Mancante"}`);
+      console.log(`  - EMAIL_PASS: ${process.env.EMAIL_PASS ? "Presente" : "Mancante"}`);
+    }
+
+    if ((!configured || isBackdoor) && !req.path.startsWith("/api/")) {
       return res.sendFile(path.join(process.cwd(), "setup_wizard.html"));
     }
     next();
@@ -653,35 +730,57 @@ async function startServer() {
   app.post("/api/notify", async (req, res) => {
     const { screenshot, description, type, recipient, emailUser, emailPass } = req.body;
 
-    const rawRecipients = recipient || process.env.NOTIFICATION_EMAILS;
-    const targetRecipients = Array.isArray(rawRecipients)
-      ? rawRecipients
-      : typeof rawRecipients === "string"
-        ? rawRecipients.split(",").map(e => e.trim()).filter(Boolean)
-        : ["castromassimo@gmail.com"];
-
-    console.log(`[Notification] Sending ${type} alert to: ${targetRecipients.join(", ")}`);
+    console.log(`[Notification] Sending ${type} alert to: ${Array.isArray(recipient) ? recipient.join(", ") : recipient}`);
 
     try {
       if (type === "email") {
-        const user = emailUser || process.env.EMAIL_USER;
-        const pass = emailPass || process.env.EMAIL_PASS;
+        const user = emailUser || process.env.EMAIL_USER || DEFAULT_SMTP_USER;
+        const pass = emailPass || process.env.EMAIL_PASS || DEFAULT_SMTP_PASS;
 
         if (!user || !pass) {
           console.error("CRITICAL: EMAIL_USER or EMAIL_PASS missing!");
           return res.status(400).json({ success: false, error: "Email credentials missing" });
         }
 
+        // Auto-detect or override host
+        let host = process.env.EMAIL_HOST || "smtp.gmail.com";
+        let port = parseInt(process.env.EMAIL_PORT || "465", 10);
+        let secure = process.env.EMAIL_SECURE !== "false";
+
+        if (!process.env.EMAIL_HOST && user) {
+          const emailLower = user.toLowerCase().trim();
+          if (emailLower.endsWith('@gmail.com')) {
+            host = 'smtp.gmail.com'; port = 465; secure = true;
+          } else if (emailLower.endsWith('@libero.it')) {
+            host = 'smtp.libero.it'; port = 465; secure = true;
+          } else if (emailLower.endsWith('@virgilio.it')) {
+            host = 'out.virgilio.it'; port = 465; secure = true;
+          } else if (emailLower.endsWith('@tiscali.it')) {
+            host = 'smtp.tiscali.it'; port = 465; secure = true;
+          } else if (emailLower.endsWith('@fastwebnet.it')) {
+            host = 'smtp.fastwebnet.it'; port = 587; secure = false;
+          } else if (emailLower.endsWith('@outlook.com') || emailLower.endsWith('@hotmail.com') || emailLower.endsWith('@hotmail.it') || emailLower.endsWith('@live.it')) {
+            host = 'smtp.office365.com'; port = 587; secure = false;
+          } else if (emailLower.endsWith('@yahoo.com') || emailLower.endsWith('@yahoo.it')) {
+            host = 'smtp.mail.yahoo.com'; port = 465; secure = true;
+          }
+        }
+
+        console.log(`[Notification] SMTP Transporter initialization: host=${host}, port=${port}, secure=${secure}, user=${user}`);
+
         const transporter = nodemailer.createTransport({
-          host: "smtp.gmail.com",
-          port: 465,
-          secure: true,
+          host,
+          port,
+          secure,
           auth: { user, pass },
+          tls: {
+            rejectUnauthorized: false
+          }
         });
 
         const mailOptions = {
           from: `"Vigil.AI - Sistema di Sicurezza" <${user}>`,
-          to: targetRecipients,
+          to: recipient,
           subject: "🚨 ALLERTA SICUREZZA - Rilevamento Emergenza",
           text: `ATTENZIONE: Il sistema Vigil.AI ha rilevato una possibile emergenza.\n\nDettagli: ${description}\n\nData/Ora: ${new Date().toLocaleString('it-IT')}`,
           attachments: [
@@ -697,16 +796,16 @@ async function startServer() {
         console.log("Email sent successfully");
       }
       res.json({ success: true });
-    } catch (error) {
+    } catch (error: any) {
       console.error("Notification error:", error);
-      res.status(500).json({ success: false, error: "Failed to send notification" });
+      res.status(500).json({ success: false, error: error.message || "Failed to send notification" });
     }
   });
 
   // --- IP CAMERA STREAM MANAGER ---
   const { spawn } = await import("child_process");
   const FFMPEG_BIN = ffmpeg || (process.platform === "win32" ? "ffmpeg.exe" : "ffmpeg");
-  const activeStreams = new Map<string, { latestFrame: Buffer | null, lastAccessed: number, process: any }>();
+  const activeStreams = new Map<string, { latestFrame: Buffer | null, lastAccessed: number, startTime: number, process: any }>();
   
   const SOI = Buffer.from([0xFF, 0xD8]);
   const EOI = Buffer.from([0xFF, 0xD9]);
@@ -737,11 +836,12 @@ async function startServer() {
 
     const fs = await import("fs");
     const logPath = path.join(__dirname, "ffmpeg_error.log");
-    const logStream = fs.createWriteStream(logPath, { flags: 'a' });
     
     ff.stderr.on('data', (data) => {
       const msg = data.toString();
-      logStream.write(`[${new Date().toISOString()}] [${rtspUrl.split('@')[1]}] ${msg}`);
+      fs.appendFile(logPath, `[${new Date().toISOString()}] [${rtspUrl.split('@')[1]}] ${msg}`, (err) => {
+        if (err) console.error(`[Camera Manager] Error writing to ffmpeg_error.log: ${err.message}`);
+      });
       if (msg.includes('error') || msg.includes('failed') || msg.includes('Invalid')) {
         console.error(`[FFmpeg Error] ${msg.trim()}`);
       }
@@ -762,7 +862,9 @@ async function startServer() {
 
     ff.on('error', (err) => {
       console.error(`[Camera Manager] Failed to start FFmpeg: ${err.message}`);
-      logStream.write(`[${new Date().toISOString()}] [ERROR] ${err.message}\n`);
+      fs.appendFile(logPath, `[${new Date().toISOString()}] [ERROR] ${err.message}\n`, (writeErr) => {
+        if (writeErr) console.error(`[Camera Manager] Error writing to ffmpeg_error.log: ${writeErr.message}`);
+      });
     });
 
     ff.on('close', (code: number) => {
@@ -828,7 +930,7 @@ async function startServer() {
     app.use(vite.middlewares);
   } else {
     const distPath = path.join(process.cwd(), "dist");
-    // Serve static files but disable automatic index serving (e.g. for / or /index.html)
+    // Serve static files but disable automatic index serving
     app.use(express.static(distPath, { index: false }));
     
     // Explicitly handle all routing paths to serve index.html with dynamically injected environment variables
@@ -860,9 +962,16 @@ async function startServer() {
 
   app.listen(PORT, "0.0.0.0", () => {
     console.log(`Vigil.AI Server running on http://localhost:${PORT}`);
+    console.log("[Setup Diagnostic] Stato configurazione all'avvio:");
+    console.log(`  - GEMINI_API_KEY: ${process.env.GEMINI_API_KEY ? "Presente" : "Mancante"}`);
+    console.log(`  - VITE_SUPABASE_URL: ${process.env.VITE_SUPABASE_URL ? "Presente" : "Mancante"}`);
+    console.log(`  - VITE_SUPABASE_ANON_KEY: ${process.env.VITE_SUPABASE_ANON_KEY ? "Presente" : "Mancante"}`);
+    console.log(`  - EMAIL_USER: ${process.env.EMAIL_USER ? "Presente" : "Mancante"}`);
+    console.log(`  - EMAIL_PASS: ${process.env.EMAIL_PASS ? "Presente" : "Mancante"}`);
+    console.log(`  - Configurato completamente (isConfigured): ${isConfigured() ? "SI" : "NO"}`);
 
-    // Avvia la sincronizzazione delle telecamere pendenti su boot (Disattivata: gestita dal client autenticato in App.tsx)
-    // syncPendingCameras();
+    // Avvia la sincronizzazione delle telecamere pendenti su boot
+    syncPendingCameras();
 
     if (process.platform !== "win32") {
       if (!isConfigured()) {

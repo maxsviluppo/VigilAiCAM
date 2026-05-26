@@ -32,20 +32,22 @@ else
   echo -e "${GREEN}Node.js è già installato: $(node -v)${CLEAR}"
 fi
 
-# 3. Install System Fallbacks (FFmpeg, compile tools, and Tailscale VPN)
-echo -e "${YELLOW}[2/6] Installazione di FFmpeg, strumenti di compilazione e Tailscale...${CLEAR}"
+# 3. Install System Fallbacks (FFmpeg and compiler tools)
+echo -e "${YELLOW}[2/7] Installazione di FFmpeg di sistema e strumenti di compilazione...${CLEAR}"
 sudo apt-get install -y ffmpeg build-essential git
 
+# 3.5 Install Tailscale VPN
+echo -e "${YELLOW}Verifica installazione di Tailscale VPN...${CLEAR}"
 if ! command -v tailscale &> /dev/null; then
-  echo -e "${YELLOW}Tailscale (VPN) non trovato. Installazione in corso...${CLEAR}"
+  echo -e "${YELLOW}Tailscale non trovato. Installazione in corso...${CLEAR}"
   curl -fsSL https://tailscale.com/install.sh | sh
-  echo -e "${GREEN}Tailscale installato con successo!${CLEAR}"
+  echo -e "${GREEN}Tailscale installato correttamente!${CLEAR}"
 else
-  echo -e "${GREEN}Tailscale (VPN) è già installato.${CLEAR}"
+  echo -e "${GREEN}Tailscale è già installato.${CLEAR}"
 fi
 
 # 4. Clean and Install npm dependencies
-echo -e "${YELLOW}[3/6] Preparazione delle dipendenze del progetto...${CLEAR}"
+echo -e "${YELLOW}[3/7] Preparazione delle dipendenze del progetto...${CLEAR}"
 if [ -d "node_modules" ]; then
   echo -e "${YELLOW}Rilevata cartella node_modules precedente. Rimozione in corso per compatibilità di piattaforma...${CLEAR}"
   rm -rf node_modules
@@ -55,7 +57,7 @@ echo -e "${YELLOW}Installazione dei pacchetti npm (architettura locale)...${CLEA
 npm install
 
 # 5. Handle environment variables (.env)
-echo -e "${YELLOW}[4/6] Configurazione variabili d'ambiente...${CLEAR}"
+echo -e "${YELLOW}[4/7] Configurazione variabili d'ambiente...${CLEAR}"
 if [ ! -f ".env" ]; then
   if [ -f ".env.example" ]; then
     echo -e "${YELLOW}Creazione del file .env da .env.example...${CLEAR}"
@@ -70,12 +72,12 @@ else
 fi
 
 # 6. Build the React frontend
-echo -e "${YELLOW}[5/6] Compilazione del frontend statico di VigilAI...${CLEAR}"
+echo -e "${YELLOW}[5/7] Compilazione del frontend statico di VigilAI...${CLEAR}"
 npm run build
 echo -e "${GREEN}Compilazione completata con successo!${CLEAR}"
 
 # 7. Setup Systemd Background Service
-echo -e "${YELLOW}[6/6] Configurazione del servizio di sistema vigilai.service...${CLEAR}"
+echo -e "${YELLOW}[6/7] Configurazione del servizio di sistema vigilai.service...${CLEAR}"
 CURRENT_DIR=$(pwd)
 CURRENT_USER=$(whoami)
 
@@ -156,13 +158,13 @@ chmod 755 "$AUTOSTART_DIR/vigilai-kiosk.desktop"
 echo -e "${GREEN}Autostart Kiosk configurato con successo in: $AUTOSTART_DIR/vigilai-kiosk.desktop${CLEAR}"
 
 # 10. Sudoers permissions & scripts permissions
-echo -e "${YELLOW}Configurazione permessi script e regole sudoers per gestione rete...${CLEAR}"
+echo -e "${YELLOW}[7/7] Configurazione permessi script e regole sudoers per gestione rete e VPN...${CLEAR}"
 chmod +x "$CURRENT_DIR/scripts/setup_ap.sh"
 
 SUDOERS_FILE="/etc/sudoers.d/vigilai-network"
 cat << EOF > /tmp/vigilai-network
-# Vigil.AI Network and Hostname management rules for Node.js
-$CURRENT_USER ALL=(ALL) NOPASSWD: /usr/bin/nmcli, /usr/bin/hostnamectl, $CURRENT_DIR/scripts/setup_ap.sh
+# Vigil.AI Network, Hostname and VPN management rules for Node.js
+$CURRENT_USER ALL=(ALL) NOPASSWD: /usr/bin/nmcli, /usr/bin/hostnamectl, /usr/bin/tailscale, /usr/sbin/tailscale, $CURRENT_DIR/scripts/setup_ap.sh
 EOF
 
 sudo chmod 440 /tmp/vigilai-network
@@ -180,8 +182,6 @@ echo -e "  - Controllare lo stato del servizio:  ${BLUE}sudo systemctl status vi
 echo -e "  - Arrestare il servizio:              ${BLUE}sudo systemctl stop vigilai${CLEAR}"
 echo -e "  - Riavviare il servizio:              ${BLUE}sudo systemctl restart vigilai${CLEAR}"
 echo -e "  - Visualizzare i log in tempo reale:  ${BLUE}sudo journalctl -u vigilai -f${CLEAR}"
-echo -e "  - Configurare la VPN Tailscale:       ${BLUE}sudo tailscale up${CLEAR}"
-echo -e "  - Mostrare l'IP VPN di Tailscale:     ${BLUE}tailscale ip -4${CLEAR}"
 echo -e ""
 echo -e "Ora puoi connetterti all'IP del Raspberry sulla porta ${GREEN}3088${CLEAR} (es: http://<IP_DEL_RASPBERRY>:3088)"
 echo -e "======================================================================"

@@ -126,7 +126,7 @@ export const analyzeFrame = async (
   } catch (error: any) {
     let cleanErrorMessage = error.message || "Errore sconosciuto durante l'analisi.";
     
-    // Se l'errore è una stringa JSON (like often with 429), extract only the message
+    // Se l'errore è una stringa JSON (come spesso accade con gli errori 429), estraiamo solo il messaggio
     if (cleanErrorMessage.includes("RESOURCE_EXHAUSTED") || cleanErrorMessage.includes("quota")) {
       cleanErrorMessage = `Quota API Gemini superata per il modello ${modelId} (Free Tier). Attendi 60s o prova un modello diverso.`;
     } else if (cleanErrorMessage.includes("404")) {

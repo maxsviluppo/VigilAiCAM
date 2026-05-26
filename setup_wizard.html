@@ -2,7 +2,7 @@
 <html lang="it">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>Vigil.AI - Configurazione Iniziale</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -81,66 +81,7 @@
       overflow: hidden;
     }
 
-    /* Stepper Header */
-    .stepper {
-      display: flex;
-      justify-content: space-between;
-      margin-bottom: 25px;
-      position: relative;
-      padding: 0 10px;
-    }
 
-    .stepper::before {
-      content: '';
-      position: absolute;
-      top: 15px;
-      left: 30px;
-      right: 30px;
-      height: 2px;
-      background: rgba(255, 255, 255, 0.05);
-      z-index: 1;
-    }
-
-    .stepper-progress {
-      position: absolute;
-      top: 15px;
-      left: 30px;
-      width: 0%;
-      height: 2px;
-      background: var(--primary);
-      z-index: 2;
-      transition: width 0.3s ease;
-    }
-
-    .step-indicator {
-      width: 32px;
-      height: 32px;
-      border-radius: 50%;
-      background: #151622;
-      border: 2px solid rgba(255, 255, 255, 0.1);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 13px;
-      font-weight: 600;
-      color: var(--text-muted);
-      position: relative;
-      z-index: 3;
-      transition: all 0.3s ease;
-    }
-
-    .step-indicator.active {
-      background: var(--primary);
-      border-color: var(--primary);
-      color: white;
-      box-shadow: 0 0 10px var(--primary-glow);
-    }
-
-    .step-indicator.completed {
-      background: var(--success);
-      border-color: var(--success);
-      color: white;
-    }
 
     /* Form and step layouts */
     .step-content {
@@ -195,7 +136,7 @@
       border-radius: 10px;
       color: var(--text);
       font-family: var(--font);
-      font-size: 14px;
+      font-size: 16px;
       transition: all 0.2s ease;
       outline: none;
     }
@@ -522,7 +463,7 @@
       }
       input, select {
         padding: 8px 10px;
-        font-size: 13px;
+        font-size: 16px;
       }
       .wifi-list {
         max-height: 100px;
@@ -609,33 +550,49 @@
     body.keyboard-open {
       padding-bottom: 280px !important;
     }
+    .btn-keyboard-toggle {
+      background: transparent;
+      border: none;
+      padding: 8px;
+      color: var(--text-muted);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: color 0.2s ease, transform 0.1s ease;
+    }
+    .btn-keyboard-toggle:hover {
+      color: var(--primary);
+    }
+    .btn-keyboard-toggle.active {
+      color: var(--primary);
+    }
   </style>
 </head>
 <body>
 
   <div class="container" id="wizard-container">
-    
-    <!-- Stepper Progress Header -->
-    <div class="stepper">
-      <div class="stepper-progress" id="stepper-progress"></div>
-      <div class="step-indicator active" data-step="1">1</div>
-      <div class="step-indicator" data-step="2">2</div>
-      <div class="step-indicator" data-step="3">3</div>
-    </div>
 
     <div class="alert alert-error" id="error-alert"></div>
     <div class="alert alert-success" id="success-alert"></div>
 
-    <!-- STEP 1: SISTEMA E RETE -->
+    <!-- STEP 1: NETWORK CONFIG -->
     <div class="step-content active" id="step-1-content">
       <header>
-        <h1>1. Nome Box & Rete Wi-Fi</h1>
-        <p class="subtitle">Personalizza il nome del tuo Raspberry Pi ed effettua la connessione alla Wi-Fi locale.</p>
+        <h1>Configurazione Rete</h1>
+        <p class="subtitle" style="margin-bottom: 16px; line-height: 1.5;">
+          Seleziona la tua rete Wi-Fi locale e inserisci la password per connettere il box, oppure salta se utilizzi un cavo di rete Ethernet.
+        </p>
       </header>
 
       <div class="form-group">
         <label for="hostname">Nome del Dispositivo (Hostname)</label>
-        <input type="text" id="hostname" placeholder="vigilai-box" value="vigilai-box">
+        <div style="position: relative; display: flex; align-items: center;">
+          <input type="text" id="hostname" placeholder="vigilai-box" value="vigilai-box" style="padding-right: 44px;">
+          <button type="button" class="btn-keyboard-toggle" onclick="toggleKeyboardFor('hostname')" style="position: absolute; right: 8px; z-index: 10;" title="Tastiera virtuale">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2" ry="2"></rect><line x1="6" y1="8" x2="6" y2="8"></line><line x1="10" y1="8" x2="10" y2="8"></line><line x1="14" y1="8" x2="14" y2="8"></line><line x1="18" y1="8" x2="18" y2="8"></line><line x1="6" y1="12" x2="6" y2="12"></line><line x1="18" y1="12" x2="18" y2="12"></line><line x1="7" y1="16" x2="17" y2="16"></line><line x1="10" y1="12" x2="14" y2="12"></line></svg>
+          </button>
+        </div>
         <p class="help-text">Utilizzato per accedere al sistema in rete locale (es. http://vigilai-box.local:3088).</p>
       </div>
 
@@ -657,205 +614,18 @@
 
       <div class="form-group" id="wifi-password-group" style="display: none;">
         <label for="wifi-password">Password per <span id="selected-ssid-label" style="color: var(--primary);"></span></label>
-        <input type="password" id="wifi-password" placeholder="Inserisci password Wi-Fi">
-      </div>
-
-      <div class="button-group">
-        <div></div> <!-- Spacer -->
-        <button type="button" class="btn-primary" id="btn-step-1" onclick="submitStep1()">
-          <span>Connetti e Continua</span>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
-        </button>
-      </div>
-    </div>
-
-    <!-- STEP 2: RILEVAMENTO TELECAMERE IP -->
-    <div class="step-content" id="step-2-content">
-      <header>
-        <h1>2. Rilevamento Telecamere IP</h1>
-        <p class="subtitle">Scansiona la tua rete locale per identificare e verificare le telecamere IP RTSP presenti.</p>
-      </header>
-
-      <div class="camera-discovery-box">
-        <div style="display: flex; justify-content: space-between; align-items: center;">
-          <label style="margin-bottom: 0;">Dispositivi IP Rilevati</label>
-          <button type="button" class="btn-test" style="margin-top: 0;" onclick="discoverCameras()">
-            <span id="cam-discover-loader" class="spinner" style="display: none; width: 10px; height: 10px; border-width: 1px;"></span>
-            <span id="cam-discover-text">Avvia Scansione IP</span>
+        <div style="position: relative; display: flex; align-items: center;">
+          <input type="password" id="wifi-password" placeholder="Inserisci password Wi-Fi" style="padding-right: 44px;">
+          <button type="button" class="btn-keyboard-toggle" onclick="toggleKeyboardFor('wifi-password')" style="position: absolute; right: 8px; z-index: 10;" title="Tastiera virtuale">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2" ry="2"></rect><line x1="6" y1="8" x2="6" y2="8"></line><line x1="10" y1="8" x2="10" y2="8"></line><line x1="14" y1="8" x2="14" y2="8"></line><line x1="18" y1="8" x2="18" y2="8"></line><line x1="6" y1="12" x2="6" y2="12"></line><line x1="18" y1="12" x2="18" y2="12"></line><line x1="7" y1="16" x2="17" y2="16"></line><line x1="10" y1="12" x2="14" y2="12"></line></svg>
           </button>
         </div>
-
-        <div class="discovered-cams-list" id="discovered-cams-list">
-          <div style="padding: 12px; text-align: center; font-size: 12px; color: var(--text-muted); width: 100%;">
-            Avvia la scansione per cercare dispositivi con porta RTSP attiva nella sottorete.
-          </div>
-        </div>
       </div>
 
-      <!-- Configurazione Telecamera Selezionata -->
-      <div id="cam-config-panel" style="display: none; border-top: 1px solid var(--border-color); padding-top: 15px; margin-top: 10px;">
-        <h4 style="font-size: 13px; font-weight: 600; margin-bottom: 10px; color: var(--primary);">Configura Telecamera (<span id="active-cam-ip"></span>)</h4>
-        
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
-          <div class="form-group">
-            <label for="cam-name">Nome Telecamera</label>
-            <input type="text" id="cam-name" placeholder="Es. Ingresso Principale">
-          </div>
-          <div class="form-group">
-            <label for="cam-location">Posizione / Zona</label>
-            <input type="text" id="cam-location" placeholder="Es. Esterno">
-          </div>
-        </div>
-
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
-          <div class="form-group">
-            <label for="cam-user">Username RTSP</label>
-            <input type="text" id="cam-user" placeholder="admin">
-          </div>
-          <div class="form-group">
-            <label for="cam-pass">Password RTSP</label>
-            <input type="password" id="cam-pass" placeholder="password">
-          </div>
-        </div>
-
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; align-items: flex-end;">
-          <div class="form-group">
-            <label for="cam-path">Percorso RTSP (Path)</label>
-            <input type="text" id="cam-path" placeholder="/stream1" value="/stream1">
-          </div>
-          <button type="button" class="btn-secondary" style="height: 38px; margin-bottom: 16px;" onclick="testCameraStream()">
-            <span id="test-stream-loader" class="spinner" style="display: none; width: 12px; height: 12px; border-width: 1.5px;"></span>
-            <span>Verifica Stream</span>
-          </button>
-        </div>
-
-        <!-- Preview Immagine -->
-        <div class="preview-container" id="preview-container">
-          <div class="preview-placeholder" id="preview-placeholder">
-            Inserisci i dati e clicca "Verifica Stream" per vedere il fotogramma di anteprima.
-          </div>
-        </div>
-
-        <button type="button" class="btn-primary" style="margin-top: 10px; background: var(--success); width: 100%;" onclick="saveActiveCamera()">
-          Aggiungi Telecamera al Database
-        </button>
-      </div>
-
-      <!-- Elenco Telecamere Configurate e Aggiunte -->
-      <div class="configured-list" id="configured-list-section" style="display: none;">
-        <label>Telecamere Configurate nel Database</label>
-        <div id="configured-cams-container">
-          <!-- Popolato dinamicamente -->
-        </div>
-      </div>
-
-      <div class="button-group" style="margin-top: 20px;">
-        <button type="button" class="btn-secondary" onclick="prevStep(1)">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>
-          <span>Indietro</span>
-        </button>
-        <button type="button" class="btn-primary" id="btn-step-2" onclick="submitStep2()">
-          <span>Avanti (Riepilogo)</span>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
-        </button>
-      </div>
-    </div>
-
-    <!-- STEP 3: RIEPILOGO E SALVATAGGIO -->
-    <div class="step-content" id="step-3-content">
-      <header>
-        <h1>3. Riepilogo & Attivazione</h1>
-        <p class="subtitle">Conferma i dettagli di configurazione. Cliccando "Salva e Riavvia" il box si collegherà alla Wi-Fi configurata.</p>
-      </header>
-
-      <div style="background: rgba(255,255,255,0.02); border: 1px solid var(--border-color); border-radius: 12px; padding: 16px; margin-bottom: 20px; font-size: 13px;">
-        <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
-          <span style="color: var(--text-muted);">Nome Box:</span>
-          <strong id="summary-hostname">vigilai-box</strong>
-        </div>
-        <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
-          <span style="color: var(--text-muted);">Rete Wi-Fi:</span>
-          <strong id="summary-wifi">-</strong>
-        </div>
-        <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
-          <span style="color: var(--text-muted);">Database Cloud:</span>
-          <strong style="color: var(--success);" id="summary-db">Preimpostato</strong>
-        </div>
-        <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
-          <span style="color: var(--text-muted);">Gemini AI Key:</span>
-          <strong style="color: var(--success);" id="summary-ai-key">Preimpostata</strong>
-        </div>
-        <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
-          <span style="color: var(--text-muted);">Email Mittente:</span>
-          <strong style="color: var(--success);" id="summary-email-sender">Preimpostata</strong>
-        </div>
-        <div style="display: flex; justify-content: space-between;">
-          <span style="color: var(--text-muted);">Telecamere Aggiunte:</span>
-          <strong id="summary-cameras">0</strong>
-        </div>
-      </div>
-
-      <!-- Configurazione Notifiche Allarmi Email -->
-      <div style="background: rgba(255,255,255,0.02); border: 1px solid var(--border-color); border-radius: 12px; padding: 16px; margin-bottom: 20px;">
-        <h3 style="font-size: 14px; font-weight: 700; margin-bottom: 12px; color: var(--primary); display: flex; align-items: center; gap: 8px;">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg>
-          Destinatari Notifiche Allarmi (Email)
-        </h3>
-        
-        <div class="form-group" style="margin-bottom: 12px;">
-          <label for="setup-recipients">Indirizzi Email Ricezione Allarmi</label>
-          <input type="text" id="setup-recipients" placeholder="es: castromassimo@gmail.com, cliente@email.com" value="castromassimo@gmail.com">
-          <p class="help-text">Inserisci una o più email separate da virgola dove ricevere i messaggi di allarme con fotogrammi.</p>
-        </div>
-
-        <div style="margin-top: 15px;">
-          <button type="button" class="btn-secondary" style="width: 100%; font-size: 11px; padding: 8px 12px;" onclick="toggleAdvancedSettings()">
-            <span id="advanced-toggle-text">Mostra Opzioni Avanzate (SMTP & Chiavi Cloud)</span>
-          </button>
-        </div>
-
-        <!-- Opzioni Avanzate Collassabili -->
-        <div id="advanced-settings-panel" style="display: none; margin-top: 15px; border-top: 1px solid var(--border-color); padding-top: 15px;">
-          <div class="form-group">
-            <label for="setup-gemini-key">Chiave API Gemini</label>
-            <input type="password" id="setup-gemini-key" placeholder="Gemini API Key" value="AIzaSyDznkSahzuLZIge6bruIMQk2J-WgMHEyHM">
-          </div>
-
-          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
-            <div class="form-group">
-              <label for="setup-email-user">Mittente SMTP (Gmail)</label>
-              <input type="text" id="setup-email-user" placeholder="es: mittente@gmail.com" value="castromassimo@gmail.com">
-            </div>
-            <div class="form-group">
-              <label for="setup-email-pass">Password App SMTP</label>
-              <input type="password" id="setup-email-pass" placeholder="Password per le app" value="nlytzpqmdhwouonl">
-            </div>
-          </div>
-          <p class="help-text" style="margin-bottom: 12px;">Se utilizzi Gmail, inserisci una "Password per le app" a 16 caratteri generata dal tuo account Google.</p>
-
-          <div class="form-group">
-            <label for="setup-supabase-url">Supabase URL</label>
-            <input type="text" id="setup-supabase-url" placeholder="https://..." value="https://bdcryhunzdemuficudws.supabase.co">
-          </div>
-
-          <div class="form-group">
-            <label for="setup-supabase-key">Supabase Anon Key</label>
-            <input type="password" id="setup-supabase-key" placeholder="Anon Key" value="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJkY3J5aHVuemRlbXVmaWN1ZHdzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzgxODQ4MzcsImV4cCI6MjA5Mzc2MDgzN30.hlqDNRSqgV12o3lFDFnB7wL5ve04JIk8T_VyjydLGh0">
-          </div>
-        </div>
-      </div>
-
-      <div class="alert alert-warning" style="display: block;">
-        <strong>Attenzione:</strong> Una volta salvato, l'hotspot di setup <em>VigilAI_Setup</em> verrà disattivato. Dovrai collegare il tuo smartphone o PC alla stessa rete Wi-Fi locale scelta per poter accedere a VigilAI.
-      </div>
-
-      <div class="button-group">
-        <button type="button" class="btn-secondary" onclick="prevStep(2)">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>
-          <span>Indietro</span>
-        </button>
-        <button type="button" class="btn-primary" id="btn-final-save" style="background: var(--success); box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);" onclick="saveAndReboot()">
-          <span>Salva e Riavvia Vigil.AI</span>
+      <div class="button-group" style="margin-top: 25px;">
+        <button type="button" class="btn-secondary" id="btn-skip-wifi" onclick="saveWithoutWifi()">Salta (Usa Ethernet)</button>
+        <button type="button" class="btn-primary" id="btn-connect-wifi" onclick="saveAndConnectWifi()">
+          <span>Salva e Riavvia Box</span>
         </button>
       </div>
     </div>
@@ -868,41 +638,27 @@
         </svg>
       </div>
       <h2 style="font-size: 20px; font-weight: 700; margin-bottom: 10px;">Configurazione Inviata!</h2>
-      <p class="subtitle">Il Raspberry Pi sta arrestando l'hotspot e collegandosi alla tua rete locale. Il servizio VigilAI verrà riavviato automaticamente.</p>
-      <p class="subtitle" style="margin-top: 15px;">Ricaricamento della pagina tra:</p>
-      <div style="font-size: 36px; font-weight: 700; color: var(--primary); margin-top: 10px;" id="reboot-countdown">10</div>
-    </div>
-
-  </div>
-
-  <!-- CUSTOM PROMPT MODAL -->
-  <div id="custom-prompt-modal" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.8); backdrop-filter: blur(8px); z-index: 20000; align-items: center; justify-content: center; padding: 20px;">
-    <div class="container" style="max-width: 400px; padding: 24px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); border: 1px solid var(--border-color); background: var(--panel-bg); backdrop-filter: blur(20px); border-radius: 20px;">
-      <h3 style="font-size: 16px; font-weight: 700; margin-bottom: 12px; color: var(--primary);">Aggiungi IP Telecamera</h3>
-      <p class="subtitle" style="font-size: 11px; margin-bottom: 16px;">Inserisci l'indirizzo IP locale della telecamera.</p>
+      <p class="subtitle" style="margin-bottom: 20px; line-height: 1.5;">
+        I dati di configurazione sono stati memorizzati con successo.<br>
+        Il box tenterà ora di connettersi alla rete Wi-Fi locale.
+      </p>
       
-      <div class="form-group" style="margin-bottom: 20px;">
-        <input type="text" id="custom-prompt-input" value="192.168.1.">
+      <div style="margin-bottom: 25px;">
+        <button type="button" class="btn-primary" id="btn-system-reboot" style="background: var(--warning); box-shadow: 0 4px 12px rgba(245, 158, 11, 0.3); width: 100%; max-width: 280px; margin: 0 auto; display: block;" onclick="triggerSystemReboot()">
+          <span>Riavvia Raspberry Pi</span>
+        </button>
       </div>
-      
-      <div style="display: flex; gap: 10px; justify-content: flex-end;">
-        <button type="button" class="btn-secondary" style="padding: 10px 16px; font-size: 13px;" onclick="closeCustomPrompt(false)">Annulla</button>
-        <button type="button" class="btn-primary" style="padding: 10px 16px; font-size: 13px;" onclick="closeCustomPrompt(true)">Conferma</button>
+
+      <p class="subtitle" style="font-size: 12px; margin-top: 10px; line-height: 1.4;">
+        <strong>Nota:</strong> Se il riavvio automatico non risponde, puoi riavviare manualmente il Raspberry Pi scollegando e ricollegando il cavo dell'alimentazione.
+      </p>
+
+      <div id="countdown-wrapper" style="display: none; margin-top: 20px;">
+        <p class="subtitle" style="margin-bottom: 5px;">Tentativo di ricaricamento tra:</p>
+        <div style="font-size: 36px; font-weight: 700; color: var(--primary);" id="reboot-countdown-box">15</div>
       </div>
     </div>
-  </div>
 
-  <!-- CUSTOM CONFIRM MODAL -->
-  <div id="custom-confirm-modal" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.8); backdrop-filter: blur(8px); z-index: 20000; align-items: center; justify-content: center; padding: 20px;">
-    <div class="container" style="max-width: 400px; padding: 24px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); border: 1px solid var(--border-color); background: var(--panel-bg); backdrop-filter: blur(20px); border-radius: 20px;">
-      <h3 style="font-size: 16px; font-weight: 700; margin-bottom: 12px; color: var(--warning);">Nessuna Telecamera</h3>
-      <p class="subtitle" id="custom-confirm-message" style="font-size: 12px; margin-bottom: 20px; line-height: 1.4; color: var(--text);">Non hai inserito alcuna telecamera nel database. Vuoi procedere comunque?</p>
-      
-      <div style="display: flex; gap: 10px; justify-content: flex-end;">
-        <button type="button" class="btn-secondary" style="padding: 10px 16px; font-size: 13px;" onclick="closeCustomConfirm(false)">Annulla</button>
-        <button type="button" class="btn-primary" style="padding: 10px 16px; font-size: 13px; background: var(--warning); box-shadow: 0 4px 12px rgba(245, 158, 11, 0.3);" onclick="closeCustomConfirm(true)">Procedi</button>
-      </div>
-    </div>
   </div>
 
   <script>
@@ -914,44 +670,57 @@
         password: ''
       },
       cloud: {
-        geminiKey: 'AIzaSyDznkSahzuLZIge6bruIMQk2J-WgMHEyHM',
+        geminiKey: '',
         supabaseUrl: 'https://bdcryhunzdemuficudws.supabase.co',
         supabaseAnonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJkY3J5aHVuemRlbXVmaWN1ZHdzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzgxODQ4MzcsImV4cCI6MjA5Mzc2MDgzN30.hlqDNRSqgV12o3lFDFnB7wL5ve04JIk8T_VyjydLGh0'
       },
       email: {
-        user: 'castromassimo@gmail.com',
-        pass: 'nlytzpqmdhwouonl'
+        user: '',
+        pass: '',
+        recipients: ''
       },
       cameras: []
     };
 
-    let activeStep = 1;
     let selectedSsid = '';
     let selectedSsidIsSecured = false;
-    let selectedCamIp = '';
+    let currentStep = 1;
     let supabaseClient = null;
 
-    // Aggiorna l'indicatore grafico dei passi (stepper)
-    function updateStepper() {
-      document.querySelectorAll('.step-indicator').forEach((el, index) => {
-        const stepNum = index + 1;
-        el.classList.remove('active', 'completed');
-        if (stepNum === activeStep) {
-          el.classList.add('active');
-        } else if (stepNum < activeStep) {
-          el.classList.add('completed');
-        }
-      });
-      const progressPercent = ((activeStep - 1) / 2) * 100;
-      document.getElementById('stepper-progress').style.width = `${progressPercent}%`;
-    }
+    // Tastiera virtuale variabili
+    const normalRows = [
+      ['q', 'w', 'e', 'r', 't', 'y', 'u', 'i', 'o', 'p'],
+      ['a', 's', 'd', 'f', 'g', 'h', 'j', 'k', 'l'],
+      ['Shift', 'z', 'x', 'c', 'v', 'b', 'n', 'm', 'Canc'],
+      ['?123', 'Space', 'OK']
+    ];
 
-    // Naviga al passo precedente
-    function prevStep(step) {
-      document.getElementById(`step-${activeStep}-content`).classList.remove('active');
-      activeStep = step;
-      document.getElementById(`step-${activeStep}-content`).classList.add('active');
-      updateStepper();
+    const symbolRows = [
+      ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0'],
+      ['-', '/', ':', ';', '(', ')', '$', '&', '@', '"'],
+      ['Shift', '.', ',', '?', '!', "'", '_', '\\', 'Canc'],
+      ['ABC', 'Space', 'OK']
+    ];
+
+    let isShift = false;
+    let isSymbols = false;
+    let activeInput = null;
+
+    // Gestione passi
+    function goToStep(step) {
+      currentStep = step;
+      document.querySelectorAll('.step-content').forEach(el => el.style.display = 'none');
+      document.querySelectorAll('.step-indicator').forEach(el => {
+        el.style.borderBottomColor = 'var(--border-color)';
+        el.style.color = 'var(--text-muted)';
+      });
+      
+      document.getElementById(`step-${step}-content`).style.display = 'block';
+      const indicator = document.getElementById(`step-${step}-indicator`);
+      if (indicator) {
+        indicator.style.borderBottomColor = 'var(--primary)';
+        indicator.style.color = 'var(--text)';
+      }
       hideAlerts();
     }
 
@@ -975,7 +744,16 @@
       document.getElementById('success-alert').style.display = 'none';
     }
 
-    // --- STEP 1: HOSTNAME E WIFI ---
+    // Inizializza client Supabase
+    function initSupabaseClient() {
+      if (typeof supabase !== 'undefined' && supabase.createClient) {
+        supabaseClient = supabase.createClient(config.cloud.supabaseUrl, config.cloud.supabaseAnonKey);
+        console.log("Supabase client inizializzato.");
+      } else {
+        console.error("Libreria Supabase non caricata.");
+      }
+    }
+
     // Carica hostname di default all'avvio
     async function loadDefaultHostname() {
       try {
@@ -1057,8 +835,69 @@
       }
     }
 
-    // Connette alla rete Wi-Fi e passa allo Step 2 (Rilevamento Telecamere)
-    async function submitStep1() {
+    // Salva l'hostname ed invia i dati di setup al server per il riavvio in modalità Ethernet
+    async function saveWithoutWifi() {
+      const hostnameInput = document.getElementById('hostname').value.trim();
+      if (!hostnameInput) {
+        showAlert('error', 'Nome box obbligatorio.');
+        return;
+      }
+
+      const btn = document.getElementById('btn-skip-wifi');
+      const btnMain = document.getElementById('btn-connect-wifi');
+      btn.disabled = true;
+      btnMain.disabled = true;
+      btn.innerHTML = '<span class="spinner"></span> <span>Configurazione...</span>';
+      hideAlerts();
+
+      try {
+        // 1. Salva Hostname
+        const hostRes = await fetch('/api/system/hostname', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ hostname: hostnameInput })
+        });
+        const hostData = await hostRes.json();
+        if (!hostRes.ok || !hostData.success) {
+          throw new Error("Impossibile salvare l'hostname.");
+        }
+        config.hostname = hostnameInput;
+
+        // 2. Invia setup vuoto (Ethernet)
+        const setupRes = await fetch('/api/setup', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            WIFI_SSID: '',
+            WIFI_PASSWORD: '',
+            GEMINI_API_KEY: '',
+            VITE_GEMINI_API_KEY: '',
+            EMAIL_USER: '',
+            EMAIL_PASS: '',
+            NOTIFICATION_EMAILS: '',
+            cameras: []
+          })
+        });
+        const setupData = await setupRes.json();
+        if (!setupRes.ok || !setupData.success) {
+          throw new Error(setupData.error || "Salvataggio configurazione fallito.");
+        }
+
+        // Mostra pannello di riavvio
+        document.getElementById('step-1-content').style.display = 'none';
+        document.getElementById('reboot-panel').style.display = 'block';
+        triggerSystemReboot();
+
+      } catch (err) {
+        showAlert('error', err.message);
+        btn.disabled = false;
+        btnMain.disabled = false;
+        btn.innerHTML = 'Salta (Usa Ethernet)';
+      }
+    }
+
+    // Salva l'hostname ed invia i dati di setup al server con Wi-Fi
+    async function saveAndConnectWifi() {
       const hostnameInput = document.getElementById('hostname').value.trim();
       const pwdInput = document.getElementById('wifi-password').value;
 
@@ -1075,13 +914,15 @@
         return;
       }
 
-      const btn = document.getElementById('btn-step-1');
+      const btn = document.getElementById('btn-connect-wifi');
+      const btnSkip = document.getElementById('btn-skip-wifi');
       btn.disabled = true;
-      btn.innerHTML = '<span class="spinner"></span> <span>Salvataggio hostname...</span>';
+      btnSkip.disabled = true;
+      btn.innerHTML = '<span class="spinner"></span> <span>Connessione...</span>';
       hideAlerts();
 
       try {
-        // 1. Applica Hostname
+        // 1. Salva Hostname
         const hostRes = await fetch('/api/system/hostname', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -1093,424 +934,74 @@
         }
         config.hostname = hostnameInput;
 
-        // Memorizziamo le credenziali Wi-Fi localmente nella configurazione
-        config.wifi.ssid = selectedSsid;
-        config.wifi.password = pwdInput;
-
-        // Inizializza client supabase in modo facoltativo (non blocca se fallisce)
-        try {
-          if (window.supabase) {
-            supabaseClient = window.supabase.createClient(config.cloud.supabaseUrl, config.cloud.supabaseAnonKey);
-          }
-        } catch (e) {
-          console.warn("Impossibile inizializzare Supabase:", e);
-        }
-
-        // Carica telecamere esistenti in modo facoltativo
-        try {
-          if (supabaseClient) {
-            await loadExistingCameras();
-          }
-        } catch (e) {
-          console.warn("Impossibile caricare telecamere esistenti:", e);
-        }
-
-        // Passa allo step successivo
-        document.getElementById('step-1-content').classList.remove('active');
-        activeStep = 2;
-        document.getElementById('step-2-content').classList.add('active');
-        updateStepper();
-      } catch (err) {
-        showAlert('error', err.message);
-      } finally {
-        btn.disabled = false;
-        btn.innerHTML = '<span>Connetti e Continua</span> <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>';
-      }
-    }
-
-    // --- STEP 2: DISCOVERY TELECAMERE IP ---
-    // Carica telecamere precedentemente configurate nel database
-    async function loadExistingCameras() {
-      if (!supabaseClient) return;
-      try {
-        const { data, error } = await supabaseClient.from('cameras').select('*');
-        if (!error && data) {
-          config.cameras = data;
-          renderConfiguredCameras();
-        }
-      } catch (err) {
-        console.warn('Errore lettura telecamere esistenti:', err);
-      }
-    }
-
-    // Scansiona dispositivi sulla sottorete locale
-    async function discoverCameras() {
-      const loader = document.getElementById('cam-discover-loader');
-      const text = document.getElementById('cam-discover-text');
-      const list = document.getElementById('discovered-cams-list');
-
-      loader.style.display = 'inline-block';
-      text.innerText = 'Scansione in corso...';
-      list.innerHTML = '<div style="padding: 20px; text-align: center; width: 100%;"><span class="spinner"></span><div style="margin-top: 8px; font-size: 12px; color: var(--text-muted);">Scansione porte RTSP (554/8554) nella sottorete...</div></div>';
-
-      try {
-        const res = await fetch('/api/cameras/discover');
-        const data = await res.json();
-
-        if (res.ok && data.success) {
-          list.innerHTML = '';
-          if (data.cameras.length === 0) {
-            list.innerHTML = '<div style="padding: 15px; text-align: center; font-size: 12px; color: var(--text-muted); width: 100%;">Nessun dispositivo RTSP trovato. Puoi aggiungere un IP manualmente.</div>';
-            addManualIpOption();
-          } else {
-            data.cameras.forEach(ip => {
-              const item = document.createElement('div');
-              item.className = 'cam-ip-item';
-              item.onclick = () => selectCameraIp(ip, item);
-              item.innerHTML = `
-                <div style="display: flex; align-items: center; gap: 8px;">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#5c62ec" stroke-width="2"><rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18"></rect><line x1="7" y1="2" x2="7" y2="22"></line><line x1="17" y1="2" x2="17" y2="22"></line><line x1="2" y1="12" x2="22" y2="12"></line><line x1="2" y1="7" x2="7" y2="7"></line><line x1="2" y1="17" x2="7" y2="17"></line><line x1="17" y1="17" x2="22" y2="17"></line><line x1="17" y1="7" x2="22" y2="7"></line></svg>
-                  <span style="font-size: 13px; font-weight: 500;">Telecamera Rilevata</span>
-                </div>
-                <strong style="font-size: 13px; color: var(--primary);">${ip}</strong>
-              `;
-              list.appendChild(item);
-            });
-            addManualIpOption();
-          }
-        }
-      } catch (err) {
-        list.innerHTML = `<div style="padding: 15px; text-align: center; font-size: 12px; color: var(--error); width: 100%;">Scansione fallita: ${err.message}</div>`;
-      } finally {
-        loader.style.display = 'none';
-        text.innerText = 'Avvia Scansione IP';
-      }
-    }
-
-    // Aggiunge pulsante per inserire manualmente un IP
-    function addManualIpOption() {
-      const list = document.getElementById('discovered-cams-list');
-      const item = document.createElement('div');
-      item.className = 'cam-ip-item';
-      item.style.borderStyle = 'dashed';
-      item.onclick = () => {
-        showCustomPrompt("192.168.1.", (manualIp) => {
-          if (manualIp && manualIp.trim()) {
-            selectCameraIp(manualIp.trim(), item);
-          }
-        });
-      };
-      item.innerHTML = `
-        <span style="font-size: 12px; color: var(--text-muted);">+ Aggiungi IP Telecamera manualmente...</span>
-        <span></span>
-      `;
-      list.appendChild(item);
-    }
-
-    // Seleziona un IP per configurarlo
-    function selectCameraIp(ip, element) {
-      selectedCamIp = ip;
-      document.querySelectorAll('.cam-ip-item').forEach(el => el.classList.remove('selected'));
-      if (element) element.classList.add('selected');
-
-      document.getElementById('active-cam-ip').innerText = ip;
-      document.getElementById('cam-config-panel').style.display = 'block';
-
-      document.getElementById('cam-name').value = `Telecamera ${ip.split('.').pop()}`;
-      document.getElementById('cam-location').value = 'Interno';
-      
-      document.getElementById('preview-container').innerHTML = `
-        <div class="preview-placeholder" id="preview-placeholder">
-          Inserisci i dati e clicca "Verifica Stream" per vedere il fotogramma di anteprima.
-        </div>
-      `;
-      
-      document.getElementById('cam-name').focus();
-    }
-
-    // Testa la connettività dello stream RTSP della telecamera
-    async function testCameraStream() {
-      const user = document.getElementById('cam-user').value.trim();
-      const pass = document.getElementById('cam-pass').value.trim();
-      const path = document.getElementById('cam-path').value.trim();
-      
-      if (!selectedCamIp) {
-        showAlert('error', 'Seleziona prima una telecamera.');
-        return;
-      }
-
-      let rtspUrl = '';
-      if (user && pass) {
-        rtspUrl = `rtsp://${user}:${pass}@${selectedCamIp}:554${path}`;
-      } else {
-        rtspUrl = `rtsp://${selectedCamIp}:554${path}`;
-      }
-
-      const loader = document.getElementById('test-stream-loader');
-      const container = document.getElementById('preview-container');
-      
-      loader.style.display = 'inline-block';
-      container.innerHTML = '<span class="spinner" style="width:30px; height:30px;"></span><div style="position:absolute; bottom:15px; font-size:11px; color:var(--text-muted);">Apertura flusso RTSP in corso...</div>';
-
-      try {
-        const res = await fetch('/api/cameras/test-stream', {
+        // 2. Invia setup con Wi-Fi e riavvia
+        const setupRes = await fetch('/api/setup', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ rtspUrl })
-        });
-        const data = await res.json();
-
-        if (res.ok && data.success && data.preview) {
-          container.innerHTML = `<img src="${data.preview}" class="preview-img" alt="Anteprima Stream">`;
-          showAlert('success', 'Flusso video agganciato con successo!');
-        } else {
-          container.innerHTML = `<div class="preview-placeholder" style="color:var(--error);">${data.error || "Impossibile caricare l'immagine."}</div>`;
-          showAlert('error', data.error || 'Impossibile connettersi alla telecamera.');
-        }
-      } catch (err) {
-        container.innerHTML = `<div class="preview-placeholder" style="color:var(--error);">${err.message}</div>`;
-        showAlert('error', err.message);
-      } finally {
-        loader.style.display = 'none';
-      }
-    }
-
-    // Salva la telecamera configurata su Supabase (in locale prima, e in background su Supabase se attivo)
-    async function saveActiveCamera() {
-      const name = document.getElementById('cam-name').value.trim();
-      const location = document.getElementById('cam-location').value.trim();
-      const user = document.getElementById('cam-user').value.trim();
-      const pass = document.getElementById('cam-pass').value.trim();
-      const path = document.getElementById('cam-path').value.trim();
-
-      if (!name) {
-        showAlert('error', 'Il nome della telecamera è obbligatorio.');
-        return;
-      }
-
-      let rtspUrl = '';
-      if (user && pass) {
-        rtspUrl = `rtsp://${user}:${pass}@${selectedCamIp}:554${path}`;
-      } else {
-        rtspUrl = `rtsp://${selectedCamIp}:554${path}`;
-      }
-
-      const camData = {
-        name,
-        location: location || 'Interno',
-        type: 'ip',
-        url: rtspUrl,
-        ip: selectedCamIp,
-        port: 554,
-        username: user || null,
-        password: pass || null,
-        rtspPath: path || '/stream1',
-        status: 'online',
-        enabledTriggers: ['intrusion', 'violence', 'fire', 'smoke', 'fall']
-      };
-
-      // Salviamo sempre in locale per l'invio finale
-      config.cameras.push(camData);
-      renderConfiguredCameras();
-      showAlert('success', `Telecamera "${name}" aggiunta in locale correttamente!`);
-
-      // Se il client database è attivo, proviamo il salvataggio immediato in background
-      if (supabaseClient) {
-        console.log("Tentativo di salvataggio telecamera nel database cloud...");
-        supabaseClient
-          .from('cameras')
-          .insert([camData])
-          .select()
-          .then(({ data, error }) => {
-            if (error) {
-              console.warn("Salvataggio cloud non riuscito (sarà riprovato al riavvio):", error.message);
-            } else if (data && data.length > 0) {
-              console.log("Telecamera salvata anche nel database cloud.");
-              // Sostituiamo l'elemento locale con quello del DB (che ha l'ID corretto)
-              const idx = config.cameras.indexOf(camData);
-              if (idx !== -1) {
-                config.cameras[idx] = data[0];
-              }
-            }
+          body: JSON.stringify({
+            WIFI_SSID: selectedSsid,
+            WIFI_PASSWORD: pwdInput,
+            GEMINI_API_KEY: '',
+            VITE_GEMINI_API_KEY: '',
+            EMAIL_USER: '',
+            EMAIL_PASS: '',
+            NOTIFICATION_EMAILS: '',
+            cameras: []
           })
-          .catch(err => {
-            console.warn("Errore durante salvataggio cloud in background:", err);
-          });
-      }
-
-      document.getElementById('cam-config-panel').style.display = 'none';
-      selectedCamIp = '';
-      document.querySelectorAll('.cam-ip-item').forEach(el => el.classList.remove('selected'));
-    }
-
-    // Renderizza l'elenco delle telecamere configurate
-    function renderConfiguredCameras() {
-      const container = document.getElementById('configured-cams-container');
-      const section = document.getElementById('configured-list-section');
-
-      if (config.cameras.length === 0) {
-        section.style.display = 'none';
-        return;
-      }
-
-      section.style.display = 'block';
-      container.innerHTML = '';
-
-      config.cameras.forEach((cam, idx) => {
-        const item = document.createElement('div');
-        item.className = 'configured-item';
-        item.innerHTML = `
-          <div>
-            <strong>${cam.name}</strong> 
-            <span style="color:var(--text-muted); font-size:11px; margin-left: 5px;">(${cam.ip || 'RTSP'})</span>
-          </div>
-          <button type="button" class="btn-secondary" style="padding: 4px 8px; font-size: 11px; color:var(--error); border-color: rgba(239, 68, 68, 0.2);" onclick="removeCamera(${idx})">
-            Rimuovi
-          </button>
-        `;
-        container.appendChild(item);
-      });
-    }
-
-    // Rimuove una telecamera da configurazione locale e database
-    async function removeCamera(idx) {
-      const removedCam = config.cameras[idx];
-      config.cameras.splice(idx, 1);
-      renderConfiguredCameras();
-
-      if (removedCam && removedCam.id && supabaseClient) {
-        try {
-          const { error } = await supabaseClient.from('cameras').delete().eq('id', removedCam.id);
-          if (error) console.error("Errore eliminazione database:", error);
-        } catch (err) {
-          console.error("Errore rimozione:", err);
-        }
-      }
-    }
-
-    // Avanza allo Step 3 (Riepilogo)
-    function submitStep2() {
-      if (config.cameras.length === 0) {
-        showCustomConfirm("Non hai inserito alcuna telecamera nel database. Vuoi procedere comunque?", (proceed) => {
-          if (proceed) {
-            goToStep3();
-          }
         });
-      } else {
-        goToStep3();
+        const setupData = await setupRes.json();
+        if (!setupRes.ok || !setupData.success) {
+          throw new Error(setupData.error || "Salvataggio configurazione fallito.");
+        }
+
+        // Mostra pannello di riavvio
+        document.getElementById('step-1-content').style.display = 'none';
+        document.getElementById('reboot-panel').style.display = 'block';
+        triggerSystemReboot();
+
+      } catch (err) {
+        showAlert('error', err.message);
+        btn.disabled = false;
+        btnSkip.disabled = false;
+        btn.innerHTML = '<span>Salva e Riavvia Box</span>';
       }
     }
 
-    function goToStep3() {
-      document.getElementById('summary-hostname').innerText = config.hostname;
-      document.getElementById('summary-wifi').innerText = config.wifi.ssid;
-      document.getElementById('summary-cameras').innerText = config.cameras.length;
-
-      document.getElementById('step-2-content').classList.remove('active');
-      activeStep = 3;
-      document.getElementById('step-3-content').classList.add('active');
-      updateStepper();
-      hideAlerts();
-    }
-
-    // Mostra/Nascondi le impostazioni avanzate
-    function toggleAdvancedSettings() {
-      const panel = document.getElementById('advanced-settings-panel');
-      const btnText = document.getElementById('advanced-toggle-text');
-      if (panel.style.display === 'none') {
-        panel.style.display = 'block';
-        btnText.innerText = 'Nascondi Opzioni Avanzate';
-      } else {
-        panel.style.display = 'none';
-        btnText.innerText = 'Mostra Opzioni Avanzate (SMTP & Chiavi Cloud)';
-      }
-    }
-
-    // --- STEP 3: SALVATAGGIO FINALE E RIAVVIO ---
-    async function saveAndReboot() {
-      const btn = document.getElementById('btn-final-save');
+    // --- COMANDO DI RIAVVIO DEL SISTEMA ---
+    async function triggerSystemReboot() {
+      const btn = document.getElementById('btn-system-reboot');
       btn.disabled = true;
-      btn.innerHTML = '<span class="spinner"></span> <span>Salvataggio definitivo...</span>';
-
-      const geminiKey = document.getElementById('setup-gemini-key').value.trim();
-      const emailUser = document.getElementById('setup-email-user').value.trim();
-      const emailPass = document.getElementById('setup-email-pass').value.trim();
-      const supabaseUrl = document.getElementById('setup-supabase-url').value.trim();
-      const supabaseAnonKey = document.getElementById('setup-supabase-key').value.trim();
-      const notificationEmails = document.getElementById('setup-recipients').value.trim();
+      btn.innerHTML = '<span class="spinner"></span> <span>Invio comando riavvio...</span>';
 
       try {
-        const response = await fetch('/api/setup', {
+        const res = await fetch('/api/system/reboot', {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            GEMINI_API_KEY: geminiKey,
-            VITE_GEMINI_API_KEY: geminiKey,
-            VITE_SUPABASE_URL: supabaseUrl,
-            VITE_SUPABASE_ANON_KEY: supabaseAnonKey,
-            EMAIL_USER: emailUser,
-            EMAIL_PASS: emailPass,
-            NOTIFICATION_EMAILS: notificationEmails,
-            WIFI_SSID: config.wifi.ssid,
-            WIFI_PASSWORD: config.wifi.password,
-            cameras: config.cameras
-          })
+          headers: { 'Content-Type': 'application/json' }
         });
+        const data = await res.json();
+        if (res.ok && data.success) {
+          btn.innerHTML = '<span>Riavvio Inviato!</span>';
+          let timeLeft = 15;
+          const countdownEl = document.getElementById('reboot-countdown-box');
+          document.getElementById('countdown-wrapper').style.display = 'block';
 
-        const result = await response.json();
-
-        if (response.ok && result.success) {
-          document.getElementById('step-3-content').style.display = 'none';
-          document.querySelector('.stepper').style.display = 'none';
-          document.getElementById('reboot-panel').style.display = 'block';
-          
-          let timeLeft = 10;
-          const countdownEl = document.getElementById('reboot-countdown');
-          
           const interval = setInterval(() => {
             timeLeft--;
             countdownEl.innerText = timeLeft;
             if (timeLeft <= 0) {
               clearInterval(interval);
-              if (config.hostname) {
-                window.location.href = `http://${config.hostname}.local:3088/`;
-              } else {
-                window.location.reload();
-              }
+              window.location.href = `http://${config.hostname}.local:3088/`;
             }
           }, 1000);
         } else {
-          throw new Error(result.error || 'Errore durante il salvataggio finale.');
+          throw new Error(data.error || 'Impossibile inviare il comando di riavvio.');
         }
       } catch (err) {
-        showAlert('error', 'Salvataggio finale fallito: ' + err.message);
+        alert('Impossibile riavviare automaticamente: ' + err.message + '\n\nProcedi riavviando manualmente scollegando e ricollegando l\'alimentazione.');
         btn.disabled = false;
-        btn.innerHTML = '<span>Salva e Riavvia Vigil.AI</span>';
+        btn.innerHTML = '<span>Riavvia Raspberry Pi</span>';
       }
     }
-
-    // --- TASTIERA VIRTUALE INTEGRATA ---
-    let activeInput = null;
-    let isShift = false;
-    let isSymbols = false;
-    let useVirtualKeyboard = true;
-
-    const normalRows = [
-      ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '-', '_'],
-      ['q', 'w', 'e', 'r', 't', 'y', 'u', 'i', 'o', 'p', '.', '/'],
-      ['a', 's', 'd', 'f', 'g', 'h', 'j', 'k', 'l', '@', ':'],
-      ['Shift', 'z', 'x', 'c', 'v', 'b', 'n', 'm', 'Space', '?123'],
-      ['Canc', 'OK']
-    ];
-
-    const symbolRows = [
-      ['!', '@', '#', '$', '%', '^', '&', '*', '(', ')', '-', '_'],
-      ['+', '=', '{', '}', '[', ']', '|', '\\', ':', ';', '"', '\''],
-      ['<', '>', ',', '?', '/', '~', '`', '.', 'Space', 'ABC'],
-      ['Canc', 'OK']
-    ];
 
     function setupVirtualKeyboard() {
       if (document.getElementById('virtual-keyboard')) return;
@@ -1522,33 +1013,14 @@
 
       renderKeyboard(normalRows);
 
-      // Seleziona in modo robusto tutti i tipi di input editabili (es. text, password, url, email, etc.)
-      const inputs = document.querySelectorAll('input:not([type="checkbox"]):not([type="radio"]):not([type="submit"]):not([type="button"]):not([type="file"])');
-      inputs.forEach(input => {
-        input.addEventListener('focus', () => {
-          if (!useVirtualKeyboard) return;
-          activeInput = input;
-          kb.classList.add('active');
-          document.body.classList.add('keyboard-open');
-          setTimeout(() => {
-            input.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          }, 300);
-        });
-
-        input.addEventListener('click', () => {
-          if (!useVirtualKeyboard) return;
-          activeInput = input;
-          kb.classList.add('active');
-          document.body.classList.add('keyboard-open');
-        });
-      });
-
       const handleOutsideClick = (e) => {
-        const isInput = Array.from(inputs).some(input => input.contains(e.target));
+        const isInput = e.target.tagName === 'INPUT' || e.target.closest('input');
         const isKeyboard = kb.contains(e.target);
-        if (!isInput && !isKeyboard) {
+        const isToggleBtn = e.target.closest('.btn-keyboard-toggle');
+        if (!isInput && !isKeyboard && !isToggleBtn) {
           kb.classList.remove('active');
           document.body.classList.remove('keyboard-open');
+          document.querySelectorAll('.btn-keyboard-toggle').forEach(b => b.classList.remove('active'));
           if (activeInput) {
             activeInput.blur();
             activeInput = null;
@@ -1558,15 +1030,33 @@
       // Utilizziamo mousedown/touchstart a livello document catturati in anticipo per non interferire con click di tastiera/input
       document.addEventListener('mousedown', handleOutsideClick, true);
       document.addEventListener('touchstart', handleOutsideClick, true);
+    }
 
-      // Nasconde e disattiva la tastiera virtuale se viene rilevata la digitazione da tastiera fisica
-      window.addEventListener('keydown', (e) => {
-        if (e.isTrusted && e.key.length === 1) {
-          useVirtualKeyboard = false;
-          kb.classList.remove('active');
-          document.body.classList.remove('keyboard-open');
-        }
-      });
+    function toggleKeyboardFor(inputId) {
+      const input = document.getElementById(inputId);
+      const kb = document.getElementById('virtual-keyboard');
+      if (!input || !kb) return;
+
+      const btn = input.parentNode.querySelector('.btn-keyboard-toggle');
+
+      if (activeInput === input && kb.classList.contains('active')) {
+        kb.classList.remove('active');
+        document.body.classList.remove('keyboard-open');
+        input.blur();
+        activeInput = null;
+        if (btn) btn.classList.remove('active');
+      } else {
+        document.querySelectorAll('.btn-keyboard-toggle').forEach(b => b.classList.remove('active'));
+        
+        activeInput = input;
+        kb.classList.add('active');
+        document.body.classList.add('keyboard-open');
+        if (btn) btn.classList.add('active');
+
+        setTimeout(() => {
+          input.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }, 150);
+      }
     }
 
     function renderKeyboard(rows) {
@@ -1646,8 +1136,11 @@
       } else if (key === 'OK') {
         document.getElementById('virtual-keyboard').classList.remove('active');
         document.body.classList.remove('keyboard-open');
-        activeInput.blur();
-        activeInput = null;
+        document.querySelectorAll('.btn-keyboard-toggle').forEach(b => b.classList.remove('active'));
+        if (activeInput) {
+          activeInput.blur();
+          activeInput = null;
+        }
       } else {
         const val = isShift ? key.toUpperCase() : key.toLowerCase();
         activeInput.value += val;
@@ -1656,51 +1149,11 @@
       }
     }
 
-    // Funzioni helper per i modali personalizzati
-    let customPromptCallback = null;
-    function showCustomPrompt(defaultValue, callback) {
-      document.getElementById('custom-prompt-input').value = defaultValue;
-      document.getElementById('custom-prompt-modal').style.display = 'flex';
-      customPromptCallback = callback;
-      
-      const input = document.getElementById('custom-prompt-input');
-      setTimeout(() => {
-        input.focus();
-        input.click(); // Forza l'attivazione della tastiera virtuale
-      }, 100);
-    }
-    
-    function closeCustomPrompt(success) {
-      document.getElementById('custom-prompt-modal').style.display = 'none';
-      if (success && customPromptCallback) {
-        const val = document.getElementById('custom-prompt-input').value.trim();
-        customPromptCallback(val);
-      }
-      customPromptCallback = null;
-    }
-
-    let customConfirmCallback = null;
-    function showCustomConfirm(message, callback) {
-      document.getElementById('custom-confirm-message').innerText = message;
-      document.getElementById('custom-confirm-modal').style.display = 'flex';
-      customConfirmCallback = callback;
-    }
-    
-    function closeCustomConfirm(proceed) {
-      document.getElementById('custom-confirm-modal').style.display = 'none';
-      if (customConfirmCallback) {
-        customConfirmCallback(proceed);
-      }
-      customConfirmCallback = null;
-    }
-
     // Carica hostname default all'avvio e inizializza tastiera virtuale
     window.addEventListener('DOMContentLoaded', () => {
       loadDefaultHostname();
       setupVirtualKeyboard();
-      if (window.supabase) {
-        supabaseClient = window.supabase.createClient(config.cloud.supabaseUrl, config.cloud.supabaseAnonKey);
-      }
+      initSupabaseClient();
     });
   </script>
 </body>
