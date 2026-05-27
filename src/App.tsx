@@ -1089,6 +1089,44 @@ export default function App() {
 
   const activeCamera = cameras.find(c => c.id === activeCameraId);
 
+  // Helper: capture a frame from a webcam/browser camera robustly
+  const captureFromWebcam = async (camId: string): Promise<HTMLVideoElement | null> => {
+    // 1. Try the existing video ref
+    const videoEl = videoRefs.current.get(camId);
+    if (videoEl && videoEl.readyState >= 2 && videoEl.videoWidth > 0) {
+      return videoEl;
+    }
+
+    // 2. If ref exists but not ready, wait up to 2s for it to become ready
+    if (videoEl) {
+      const ready = await new Promise<boolean>(resolve => {
+        if (videoEl.readyState >= 2 && videoEl.videoWidth > 0) { resolve(true); return; }
+        const onReady = () => { videoEl.removeEventListener('canplay', onReady); resolve(videoEl.readyState >= 2 && videoEl.videoWidth > 0); };
+        videoEl.addEventListener('canplay', onReady);
+        setTimeout(() => { videoEl.removeEventListener('canplay', onReady); resolve(videoEl.readyState >= 2 && videoEl.videoWidth > 0); }, 2000);
+      });
+      if (ready) return videoEl;
+    }
+
+    // 3. Fallback: create a temporary video from the MediaStream
+    const stream = streamsRef.current.get(camId);
+    if (!stream || !stream.active) return null;
+    const tempVideo = document.createElement('video');
+    tempVideo.srcObject = stream;
+    tempVideo.muted = true;
+    tempVideo.playsInline = true;
+    await tempVideo.play().catch(() => {});
+    const ready = await new Promise<boolean>(resolve => {
+      if (tempVideo.readyState >= 2 && tempVideo.videoWidth > 0) { resolve(true); return; }
+      const onReady = () => { tempVideo.removeEventListener('canplay', onReady); resolve(tempVideo.readyState >= 2 && tempVideo.videoWidth > 0); };
+      tempVideo.addEventListener('canplay', onReady);
+      setTimeout(() => { tempVideo.removeEventListener('canplay', onReady); resolve(tempVideo.readyState >= 2 && tempVideo.videoWidth > 0); }, 2500);
+    });
+    if (ready) return tempVideo;
+    tempVideo.srcObject = null;
+    return null;
+  };
+
   // Notification function
   const sendNotification = async (description: string, screenshot: string): Promise<{ success: boolean; error?: string }> => {
     try {
@@ -1104,15 +1142,19 @@ export default function App() {
           emailPass: appSettings.emailPass
         })
       });
-      const text = await response.text();
-      let data;
-      try {
-        data = JSON.parse(text);
-      } catch (parseErr) {
-        return { success: false, error: `Risposta del server non valida (Stato ${response.status}): ${text.substring(0, 100)}` };
+
+      let data: any = {};
+      const contentType = response.headers.get("content-type") || "";
+      if (contentType.includes("application/json")) {
+        data = await response.json();
+      } else {
+        const text = await response.text();
+        console.error("[notify] Non-JSON response:", response.status, text.slice(0, 200));
+        return { success: false, error: `Risposta del server non valida (Stato ${response.status})` };
       }
+
       if (!response.ok || !data.success) {
-        return { success: false, error: data.error || `Errore del server (Stato ${response.status})` };
+        return { success: false, error: data.error || `Errore del server (${response.status})` };
       }
       console.log("Notification request sent to:", notificationEmails.join(", "));
       return { success: true };
@@ -1280,42 +1322,47 @@ export default function App() {
 
     for (const cam of activeCams) {
       const img = imgRefs.current.get(cam.id);
-      const video = videoRefs.current.get(cam.id);
-      let success = false;
 
-      if ((cam.type === 'ip' || cam.type === 'onvif') && img) {
-        canvas.width = img.naturalWidth || 1280;
-        canvas.height = img.naturalHeight || 720;
-        if (canvas.width > 0 && canvas.height > 0) {
-          context.drawImage(img, 0, 0, canvas.width, canvas.height);
-          success = true;
+      // Prepara canvas con dimensioni default
+      canvas.width = 640;
+      canvas.height = 480;
+      // Sfondo nero di default (come prima)
+      context.fillStyle = "#000000";
+      context.fillRect(0, 0, canvas.width, canvas.height);
+
+      // Prova a catturare il frame dalla sorgente migliore disponibile
+      if ((cam.type === 'ip' || cam.type === 'onvif') && img && img.naturalWidth > 0) {
+        canvas.width = img.naturalWidth;
+        canvas.height = img.naturalHeight;
+        context.drawImage(img, 0, 0, canvas.width, canvas.height);
+      } else if (cam.type === 'webcam' || cam.type === 'browser') {
+        // Prova a catturare dalla webcam (con fallback a frame nero se non pronta)
+        const readyVideo = await captureFromWebcam(cam.id);
+        if (readyVideo && readyVideo.videoWidth > 0) {
+          canvas.width = readyVideo.videoWidth;
+          canvas.height = readyVideo.videoHeight;
+          context.drawImage(readyVideo, 0, 0, canvas.width, canvas.height);
         }
-      } else if ((cam.type === 'webcam' || cam.type === 'browser') && video && video.readyState >= 2) {
-        canvas.width = video.videoWidth || 640;
-        canvas.height = video.videoHeight || 480;
-        context.drawImage(video, 0, 0, canvas.width, canvas.height);
-        success = true;
+        // Se non pronta: rimane il frame nero → va bene lo stesso
       }
 
-      if (success) {
-        const screenshot = canvas.toDataURL("image/jpeg", 0.6).split(",")[1];
-        const res = await sendNotification(`[TEST MANUALE] Allarme inviato manualmente per verificare la ricezione delle immagini dalla camera: ${cam.name}`, screenshot);
+      // Invia SEMPRE (anche con foto nera se cam non disponibile)
+      const screenshot = canvas.toDataURL("image/jpeg", 0.6).split(",")[1];
+      const res = await sendNotification(`[TEST MANUALE] Allarme inviato manualmente per verificare la ricezione delle immagini dalla camera: ${cam.name}`, screenshot);
 
-        if (res.success) {
-          setIncidents(prev => [{
-            id: Math.random().toString(36).substr(2, 9),
-            timestamp: new Date(),
-            cameraId: cam.id,
-            cameraName: cam.name,
-            description: `[TEST MANUALE] Notifica inviata con successo (${cam.name})`,
-            threatLevel: "medium",
-            screenshot: canvas.toDataURL("image/jpeg", 0.8)
-          }, ...prev]);
-
-          sentCount++;
-        } else {
-          lastErrorMsg = res.error || "Errore sconosciuto";
-        }
+      if (res.success) {
+        setIncidents(prev => [{
+          id: Math.random().toString(36).substr(2, 9),
+          timestamp: new Date(),
+          cameraId: cam.id,
+          cameraName: cam.name,
+          description: `[TEST MANUALE] Notifica inviata con successo (${cam.name})`,
+          threatLevel: "medium",
+          screenshot: canvas.toDataURL("image/jpeg", 0.8)
+        }, ...prev]);
+        sentCount++;
+      } else {
+        lastErrorMsg = res.error || "Errore sconosciuto";
       }
     }
 
@@ -1329,9 +1376,9 @@ export default function App() {
       setGlobalModal({
         type: 'error',
         title: 'Errore Invio Allarme',
-        message: lastErrorMsg 
+        message: lastErrorMsg
           ? `Impossibile inviare la notifica email. Dettaglio errore: ${lastErrorMsg}`
-          : 'Impossibile catturare l\'immagine da alcuna telecamera attiva. Assicurati che i flussi video siano visibili sullo schermo.'
+          : 'Errore sconosciuto durante l\'invio.'
       });
     }
   };
@@ -1394,7 +1441,9 @@ export default function App() {
 
     if (alertSequenceCountRef.current === 0) {
       shouldNotify = true;
-    } else if (timeSinceLast >= 180000) { // 1 avviso ogni 3 minuti
+    } else if (alertSequenceCountRef.current === 1 && timeSinceLast >= 20000) {
+      shouldNotify = true;
+    } else if (alertSequenceCountRef.current > 1 && timeSinceLast >= 10000) {
       shouldNotify = true;
     }
 
@@ -1461,7 +1510,17 @@ export default function App() {
         base64Image = canvas.toDataURL("image/jpeg", 0.6).split(",")[1];
         success = true;
       }
+    } else if (cam.type === 'webcam' || cam.type === 'browser') {
+      const readyVideo = await captureFromWebcam(cam.id);
+      if (readyVideo) {
+        canvas.width = readyVideo.videoWidth || 640;
+        canvas.height = readyVideo.videoHeight || 480;
+        context.drawImage(readyVideo, 0, 0, canvas.width, canvas.height);
+        base64Image = canvas.toDataURL("image/jpeg", 0.6).split(",")[1];
+        success = true;
+      }
     } else if (video && video.readyState >= 2) {
+      // Fallback for any other video type
       canvas.width = video.videoWidth || 640;
       canvas.height = video.videoHeight || 480;
       context.drawImage(video, 0, 0, canvas.width, canvas.height);
@@ -2095,7 +2154,6 @@ export default function App() {
                           ref={(el) => { if (el) videoRefs.current.set(cam.id, el); else videoRefs.current.delete(cam.id); }}
                           autoPlay 
                           muted 
-                          crossOrigin="anonymous"
                           playsInline 
                           className={`w-full h-full object-cover transition-all duration-1000 ${alertingCameraIds.includes(cam.id) ? 'opacity-40 saturate-150' : 'opacity-100'}`}
                           style={isNightMode ? { filter: 'grayscale(1) brightness(1.2) contrast(1.1) sepia(0.2) hue-rotate(180deg)' } : {}}
