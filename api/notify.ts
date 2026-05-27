@@ -6,18 +6,16 @@ export default async function handler(req: any, res: any) {
   }
 
   const { screenshot, description, type, recipient, emailUser, emailPass } = req.body;
-  const DEFAULT_SMTP_USER = "allarme.vigilai@gmail.com";
-  const DEFAULT_SMTP_PASS = "jkcrqzcfbkjpsych";
 
   console.log(`[Vercel Serverless] Sending ${type} alert to: ${Array.isArray(recipient) ? recipient.join(", ") : recipient}`);
 
   try {
     if (type === "email") {
-      const user = emailUser || process.env.EMAIL_USER || DEFAULT_SMTP_USER;
-      const pass = emailPass || process.env.EMAIL_PASS || DEFAULT_SMTP_PASS;
+      const user = emailUser || process.env.EMAIL_USER;
+      const pass = emailPass || process.env.EMAIL_PASS;
 
       if (!user || !pass) {
-        return res.status(400).json({ success: false, error: "Email credentials missing" });
+        return res.status(400).json({ success: false, error: "Credenziali email mancanti (emailUser/emailPass o variabili d'ambiente non impostate)" });
       }
 
       // Auto-detect or override host
