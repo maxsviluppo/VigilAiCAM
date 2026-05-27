@@ -601,7 +601,7 @@ export default function App() {
   const [selectedZoneId, setSelectedZoneId] = useState<string | null>(null);
   
   // Settings State
-  const [aiModel, setAiModel] = useState(() => localStorage.getItem("vigilai_model") || "gemini-1.5-flash");
+  const [aiModel, setAiModel] = useState(() => localStorage.getItem("vigilai_model") || "gemini-3-flash-preview");
   const [appSettings, setAppSettings] = useState({
     geminiKey: localStorage.getItem("vigilai_gemini_key") || "",
     emailUser: localStorage.getItem("vigilai_email_user") || "",
@@ -2888,7 +2888,7 @@ export default function App() {
                       >
                         <option value="gemini-3-flash-preview" className="bg-[#0f172a]">Gemini 3.0 Flash (Top Performance)</option>
                         <option value="gemini-2.0-flash" className="bg-[#0f172a]">Gemini 2.0 Flash (Fast & Modern)</option>
-                        <option value="gemini-1.5-flash" className="bg-[#0f172a]">Gemini 1.5 Flash (High Quota/Stable)</option>
+                        <option value="gemini-1.5-flash" className="bg-[#0f172a]">Gemini 1.5 Flash (Legacy)</option>
                       </select>
                     </div>
                     
