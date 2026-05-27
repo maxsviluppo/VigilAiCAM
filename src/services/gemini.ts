@@ -68,7 +68,7 @@ export const analyzeFrame = async (
     - Se un pericolo o un VEICOLO è in una zona 'restricted' o 'alert': segnali un'allerta immediata (isEmergency: true) specificando il nome della zona nella 'description'.
     - Per ogni veicolo rilevato nelle zone di sicurezza (restricted/alert), riporta obbligatoriamente nella 'description': MARCA, COLORE e TARGA (se leggibile).
     - Se un'area è 'privacy', ignora QUALSIASI attività al suo interno (non segnalare nulla).
-
+ 
     Rispondi SOLO in formato JSON:
     {
       "threatLevel": "low" | "medium" | "high",

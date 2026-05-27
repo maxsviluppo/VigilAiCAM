@@ -51,6 +51,17 @@ async function startServer() {
 
   app.use(bodyParser.json({ limit: "10mb" }));
 
+  // CORS middleware to support API requests from any host (e.g. Vercel deployment)
+  app.use((req, res, next) => {
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS, PUT, PATCH, DELETE");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With");
+    if (req.method === "OPTIONS") {
+      return res.sendStatus(200);
+    }
+    next();
+  });
+
   // Credenziali SMTP di default pre-configurate per l'invio delle notifiche (facilmente modificabili qui)
   const DEFAULT_SMTP_USER = "allarme.vigilai@gmail.com";
   const DEFAULT_SMTP_PASS = "jkcrqzcfbkjpsych";

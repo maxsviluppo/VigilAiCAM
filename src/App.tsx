@@ -1104,9 +1104,15 @@ export default function App() {
           emailPass: appSettings.emailPass
         })
       });
-      const data = await response.json();
+      const text = await response.text();
+      let data;
+      try {
+        data = JSON.parse(text);
+      } catch (parseErr) {
+        return { success: false, error: `Risposta del server non valida (Stato ${response.status}): ${text.substring(0, 100)}` };
+      }
       if (!response.ok || !data.success) {
-        return { success: false, error: data.error || "Errore del server" };
+        return { success: false, error: data.error || `Errore del server (Stato ${response.status})` };
       }
       console.log("Notification request sent to:", notificationEmails.join(", "));
       return { success: true };
@@ -1388,9 +1394,7 @@ export default function App() {
 
     if (alertSequenceCountRef.current === 0) {
       shouldNotify = true;
-    } else if (alertSequenceCountRef.current === 1 && timeSinceLast >= 20000) {
-      shouldNotify = true;
-    } else if (alertSequenceCountRef.current > 1 && timeSinceLast >= 10000) {
+    } else if (timeSinceLast >= 180000) { // 1 avviso ogni 3 minuti
       shouldNotify = true;
     }
 
