@@ -602,6 +602,7 @@ export default function App() {
   
   // Settings State
   const [aiModel, setAiModel] = useState(() => localStorage.getItem("vigilai_model") || "gemini-3-flash-preview");
+  const [showEmailPass, setShowEmailPass] = useState(false);
   const [appSettings, setAppSettings] = useState({
     geminiKey: localStorage.getItem("vigilai_gemini_key") || "",
     emailUser: localStorage.getItem("vigilai_email_user") || "",
@@ -2886,9 +2887,7 @@ export default function App() {
                         onChange={(e) => setAiModel(e.target.value)}
                         className="w-full bg-black/40 border border-white/10 px-4 py-3 rounded-xl text-xs text-white outline-none focus:border-blue-500/50 transition-all font-bold appearance-none cursor-pointer"
                       >
-                        <option value="gemini-3-flash-preview" className="bg-[#0f172a]">Gemini 3.0 Flash (Top Performance)</option>
-                        <option value="gemini-2.0-flash" className="bg-[#0f172a]">Gemini 2.0 Flash (Fast & Modern)</option>
-                        <option value="gemini-1.5-flash" className="bg-[#0f172a]">Gemini 1.5 Flash (Legacy)</option>
+                        <option value="gemini-3-flash-preview" className="bg-[#0f172a]">Gemini 3.0 Flash</option>
                       </select>
                     </div>
                     
@@ -2923,15 +2922,24 @@ export default function App() {
                       autoComplete="new-password"
                       className="w-full sm:flex-1 bg-white/5 border border-white/10 px-4 py-3 rounded-xl text-xs text-white outline-none focus:border-blue-500 transition-colors"
                     />
-                    <input 
-                      type="password" 
-                      value={appSettings.emailPass} 
-                      onChange={(e) => setAppSettings({...appSettings, emailPass: e.target.value})}
-                      onFocus={() => { if (useVirtualKeyboard) setKeyboardTarget({ id: 'settingsEmailPass', title: 'Password App SMTP' }); }}
-                      placeholder="Password App (lascia vuoto per default)"
-                      autoComplete="new-password"
-                      className="w-full sm:flex-1 bg-white/5 border border-white/10 px-4 py-3 rounded-xl text-xs text-white outline-none focus:border-blue-500 transition-colors"
-                    />
+                    <div className="w-full sm:flex-1 relative">
+                      <input 
+                        type={showEmailPass ? "text" : "password"} 
+                        value={appSettings.emailPass} 
+                        onChange={(e) => setAppSettings({...appSettings, emailPass: e.target.value})}
+                        onFocus={() => { if (useVirtualKeyboard) setKeyboardTarget({ id: 'settingsEmailPass', title: 'Password App SMTP' }); }}
+                        placeholder="Password App (lascia vuoto per default)"
+                        autoComplete="new-password"
+                        className="w-full bg-white/5 border border-white/10 pl-4 pr-10 py-3 rounded-xl text-xs text-white outline-none focus:border-blue-500 transition-colors"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowEmailPass(!showEmailPass)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white transition-colors"
+                      >
+                        {showEmailPass ? <EyeOff size={16} /> : <Eye size={16} />}
+                      </button>
+                    </div>
                   </div>
                   <p className="text-[8px] text-slate-500 uppercase tracking-widest">Usa una "Password per le app" se utilizzi Gmail per inviare gli allarmi.</p>
                 </div>
