@@ -1,4 +1,42 @@
 import nodemailer from "nodemailer";
+import { exec } from "child_process";
+import fs from "fs";
+import path from "path";
+import os from "os";
+
+// ─── TELEGRAM via OpenClaw ────────────────────────────────────────────────────
+async function sendTelegramNotification(description: string, screenshotBase64?: string): Promise<void> {
+  const chatId = process.env.TELEGRAM_CHAT_ID;
+  if (!chatId) return;
+
+  const timestamp = new Date().toLocaleString("it-IT");
+  const message = `🚨 *ALLERTA VIGIL.AI*\n\n📋 ${description}\n\n🕐 ${timestamp}`;
+
+  return new Promise((resolve) => {
+    const args = ["message", "send", "--channel", "telegram", "--target", chatId, "--message", message];
+    const proc = exec(`openclaw ${args.map(a => `"${a}"`).join(" ")}`, (err) => {
+      if (err) console.error(`[Telegram] Errore: ${err.message}`);
+      else console.log(`[Telegram] Messaggio inviato a chat ${chatId}`);
+    });
+
+    if (screenshotBase64 && screenshotBase64.length > 100) {
+      const tmpPath = path.join(os.tmpdir(), `vigilai_alert_${Date.now()}.jpg`);
+      try {
+        const base64Data = screenshotBase64.replace(/^data:image\/\w+;base64,/, "");
+        fs.writeFileSync(tmpPath, Buffer.from(base64Data, "base64"));
+        const photoArgs = ["message", "send", "--channel", "telegram", "--target", chatId, "--file", tmpPath, "--message", "📸 Fotogramma emergenza"];
+        exec(`openclaw ${photoArgs.map(a => `"${a}"`).join(" ")}`, (photoErr) => {
+          if (photoErr) console.error(`[Telegram] Errore foto: ${photoErr.message}`);
+          try { fs.unlinkSync(tmpPath); } catch (_) {}
+          resolve();
+        });
+      } catch (e: any) { console.error(`[Telegram] Errore temp: ${e.message}`); resolve(); }
+    } else {
+      proc.on("close", () => resolve());
+    }
+  });
+}
+// ─────────────────────────────────────────────────────────────────────────────
 
 export default async function handler(req: any, res: any) {
   if (req.method !== 'POST') {
@@ -72,6 +110,13 @@ export default async function handler(req: any, res: any) {
 
       await transporter.sendMail(mailOptions);
     }
+
+    // ── Telegram via OpenClaw (in parallelo all'email) ──────────────────────
+    sendTelegramNotification(description, screenshot).catch((tgErr) => {
+      console.error("[Telegram] Errore non gestito:", tgErr);
+    });
+    // ────────────────────────────────────────────────────────────────────────
+
     return res.status(200).json({ success: true });
   } catch (error: any) {
     console.error("Vercel Serverless Notification error:", error);

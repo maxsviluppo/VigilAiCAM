@@ -568,10 +568,14 @@ export default function App() {
           if (data.emailPass) {
             localStorage.setItem("vigilai_email_pass", data.emailPass);
           }
+          if (data.telegramChatId) {
+            localStorage.setItem("vigilai_telegram_chat_id", data.telegramChatId);
+          }
           setAppSettings({
             geminiKey: data.geminiKey || localStorage.getItem("vigilai_gemini_key") || "",
             emailUser: data.emailUser || localStorage.getItem("vigilai_email_user") || "",
             emailPass: data.emailPass || localStorage.getItem("vigilai_email_pass") || "",
+            telegramChatId: data.telegramChatId || localStorage.getItem("vigilai_telegram_chat_id") || "",
           });
           if (data.notificationEmails) {
             setNotificationEmails(data.notificationEmails);
@@ -607,6 +611,7 @@ export default function App() {
     geminiKey: localStorage.getItem("vigilai_gemini_key") || "",
     emailUser: localStorage.getItem("vigilai_email_user") || "",
     emailPass: localStorage.getItem("vigilai_email_pass") || "",
+    telegramChatId: localStorage.getItem("vigilai_telegram_chat_id") || "",
   });
 
   // State della tastiera virtuale e del rilevamento tastiera fisica
@@ -2946,6 +2951,44 @@ export default function App() {
 
                 <div className="h-px w-full bg-white/5" />
 
+                {/* Telegram Configuration */}
+                <div className="space-y-3">
+                  <div className="flex justify-between items-end">
+                    <label className="text-[9px] font-black uppercase tracking-widest text-slate-500">Destinatario Telegram Chat ID (OpenClaw)</label>
+                    <a href="https://t.me/userinfobot" target="_blank" rel="noreferrer" className="text-[8px] text-blue-400 hover:text-blue-300 uppercase font-black tracking-widest flex items-center gap-1">Trova Chat ID <ChevronRight size={10}/></a>
+                  </div>
+                  <input 
+                    type="text" 
+                    value={appSettings.telegramChatId} 
+                    onChange={(e) => setAppSettings({...appSettings, telegramChatId: e.target.value})}
+                    onFocus={() => { if (useVirtualKeyboard) setKeyboardTarget({ id: 'settingsTelegramChatId', title: 'Telegram Chat ID' }); }}
+                    placeholder="Es: 123456789"
+                    className="w-full bg-white/5 border border-white/10 px-4 py-3 rounded-xl text-xs text-white outline-none focus:border-blue-500 transition-colors"
+                  />
+                  
+                  {/* Visual Guide & QR Code */}
+                  <div className="p-4 bg-white/5 rounded-2xl border border-white/5 space-y-3 mt-2 flex flex-col sm:flex-row items-center gap-4">
+                    <div className="bg-white p-2 rounded-xl shrink-0">
+                      {/* Simple stylized vector SVG representation of the telegram helper QR link */}
+                      <svg width="80" height="80" viewBox="0 0 29 29" fill="none" xmlns="http://www.w3.org/2000/svg" shapeRendering="crispEdges">
+                        <path fill="#000" d="M0 0h7v7H0zM22 0h7v7h-7zM0 22h7v7H0zM2 2h3v3H2zM24 2h3v3h-3zM2 24h3v3H2zM10 0h3v1h-3zM14 0h1v4h-1zM16 0h4v1h-4zM10 2h3v1h-3zM16 2h1v1h-1zM19 2h1v1h-1zM10 4h2v1h-2zM18 4h2v1h-2zM10 6h4v1h-4zM18 6h3v1h-3zM8 8h1v5H8zM10 8h2v1h-2zM16 8h1v4h-1zM20 8h2v2h-2zM24 8h1v2h-1zM27 8h2v1h-2zM14 9h1v1h-1zM18 9h1v1h-1zM22 10h1v1h-1zM25 10h2v1h-2zM10 11h2v1h-2zM12 11h2v1h-2zM21 11h1v1h-1zM27 11h2v1h-2zM9 12h1v1H9zM15 12h1v1h-1zM17 12h2v1h-2zM20 12h1v1h-1zM22 12h2v1h-2zM25 12h1v1h-1zM11 13h1v1h-1zM13 13h1v1h-1zM27 13h1v1h-1zM8 15h1v4H8zM10 15h2v1h-2zM14 15h1v2h-1zM16 15h1v3h-1zM18 15h3v1h-3zM23 15h2v1h-2zM26 15h3v2h-3zM11 16h2v1h-2zM21 16h1v1h-1zM24 16h1v1h-1zM10 17h1v1h-1zM13 17h1v1h-1zM19 17h1v1h-1zM22 17h1v1h-1zM10 19h2v1h-2zM14 19h1v1h-1zM17 19h1v2h-1zM20 19h1v1h-1zM22 19h3v1h-3zM27 19h1v2h-1zM8 20h2v1H8zM11 20h2v1h-2zM21 20h2v1h-2zM25 20h1v1h-1zM10 21h1v1h-1zM15 21h1v1h-1zM18 21h2v1h-2zM23 21h1v1h-1zM9 23h3v1H9zM14 23h2v1h-2zM17 23h2v1h-2zM20 23h2v1h-2zM24 23h1v2h-1zM26 23h1v1h-1zM28 23h1v2h-1zM8 24h1v2H8zM15 24h1v1h-1zM18 24h1v1h-1zM20 24h1v1h-1zM22 24h1v1h-1zM27 24h1v1h-1zM9 26h1v3H9zM11 26h3v1h-3zM16 26h3v1h-3zM20 26h1v1h-1zM22 26h1v3h-1zM24 26h2v1h-2zM27 26h1v1h-1zM12 27h1v2h-1zM15 27h2v1h-2zM19 27h2v1h-2zM25 27h3v1h-3zM10 28h1v1h-1zM14 28h4v1h-4zM20 28h1v1h-1z"/>
+                      </svg>
+                    </div>
+                    <div className="space-y-1">
+                      <p className="text-[10px] font-black uppercase text-blue-400 tracking-wider flex items-center gap-1">
+                        🔍 Come trovare il tuo Chat ID
+                      </p>
+                      <ol className="text-[8px] text-slate-400 uppercase tracking-wide font-bold space-y-1 list-decimal list-inside">
+                        <li>Inquadra il QR code o clicca su "Trova Chat ID"</li>
+                        <li>Avvia il bot <strong>@userinfobot</strong> su Telegram</li>
+                        <li>Copia il valore <strong>Id:</strong> (es. 8832732995) e incollalo sopra.</li>
+                      </ol>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="h-px w-full bg-white/5" />
+
                 <div className="space-y-3">
                   <label className="text-[9px] font-black uppercase tracking-widest text-slate-500">Destinatari Notifiche Email</label>
                   <div className="flex gap-2">
@@ -2984,13 +3027,60 @@ export default function App() {
               </div>
 
                 <div className="pt-4 space-y-3">
-                  <button 
-                    onClick={sendManualTestAlarm}
-                    className="w-full py-4 bg-orange-600/20 border border-orange-500/30 rounded-2xl text-[10px] font-black uppercase tracking-widest text-orange-400 hover:bg-orange-600 hover:text-white transition-all flex items-center justify-center gap-2"
-                  >
-                    <Bell size={14} />
-                    Invia Allarme Test (con foto cam)
-                  </button>
+                  <div className="grid grid-cols-2 gap-3">
+                    <button 
+                      onClick={sendManualTestAlarm}
+                      className="py-4 bg-orange-600/20 border border-orange-500/30 rounded-2xl text-[9px] font-black uppercase tracking-widest text-orange-400 hover:bg-orange-600 hover:text-white transition-all flex items-center justify-center gap-2"
+                    >
+                      <Mail size={14} />
+                      Test Email
+                    </button>
+
+                    <button 
+                      onClick={async () => {
+                        if (!appSettings.telegramChatId) {
+                          setGlobalModal({
+                            type: 'error',
+                            title: 'Chat ID Mancante',
+                            message: 'Inserisci prima un Telegram Chat ID valido per inviare il test.'
+                          });
+                          return;
+                        }
+                        try {
+                          const res = await fetch("/api/notify", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({
+                              type: "telegram",
+                              recipient: [],
+                              description: "🔔 [TEST VIGIL.AI] - Integrazione Telegram tramite OpenClaw completata con successo!",
+                              screenshot: ""
+                            })
+                          });
+                          const data = await res.json();
+                          if (data.success) {
+                            setGlobalModal({
+                              type: 'success',
+                              title: 'Test Telegram Inviato',
+                              message: 'La notifica di test è stata inoltrata al bot Telegram.'
+                            });
+                          } else {
+                            throw new Error(data.error || "Errore sconosciuto");
+                          }
+                        } catch (err: any) {
+                          setGlobalModal({
+                            type: 'error',
+                            title: 'Errore Test Telegram',
+                            message: `Impossibile inviare: ${err.message}`
+                          });
+                        }
+                      }}
+                      className="py-4 bg-blue-600/20 border border-blue-500/30 rounded-2xl text-[9px] font-black uppercase tracking-widest text-blue-400 hover:bg-blue-600 hover:text-white transition-all flex items-center justify-center gap-2"
+                    >
+                      <Send size={14} />
+                      Test Telegram
+                    </button>
+                  </div>
 
                   <button 
                     onClick={() => {
@@ -2998,6 +3088,7 @@ export default function App() {
                       localStorage.setItem("vigilai_gemini_key_updated_at", new Date().toISOString());
                       localStorage.setItem("vigilai_email_user", appSettings.emailUser);
                       localStorage.setItem("vigilai_email_pass", appSettings.emailPass);
+                      localStorage.setItem("vigilai_telegram_chat_id", appSettings.telegramChatId);
                       localStorage.setItem("vigilai_model", aiModel);
                       localStorage.setItem("vigilai_notification_emails", JSON.stringify(notificationEmails));
                       
@@ -3009,6 +3100,7 @@ export default function App() {
                           geminiKey: appSettings.geminiKey,
                           emailUser: appSettings.emailUser,
                           emailPass: appSettings.emailPass,
+                          telegramChatId: appSettings.telegramChatId,
                           notificationEmails: notificationEmails
                         })
                       }).then(res => res.json()).then(resData => {
@@ -3025,6 +3117,7 @@ export default function App() {
                             gemini_key: appSettings.geminiKey,
                             email_user: appSettings.emailUser,
                             email_pass: appSettings.emailPass,
+                            telegram_chat_id: appSettings.telegramChatId,
                             notification_emails: notificationEmails
                           }
                         }).catch((err: any) => console.warn("[Settings] Errore backup cloud:", err));
