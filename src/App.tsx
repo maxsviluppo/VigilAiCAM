@@ -35,7 +35,8 @@ import {
   EyeOff,
   Key,
   ExternalLink,
-  Keyboard
+  Keyboard,
+  Send
 } from "lucide-react";
 import * as Lucide from "lucide-react";
 import { motion, AnimatePresence, Reorder } from "framer-motion";
