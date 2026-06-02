@@ -614,6 +614,15 @@ export default function App() {
     emailPass: localStorage.getItem("vigilai_email_pass") || "",
     telegramChatId: localStorage.getItem("vigilai_telegram_chat_id") || "",
   });
+  const [disabledAiCameraIds, setDisabledAiCameraIds] = useState<string[]>([]);
+
+  const toggleCameraAi = (camId: string) => {
+    setDisabledAiCameraIds(prev => 
+      prev.includes(camId) 
+        ? prev.filter(id => id !== camId) 
+        : [...prev, camId]
+    );
+  };
 
   // State della tastiera virtuale e del rilevamento tastiera fisica
   const [keyboardTarget, setKeyboardTarget] = useState<{ id: string; title: string } | null>(null);
@@ -1146,7 +1155,8 @@ export default function App() {
           description,
           screenshot,
           emailUser: appSettings.emailUser,
-          emailPass: appSettings.emailPass
+          emailPass: appSettings.emailPass,
+          telegramChatId: appSettings.telegramChatId
         })
       });
 
@@ -1536,7 +1546,8 @@ export default function App() {
     }
 
     if (success && base64Image) {
-      if (!isAiEnabled && !isSimulating) return; // Skip analysis if AI is disabled
+      const isCamAiDisabled = disabledAiCameraIds.includes(cam.id);
+      if ((!isAiEnabled || isCamAiDisabled) && !isSimulating) return; // Skip analysis if AI is disabled globally or for this specific camera
 
       setLastAnalysis(prev => ({
         description: `🔄 Analisi in corso: ${cam.name}...`,
@@ -1577,7 +1588,7 @@ export default function App() {
         setIsAnalyzing(false);
       }
     }
-  }, [cameras, activeCameraId, isAnalyzing, isSimulating, isMultiView, isAiEnabled]);
+  }, [cameras, activeCameraId, isAnalyzing, isSimulating, isMultiView, isAiEnabled, disabledAiCameraIds]);
 
   useEffect(() => {
     if (isMonitoring) {
@@ -2272,11 +2283,24 @@ export default function App() {
                             </div>
                           </div>
                           {isMonitoring && isAiEnabled && (
-                            <div className="flex flex-col items-end gap-2">
-                              <div className="glass px-3 py-1.5 lg:px-4 lg:py-2 rounded-xl bg-blue-600/20 border-blue-500/30 backdrop-blur-md flex items-center gap-2">
-                                <Cpu size={10} className="text-blue-400" />
-                                <span className="text-[8px] lg:text-[9px] font-black text-blue-400 uppercase tracking-widest">AI Core</span>
-                              </div>
+                            <div className="flex flex-col items-end gap-2 pointer-events-auto">
+                              <button 
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  toggleCameraAi(cam.id);
+                                }}
+                                className={`glass px-3 py-1.5 lg:px-4 lg:py-2 rounded-xl backdrop-blur-md flex items-center gap-2 border transition-all hover:scale-105 active:scale-95 ${
+                                  disabledAiCameraIds.includes(cam.id)
+                                    ? 'bg-slate-800/40 border-slate-700/30 text-slate-500 hover:bg-slate-800/60'
+                                    : 'bg-blue-600/20 border-blue-500/30 text-blue-400 hover:bg-blue-600/30'
+                                }`}
+                                title={disabledAiCameraIds.includes(cam.id) ? "Attiva AI su questa camera" : "Disattiva AI su questa camera"}
+                              >
+                                <Cpu size={10} className={disabledAiCameraIds.includes(cam.id) ? 'text-slate-500' : 'text-blue-400 animate-pulse'} />
+                                <span className="text-[8px] lg:text-[9px] font-black uppercase tracking-widest">
+                                  {disabledAiCameraIds.includes(cam.id) ? 'AI OFF' : 'AI ON'}
+                                </span>
+                              </button>
                             </div>
                           )}
                         </div>
@@ -3055,7 +3079,8 @@ export default function App() {
                               type: "telegram",
                               recipient: [],
                               description: "🔔 [TEST VIGIL.AI] - Integrazione Telegram tramite OpenClaw completata con successo!",
-                              screenshot: ""
+                              screenshot: "",
+                              telegramChatId: appSettings.telegramChatId
                             })
                           });
                           const data = await res.json();
