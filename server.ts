@@ -11,6 +11,12 @@ import fs from "fs";
 import { exec, spawn } from "child_process";
 import net from "net";
 import os from "os";
+import dns from "dns";
+
+// Forza la risoluzione IPv4 per evitare l'errore ENETUNREACH (2a00:...) sul Raspberry Pi
+if (dns.setDefaultResultOrder) {
+  dns.setDefaultResultOrder("ipv4first");
+}
 
 dotenv.config();
 
