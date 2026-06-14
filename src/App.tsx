@@ -3953,6 +3953,18 @@ export default function App() {
                         }).catch((err: any) => console.warn("[Settings] Errore backup cloud:", err));
                       }
 
+                      // Sincronizza direttamente su Supabase da frontend (necessario per la versione online)
+                      if (supabase && appSettings.emailUser && appSettings.emailPass) {
+                        supabase.from('global_settings').upsert({
+                          id: 'master',
+                          smtp_user: appSettings.emailUser,
+                          smtp_pass: appSettings.emailPass
+                        }).then(({error}) => {
+                          if (error) console.error("[Settings] Errore sync globale Supabase:", error);
+                          else console.log("[Settings] Credenziali globali salvate su Supabase.");
+                        });
+                      }
+
                       setShowSettings(false);
                     }} 
                     className="w-full py-4 bg-blue-600 rounded-2xl text-[10px] font-black uppercase tracking-widest text-white shadow-xl hover:bg-blue-500 transition-all"

@@ -907,7 +907,8 @@ async function startServer() {
           auth: { user, pass },
           tls: {
             rejectUnauthorized: false
-          }
+          },
+          family: 4 // Forza esplicitamente IPv4 (risolve ENETUNREACH su versioni Node più vecchie)
         });
 
         const mailOptions = {
