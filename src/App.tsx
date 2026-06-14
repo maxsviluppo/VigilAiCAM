@@ -560,7 +560,7 @@ export default function App() {
   useEffect(() => {
     const handleResize = () => {
       // Sogli allargata per intercettare anche simulatori o scale DPI elevate (fino a 600px x 400px)
-      const is35 = window.innerWidth <= 600 || window.innerHeight <= 400;
+      const is35 = window.innerWidth <= 600 && window.innerHeight <= 450;
       setIsMobile35(is35);
       if (is35) {
         setIsMultiView(false);
@@ -4608,8 +4608,8 @@ export default function App() {
         )}
       </AnimatePresence>
 
-      {/* Floating control buttons for 3.5" screen */}
-      {!isMobile35 && (
+      {/* Floating control buttons (Hidden in smartphone mode as they are in the top menu) */}
+      {false && (
         <div className="fixed bottom-4 right-4 z-[99] flex flex-col gap-3 md:hidden mobile-35-controls">
           <button
             type="button"
