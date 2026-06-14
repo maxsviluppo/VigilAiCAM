@@ -10,8 +10,75 @@ import ffmpeg from "ffmpeg-static";
 import fs from "fs";
 import { exec, spawn } from "child_process";
 import net from "net";
+import os from "os";
 
 dotenv.config();
+
+// ─── TELEGRAM via Direct API (Senza OpenClaw) ─────────────────────────────────
+// Invia una notifica Telegram usando direttamente le API di Telegram.
+async function sendTelegramNotification(description: string, screenshotBase64?: string, targetChatId?: string, targetBotToken?: string): Promise<void> {
+  const chatId = targetChatId || process.env.TELEGRAM_CHAT_ID;
+  const botToken = targetBotToken || process.env.TELEGRAM_BOT_TOKEN;
+  
+  if (!chatId || !botToken) {
+    console.log("[Telegram] TELEGRAM_CHAT_ID o TELEGRAM_BOT_TOKEN non impostato, skip.");
+    return;
+  }
+
+  const timestamp = new Date().toLocaleString("it-IT");
+  const message = `🚨 *ALLERTA VigilAI*\n\n📋 ${description}\n\n🕐 ${timestamp}`;
+
+  try {
+    if (screenshotBase64 && screenshotBase64.length > 100) {
+      const boundary = "----WebKitFormBoundary" + Math.random().toString(36).substring(2);
+      const base64Data = screenshotBase64.replace(/^data:image\/\w+;base64,/, "");
+      const buffer = Buffer.from(base64Data, "base64");
+
+      const payload = Buffer.concat([
+        Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="chat_id"\r\n\r\n${chatId}\r\n`),
+        Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="caption"\r\n\r\n${message}\r\n`),
+        Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="photo"; filename="screenshot.jpg"\r\nContent-Type: image/jpeg\r\n\r\n`),
+        buffer,
+        Buffer.from(`\r\n--${boundary}--\r\n`)
+      ]);
+
+      const response = await fetch(`https://api.telegram.org/bot${botToken}/sendPhoto`, {
+        method: "POST",
+        headers: {
+          "Content-Type": `multipart/form-data; boundary=${boundary}`
+        },
+        body: payload
+      });
+
+      if (!response.ok) {
+        const text = await response.text();
+        throw new Error(`Telegram API returned ${response.status}: ${text}`);
+      }
+      console.log(`[Telegram] Foto inviata con successo alla chat ${chatId}`);
+    } else {
+      const response = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          chat_id: chatId,
+          text: message,
+          parse_mode: "Markdown"
+        })
+      });
+
+      if (!response.ok) {
+        const text = await response.text();
+        throw new Error(`Telegram API returned ${response.status}: ${text}`);
+      }
+      console.log(`[Telegram] Messaggio inviato con successo alla chat ${chatId}`);
+    }
+  } catch (err: any) {
+    console.error(`[Telegram] Errore invio: ${err.message}`);
+  }
+}
+// ─────────────────────────────────────────────────────────────────────────────
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -64,7 +131,7 @@ async function startServer() {
 
   // Credenziali SMTP di default pre-configurate per l'invio delle notifiche (facilmente modificabili qui)
   const DEFAULT_SMTP_USER = "allarme.vigilai@gmail.com";
-  const DEFAULT_SMTP_PASS = "jkcrqzcfbkjpsych";
+  const DEFAULT_SMTP_PASS = "xyuptamrfbdvbalp";
 
   // Controlla se le chiavi Supabase nel file .env sono state configurate
   const isConfigured = () => {
@@ -370,7 +437,7 @@ async function startServer() {
     });
   });
 
-  // API per leggere le impostazioni correnti (Gemini Key, SMTP e Email Destinatari)
+  // API per leggere le impostazioni correnti (Gemini Key, SMTP, Telegram e Email Destinatari)
   app.get("/api/settings", (req, res) => {
     try {
       res.json({
@@ -378,6 +445,8 @@ async function startServer() {
         geminiKey: process.env.GEMINI_API_KEY || "",
         emailUser: process.env.EMAIL_USER || "",
         emailPass: process.env.EMAIL_PASS || "",
+        telegramChatId: process.env.TELEGRAM_CHAT_ID || "",
+        telegramToken: process.env.TELEGRAM_BOT_TOKEN || "",
         notificationEmails: process.env.NOTIFICATION_EMAILS 
           ? process.env.NOTIFICATION_EMAILS.split(",").map(e => e.trim()).filter(Boolean)
           : ["allarme.vigilai@gmail.com"],
@@ -390,9 +459,9 @@ async function startServer() {
   });
 
   // API per salvare le impostazioni dal pannello di controllo dell'app
-  app.post("/api/settings", (req, res) => {
+  app.post("/api/settings", async (req, res) => {
     try {
-      const { geminiKey, emailUser, emailPass, notificationEmails, supabaseUrl, supabaseAnonKey } = req.body;
+      const { geminiKey, emailUser, emailPass, telegramChatId, telegramToken, notificationEmails, supabaseUrl, supabaseAnonKey } = req.body;
 
       if (geminiKey !== undefined && geminiKey.trim() !== "") {
         process.env.GEMINI_API_KEY = geminiKey;
@@ -400,6 +469,8 @@ async function startServer() {
       }
       if (emailUser !== undefined && emailUser.trim() !== "") process.env.EMAIL_USER = emailUser;
       if (emailPass !== undefined && emailPass.trim() !== "") process.env.EMAIL_PASS = emailPass;
+      if (telegramChatId !== undefined) process.env.TELEGRAM_CHAT_ID = telegramChatId;
+      if (telegramToken !== undefined) process.env.TELEGRAM_BOT_TOKEN = telegramToken;
       if (notificationEmails !== undefined) {
         process.env.NOTIFICATION_EMAILS = Array.isArray(notificationEmails)
           ? notificationEmails.join(",")
@@ -413,6 +484,8 @@ async function startServer() {
         `VITE_GEMINI_API_KEY=${process.env.VITE_GEMINI_API_KEY || ""}`,
         `EMAIL_USER=${process.env.EMAIL_USER || ""}`,
         `EMAIL_PASS=${process.env.EMAIL_PASS || ""}`,
+        `TELEGRAM_CHAT_ID=${process.env.TELEGRAM_CHAT_ID || ""}`,
+        `TELEGRAM_BOT_TOKEN=${process.env.TELEGRAM_BOT_TOKEN || ""}`,
         `NOTIFICATION_EMAILS=${process.env.NOTIFICATION_EMAILS || ""}`,
         `VITE_SUPABASE_URL=${process.env.VITE_SUPABASE_URL || ""}`,
         `VITE_SUPABASE_ANON_KEY=${process.env.VITE_SUPABASE_ANON_KEY || ""}`,
@@ -433,6 +506,31 @@ async function startServer() {
         console.log("[Settings] Impostazioni aggiornate e salvate in .env");
       } else {
         console.log("[Settings] Nessun cambiamento rilevato nelle impostazioni, .env non sovrascritto");
+      }
+
+      // Supabase Global SMTP Sync
+      const currentSupabaseUrl = process.env.VITE_SUPABASE_URL;
+      const currentSupabaseKey = process.env.VITE_SUPABASE_ANON_KEY;
+      if (currentSupabaseUrl && currentSupabaseKey && process.env.EMAIL_USER && process.env.EMAIL_PASS) {
+        try {
+          const { createClient } = await import("@supabase/supabase-js");
+          const supabase = createClient(currentSupabaseUrl, currentSupabaseKey);
+          
+          const { error } = await supabase.from('global_settings').upsert({
+            id: 'master',
+            smtp_user: process.env.EMAIL_USER,
+            smtp_pass: process.env.EMAIL_PASS,
+            updated_at: new Date().toISOString()
+          });
+          
+          if (error) {
+            console.error("[Settings] Errore sincronizzazione SMTP globale su Supabase:", error.message);
+          } else {
+            console.log("[Settings] Credenziali SMTP sincronizzate globalmente su Supabase (global_settings)");
+          }
+        } catch (supabaseErr: any) {
+          console.error("[Settings] Eccezione durante la sincronizzazione Supabase:", supabaseErr.message);
+        }
       }
 
       res.json({ success: true });
@@ -737,16 +835,33 @@ async function startServer() {
     res.json({ ips: results, port: PORT });
   });
 
-  // API Route for Notifications
   app.post("/api/notify", async (req, res) => {
-    const { screenshot, description, type, recipient, emailUser, emailPass } = req.body;
+    const { screenshot, description, type, recipient, emailUser, emailPass, telegramChatId, telegramToken } = req.body;
 
     console.log(`[Notification] Sending ${type} alert to: ${Array.isArray(recipient) ? recipient.join(", ") : recipient}`);
 
     try {
       if (type === "email") {
-        const user = emailUser || process.env.EMAIL_USER || DEFAULT_SMTP_USER;
-        const pass = emailPass || process.env.EMAIL_PASS || DEFAULT_SMTP_PASS;
+        let user = emailUser || process.env.EMAIL_USER || DEFAULT_SMTP_USER;
+        let pass = emailPass || process.env.EMAIL_PASS || DEFAULT_SMTP_PASS;
+
+        // Tenta di recuperare le credenziali globali da Supabase
+        const currentSupabaseUrl = process.env.VITE_SUPABASE_URL;
+        const currentSupabaseKey = process.env.VITE_SUPABASE_ANON_KEY;
+        if (currentSupabaseUrl && currentSupabaseKey) {
+          try {
+            const { createClient } = await import("@supabase/supabase-js");
+            const supabase = createClient(currentSupabaseUrl, currentSupabaseKey);
+            const { data, error } = await supabase.from('global_settings').select('smtp_user, smtp_pass').eq('id', 'master').single();
+            if (data && data.smtp_user && data.smtp_pass) {
+              user = data.smtp_user;
+              pass = data.smtp_pass;
+              console.log("[Notification] Utilizzate credenziali SMTP globali da Supabase.");
+            }
+          } catch (supErr: any) {
+            console.error("[Notification] Errore lettura Supabase SMTP:", supErr.message);
+          }
+        }
 
         if (!user || !pass) {
           console.error("CRITICAL: EMAIL_USER or EMAIL_PASS missing!");
@@ -793,7 +908,7 @@ async function startServer() {
           from: `"Vigil.AI - Sistema di Sicurezza" <${user}>`,
           to: recipient,
           subject: "🚨 ALLERTA SICUREZZA - Rilevamento Emergenza",
-          text: `ATTENZIONE: Il sistema Vigil.AI ha rilevato una possibile emergenza.\n\nDettagli: ${description}\n\nData/Ora: ${new Date().toLocaleString('it-IT')}`,
+          text: `ATTENZIONE: Il sistema Vigil.AI ha rilevato una possibile emergency.\n\nDettagli: ${description}\n\nData/Ora: ${new Date().toLocaleString('it-IT')}`,
           attachments: [
             {
               filename: "fotogramma_emergenza.jpg",
@@ -806,6 +921,15 @@ async function startServer() {
         await transporter.sendMail(mailOptions);
         console.log("Email sent successfully");
       }
+
+      // ── Telegram (sempre, in parallelo all'email) ──────────────────────────
+      // Non blocca la risposta e non fallisce anche se Telegram non è configurato
+      sendTelegramNotification(description, screenshot, telegramChatId, telegramToken).catch((tgErr) => {
+        console.error("[Telegram] Errore non gestito:", tgErr);
+      });
+
+      // ───────────────────────────────────────────────────────────────────────
+
       res.json({ success: true });
     } catch (error: any) {
       console.error("Notification error:", error);
@@ -930,6 +1054,19 @@ async function startServer() {
     res.setHeader('Pragma', 'no-cache');
     res.setHeader('Expires', '0');
     res.end(stream.latestFrame);
+  });
+
+  // Route to simulate and test the setup wizard locally
+  app.get("/setup", (req, res) => {
+    res.sendFile(path.join(process.cwd(), "setup_simulator.html"));
+  });
+
+  app.get("/setup-wizard", (req, res) => {
+    res.sendFile(path.join(process.cwd(), "setup_wizard.html"));
+  });
+
+  app.get("/simulator", (req, res) => {
+    res.sendFile(path.join(process.cwd(), "app_simulator.html"));
   });
 
   // Vite middleware

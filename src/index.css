@@ -61,3 +61,82 @@
       0 0 40px #3a7bd5;
   }
 }
+
+/* Breakpoint per Monitor 3.5" (480x320) e schermi piccoli */
+@media (max-width: 500px), (max-height: 380px) {
+  header.glass {
+    display: none !important;
+  }
+  
+  main {
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+  
+  .pb-20 {
+    padding-bottom: 0 !important;
+  }
+  
+  /* Rendi le schede video a schermo intero */
+  .grid {
+    gap: 0 !important;
+    padding: 0 !important;
+  }
+  
+  .rounded-2xl {
+    border-radius: 0 !important;
+  }
+  
+  /* Compattamento moduli e spazi su display 3.5" */
+  .p-4, .p-6, .p-10, .sm\:p-6, .lg\:p-10 {
+    padding: 0.6rem !important;
+  }
+  
+  .space-y-3 > :not([hidden]) ~ :not([hidden]) {
+    margin-top: 0.4rem !important;
+  }
+  
+  .space-y-4 > :not([hidden]) ~ :not([hidden]) {
+    margin-top: 0.5rem !important;
+  }
+  
+  .space-y-6 > :not([hidden]) ~ :not([hidden]) {
+    margin-top: 0.6rem !important;
+  }
+  
+  .space-y-8 > :not([hidden]) ~ :not([hidden]) {
+    margin-top: 0.8rem !important;
+  }
+  
+  .gap-2 {
+    gap: 0.35rem !important;
+  }
+  
+  .gap-3 {
+    gap: 0.4rem !important;
+  }
+
+  .gap-6 {
+    gap: 0.6rem !important;
+  }
+
+  .gap-8 {
+    gap: 0.8rem !important;
+  }
+
+  input, select, textarea {
+    padding: 0.4rem 0.6rem !important;
+    font-size: 10px !important;
+    border-radius: 8px !important;
+  }
+
+  button {
+    padding-top: 0.5rem !important;
+    padding-bottom: 0.5rem !important;
+  }
+
+  .virtual-keyboard button {
+    padding-top: 0.75rem !important;
+    padding-bottom: 0.75rem !important;
+  }
+}

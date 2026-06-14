@@ -81,8 +81,6 @@
       overflow: hidden;
     }
 
-
-
     /* Form and step layouts */
     .step-content {
       display: none;
@@ -146,7 +144,6 @@
       box-shadow: 0 0 0 3px var(--primary-glow);
     }
 
-    /* Info Badge / Help text */
     .help-text {
       font-size: 11px;
       color: var(--text-muted);
@@ -163,41 +160,52 @@
     }
 
     button {
-      padding: 12px 20px;
-      border-radius: 10px;
+      padding: 14px 24px;
+      border-radius: 12px;
       font-family: var(--font);
-      font-size: 14px;
-      font-weight: 600;
+      font-size: 15px;
+      font-weight: 800;
       cursor: pointer;
-      transition: all 0.2s ease;
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      gap: 8px;
+      gap: 10px;
       outline: none;
       border: none;
+      user-select: none;
+      transition: background 0.15s ease, transform 0.1s ease;
+      position: relative;
     }
 
     .btn-primary {
-      background: var(--primary);
+      background: #5c62ec;
       color: white;
-      box-shadow: 0 4px 12px var(--primary-glow);
       flex-grow: 1;
+      box-shadow: 0 4px 12px rgba(92, 98, 236, 0.3);
     }
 
     .btn-primary:hover:not(:disabled) {
-      background: var(--primary-hover);
-      transform: translateY(-1px);
+      background: #484ecf;
+    }
+
+    .btn-primary:active:not(:disabled) {
+      background: #3a3fbf;
+      transform: scale(0.97);
     }
 
     .btn-secondary {
-      background: rgba(255, 255, 255, 0.05);
+      background: rgba(255, 255, 255, 0.08);
       color: var(--text);
       border: 1px solid var(--border-color);
     }
 
     .btn-secondary:hover:not(:disabled) {
-      background: rgba(255, 255, 255, 0.1);
+      background: rgba(255, 255, 255, 0.12);
+    }
+
+    .btn-secondary:active:not(:disabled) {
+      background: rgba(255, 255, 255, 0.16);
+      transform: scale(0.97);
     }
 
     button:disabled {
@@ -208,7 +216,7 @@
     }
 
     .btn-test {
-      padding: 8px 12px;
+      padding: 6px 12px;
       font-size: 11px;
       background: rgba(92, 98, 236, 0.15);
       color: #9ea2f5;
@@ -219,6 +227,40 @@
 
     .btn-test:hover:not(:disabled) {
       background: rgba(92, 98, 236, 0.25);
+    }
+
+    /* Mobile adjacent navigation square buttons */
+    .mobile-nav-buttons {
+      display: none;
+    }
+    .btn-nav-square {
+      width: 54px !important;
+      height: 54px !important;
+      padding: 0 !important;
+      border-radius: 12px !important;
+      display: flex !important;
+      align-items: center !important;
+      justify-content: center !important;
+      font-size: 24px !important;
+      font-weight: 900 !important;
+      background: rgba(255, 255, 255, 0.05) !important;
+      color: rgba(255, 255, 255, 0.25) !important;
+      border: 1px solid rgba(255, 255, 255, 0.08) !important;
+      cursor: not-allowed !important;
+      outline: none !important;
+      transition: all 0.15s ease !important;
+      box-shadow: none !important;
+    }
+    .btn-nav-square.active {
+      background: #ffffff !important;
+      color: #0c0d14 !important;
+      border: 1px solid #ffffff !important;
+      box-shadow: 0 4px 12px rgba(255, 255, 255, 0.2) !important;
+      cursor: pointer !important;
+    }
+    .btn-nav-square.active:active {
+      transform: scale(0.92) !important;
+      opacity: 0.9 !important;
     }
 
     /* Wi-Fi lists and camera lists */
@@ -332,87 +374,6 @@
       border: 1px solid rgba(245, 158, 11, 0.3);
     }
 
-    /* Camera Section CSS */
-    .camera-discovery-box {
-      margin-bottom: 15px;
-    }
-
-    .discovered-cams-list {
-      display: grid;
-      grid-template-columns: 1fr;
-      gap: 8px;
-      margin-top: 10px;
-      max-height: 150px;
-      overflow-y: auto;
-    }
-
-    .cam-ip-item {
-      padding: 10px 12px;
-      background: rgba(255, 255, 255, 0.02);
-      border: 1px solid var(--border-color);
-      border-radius: 8px;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      cursor: pointer;
-      transition: all 0.2s ease;
-    }
-
-    .cam-ip-item:hover {
-      background: rgba(92, 98, 236, 0.05);
-      border-color: rgba(92, 98, 236, 0.3);
-    }
-
-    .cam-ip-item.selected {
-      background: rgba(92, 98, 236, 0.1);
-      border-color: var(--primary);
-    }
-
-    .preview-container {
-      width: 100%;
-      height: 180px;
-      border-radius: 10px;
-      background: #090a10;
-      border: 1px solid var(--border-color);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      overflow: hidden;
-      margin-top: 10px;
-      position: relative;
-    }
-
-    .preview-img {
-      width: 100%;
-      height: 100%;
-      object-fit: contain;
-    }
-
-    .preview-placeholder {
-      font-size: 12px;
-      color: var(--text-muted);
-      text-align: center;
-      padding: 20px;
-    }
-
-    .configured-list {
-      margin-top: 15px;
-      border-top: 1px solid var(--border-color);
-      padding-top: 15px;
-    }
-
-    .configured-item {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      background: rgba(16, 185, 129, 0.05);
-      border: 1px solid rgba(16, 185, 129, 0.2);
-      padding: 8px 12px;
-      border-radius: 8px;
-      margin-bottom: 6px;
-      font-size: 13px;
-    }
-
     /* Loader animations */
     .spinner {
       width: 18px;
@@ -438,7 +399,7 @@
       100% { opacity: 0.6; }
     }
 
-    /* Small Screen Optimization (e.g. 3.5" display or portrait phone) */
+    /* Small Screen Optimization (e.g. portrait phone) */
     @media (max-width: 480px), (max-height: 520px) {
       body {
         padding: 5px;
@@ -455,9 +416,6 @@
         margin-bottom: 12px;
         font-size: 11px;
       }
-      .stepper {
-        margin-bottom: 15px;
-      }
       .form-group {
         margin-bottom: 10px;
       }
@@ -468,15 +426,134 @@
       .wifi-list {
         max-height: 100px;
       }
-      .preview-container {
-        height: 120px;
-      }
       .button-group {
         margin-top: 15px;
       }
       button {
         padding: 10px 14px;
         font-size: 13px;
+      }
+    }
+
+    /* Special layout for 3.5" display (480x320 px) */
+    @media (max-width: 480px) and (max-height: 350px) {
+      body {
+        padding: 0;
+        align-items: center;
+        overflow: hidden;
+      }
+      .container {
+        border-radius: 0;
+        border: none;
+        padding: 8px 10px;
+        max-width: 480px;
+        height: 320px;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+      }
+      #step-1-title, #step-1-subtitle, #step-2-title, #step-2-subtitle {
+        display: none !important;
+      }
+      /* Custom header for 3.5" screen */
+      .mobile-35-title {
+        display: block !important;
+        font-size: 12px;
+        font-weight: 700;
+        text-align: center;
+        margin-bottom: 6px;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        color: var(--text);
+        background: linear-gradient(135deg, #ffffff 0%, #cacede 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+      }
+      #hostname-group {
+        display: none !important;
+      }
+      /* Swap list with select dropdown */
+      #wifi-list {
+        display: none !important;
+      }
+      #wifi-select {
+        display: block !important;
+      }
+      /* Compact inputs and groups */
+      .form-group {
+        margin-bottom: 5px !important;
+      }
+      input, select {
+        padding: 6px 8px !important;
+        font-size: 14px !important;
+        height: 34px !important;
+      }
+      .button-group {
+        margin-top: 10px !important;
+        width: 100%;
+      }
+      .desktop-btn {
+        display: none !important;
+      }
+      .mobile-nav-buttons {
+        display: flex !important;
+      }
+      /* Shrink virtual keyboard for 3.5" display */
+      .virtual-keyboard {
+        max-width: 480px;
+        padding: 4px;
+        gap: 3px;
+      }
+      .key {
+        height: 30px !important;
+        font-size: 12px !important;
+      }
+      /* Reboot panel 3.5" screen overrides */
+      #reboot-panel {
+        padding: 5px 8px !important;
+      }
+      #reboot-panel h2 {
+        font-size: 15px !important;
+        margin-bottom: 4px !important;
+      }
+      #reboot-panel p {
+        font-size: 11px !important;
+        margin-bottom: 8px !important;
+        line-height: 1.3 !important;
+      }
+      #reboot-panel .reboot-icon-wrap {
+        width: 36px !important;
+        height: 36px !important;
+        margin-bottom: 8px !important;
+      }
+      #reboot-panel .reboot-icon-wrap svg {
+        width: 18px !important;
+        height: 18px !important;
+      }
+      #btn-system-reboot {
+        margin-bottom: 5px !important;
+        height: 32px !important;
+        padding: 6px 12px !important;
+        font-size: 12px !important;
+      }
+      #reboot-panel .note-text {
+        display: none !important;
+      }
+      #countdown-wrapper {
+        margin-top: 5px !important;
+      }
+      #reboot-countdown-box {
+        font-size: 24px !important;
+      }
+      /* Cerca Reti button 3.5" screen overrides */
+      .btn-test {
+        padding: 8px 14px !important;
+        font-size: 13px !important;
+        height: 34px !important;
+        margin-top: 0 !important;
+        display: inline-flex !important;
+        align-items: center !important;
+        justify-content: center !important;
       }
     }
 
@@ -488,7 +565,7 @@
       right: 0;
       margin: 0 auto;
       width: calc(100% - 20px);
-      max-width: 680px; /* Evita deformazioni su schermi grandi mantenendo dimensioni proporzionate */
+      max-width: 680px;
       background: rgba(13, 15, 25, 0.98);
       backdrop-filter: blur(15px);
       -webkit-backdrop-filter: blur(15px);
@@ -514,10 +591,10 @@
       width: 100%;
     }
     .key {
-      background: rgba(255, 255, 255, 0.08);
-      border: 1px solid rgba(255, 255, 255, 0.08);
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0.04) 100%);
+      border: 1px solid rgba(255, 255, 255, 0.06);
       color: #f3f4f6;
-      border-radius: 6px;
+      border-radius: 8px;
       height: 42px;
       display: flex;
       align-items: center;
@@ -527,25 +604,28 @@
       font-weight: 600;
       cursor: pointer;
       user-select: none;
-      transition: background 0.1s ease, transform 0.05s ease;
+      box-shadow: 0 3px 0 rgba(0, 0, 0, 0.4), 0 4px 6px rgba(0, 0, 0, 0.2);
+      transition: transform 0.05s ease, box-shadow 0.05s ease, background 0.1s ease;
       touch-action: manipulation;
     }
     .key:active {
-      background: var(--primary);
-      transform: scale(0.92);
-      border-color: var(--primary);
+      background: linear-gradient(180deg, #6c72ff 0%, #4c52dc 100%);
+      transform: translateY(2px);
+      box-shadow: 0 1px 0 rgba(0, 0, 0, 0.4), 0 1px 2px rgba(0, 0, 0, 0.1);
+      border-color: rgba(255, 255, 255, 0.15);
     }
     .key.wide {
       flex-grow: 2;
-      background: rgba(255, 255, 255, 0.15);
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.18) 0%, rgba(255, 255, 255, 0.08) 100%);
       font-size: 13px;
     }
     .key.action-key {
-      background: var(--primary);
-      border-color: var(--primary);
+      background: linear-gradient(180deg, #6c72ff 0%, #4c52dc 100%);
+      border-color: rgba(255, 255, 255, 0.1);
+      box-shadow: 0 3px 0 #3a3fbf, 0 4px 6px rgba(92, 98, 236, 0.2);
     }
     .key.action-key:active {
-      background: var(--primary-hover);
+      background: linear-gradient(180deg, #7c82ff 0%, #5157e6 100%);
     }
     body.keyboard-open {
       padding-bottom: 280px !important;
@@ -567,25 +647,239 @@
     .btn-keyboard-toggle.active {
       color: var(--primary);
     }
+    @keyframes modalPop {
+      from { opacity: 0; transform: scale(0.9); }
+      to { opacity: 1; transform: scale(1); }
+    }
+
+    /* Home Screen Simulator */
+    #home-panel {
+      display: none;
+      width: 480px;
+      height: 320px;
+      position: absolute;
+      top: 0;
+      left: 0;
+      background: #090a10;
+      color: #f3f4f6;
+      font-family: var(--font);
+      overflow: hidden;
+      z-index: 500;
+    }
+    
+    #home-panel.active {
+      display: flex;
+      flex-direction: column;
+    }
+    
+    /* Top Bar */
+    .home-top-bar {
+      height: 40px;
+      width: 100%;
+      background: rgba(18, 20, 32, 0.95);
+      border-bottom: 1px solid var(--border-color);
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      padding: 0 10px;
+      gap: 12px;
+      z-index: 10;
+    }
+    
+    /* Toolbar Icons */
+    .icon-btn {
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 6px;
+      border-radius: 6px;
+      transition: all 0.2s ease;
+      outline: none;
+    }
+    .icon-btn:hover {
+      color: var(--text);
+      background: rgba(255, 255, 255, 0.05);
+    }
+    .icon-btn.active {
+      color: #5c62ec;
+      background: rgba(92, 98, 236, 0.1);
+    }
+    .icon-btn.danger-active {
+      color: #ef4444;
+      background: rgba(239, 68, 68, 0.1);
+    }
+    
+    /* Cam Navigation Arrows Group */
+    .cam-nav-group {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      margin-left: 6px;
+      border-left: 1px solid var(--border-color);
+      padding-left: 10px;
+    }
+    
+    .cam-nav-btn {
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 900;
+      padding: 2px 6px;
+      border-radius: 4px;
+      transition: all 0.2s ease;
+    }
+    .cam-nav-btn:hover {
+      color: var(--text);
+      background: rgba(255, 255, 255, 0.05);
+    }
+    
+    /* Main Layout Area */
+    .home-main-area {
+      flex: 1;
+      display: flex;
+      position: relative;
+    }
+    
+    /* Sidebar / Left Strip */
+    .home-left-strip {
+      width: 60px;
+      background: rgba(13, 15, 25, 0.65);
+      border-right: 1px solid var(--border-color);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-end; /* Stack bottom-to-top */
+      padding: 10px 0;
+      gap: 12px;
+    }
+    
+    .sidebar-icon {
+      width: 38px;
+      height: 38px;
+      background: rgba(239, 68, 68, 0.1) !important; /* Default/Missing: Red */
+      color: #ef4444 !important;
+      border: 1px solid rgba(239, 68, 68, 0.2) !important;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      outline: none;
+      padding: 0;
+    }
+    .sidebar-icon.active {
+      background: rgba(16, 185, 129, 0.1) !important; /* Present/Active: Green */
+      color: #10b981 !important;
+      border: 1px solid rgba(16, 185, 129, 0.2) !important;
+      box-shadow: 0 0 10px rgba(16, 185, 129, 0.1);
+    }
+    .sidebar-icon:active {
+      transform: scale(0.92);
+    }
+    
+    /* Camera Viewport (Bottom Right aligned) */
+    .cam-viewport {
+      width: 420px;
+      height: 280px;
+      background: #000;
+      position: relative;
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    
+    /* Cam Live Image / Video */
+    .cam-live-feed {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      transition: opacity 0.3s ease;
+    }
+    
+    /* Live Overlay Details */
+    .cam-status-overlay {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      background: rgba(0, 0, 0, 0.6);
+      padding: 3px 6px;
+      border-radius: 4px;
+      font-size: 10px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      letter-spacing: 0.05em;
+      pointer-events: none;
+      z-index: 15;
+    }
+    
+    .live-dot {
+      width: 6px;
+      height: 6px;
+      background: #ef4444;
+      border-radius: 50%;
+      animation: pulse-live 1s infinite alternate;
+    }
+    
+    @keyframes pulse-live {
+      from { opacity: 0.3; }
+      to { opacity: 1; }
+    }
+    
+    /* Live Log Panel Overlay */
+    .live-log-overlay {
+      position: absolute;
+      bottom: 0;
+      right: 0;
+      width: 420px;
+      height: 100px;
+      background: rgba(8, 9, 15, 0.95);
+      border-top: 1px solid var(--border-color);
+      padding: 8px 12px;
+      font-family: monospace;
+      font-size: 9px;
+      color: #34d399;
+      overflow-y: auto;
+      display: none;
+      z-index: 20;
+    }
   </style>
 </head>
 <body>
 
   <div class="container" id="wizard-container">
 
-    <div class="alert alert-error" id="error-alert"></div>
-    <div class="alert alert-success" id="success-alert"></div>
+    <!-- MODALE AVVISI DI TEMA (ERROR / SUCCESS) -->
+    <div id="alert-modal" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: none; justify-content: center; align-items: center; background: rgba(8, 9, 15, 0.85); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); z-index: 10000; padding: 15px;">
+      <div style="background: rgba(22, 24, 38, 0.95); border: 1px solid rgba(255,255,255,0.08); border-radius: 12px; padding: 18px; width: 100%; max-width: 320px; box-shadow: 0 15px 30px rgba(0,0,0,0.6); text-align: center; display: flex; flex-direction: column; align-items: center; gap: 12px; animation: modalPop 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;">
+        <div id="alert-modal-icon-container" style="width: 42px; height: 42px; border-radius: 50%; display: flex; align-items: center; justify-content: center;">
+          <!-- Icon injected dynamically -->
+        </div>
+        <div id="alert-modal-text" style="font-size: 13px; font-weight: 500; color: var(--text); line-height: 1.4; word-break: break-word;"></div>
+        <button type="button" class="btn-primary" style="height: 32px; padding: 6px 20px; font-size: 12px; width: auto; margin-top: 5px; cursor: pointer;" onclick="hideAlerts()">OK</button>
+      </div>
+    </div>
 
     <!-- STEP 1: NETWORK CONFIG -->
     <div class="step-content active" id="step-1-content">
       <header>
-        <h1>Configurazione Rete</h1>
-        <p class="subtitle" style="margin-bottom: 16px; line-height: 1.5;">
+        <h2 class="mobile-35-title" style="display: none;">Inserire la rete e la password</h2>
+        <h1 id="step-1-title">Configurazione Rete</h1>
+        <p class="subtitle" id="step-1-subtitle" style="margin-bottom: 16px; line-height: 1.5;">
           Seleziona la tua rete Wi-Fi locale e inserisci la password per connettere il box, oppure salta se utilizzi un cavo di rete Ethernet.
         </p>
       </header>
 
-      <div class="form-group">
+      <div class="form-group" id="hostname-group">
         <label for="hostname">Nome del Dispositivo (Hostname)</label>
         <div style="position: relative; display: flex; align-items: center;">
           <input type="text" id="hostname" placeholder="vigilai-box" value="vigilai-box" style="padding-right: 44px;">
@@ -599,7 +893,7 @@
       <div class="form-group" style="margin-top: 20px;">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
           <label style="margin-bottom: 0;">Seleziona Rete Wi-Fi</label>
-          <button type="button" class="btn-test" style="margin-top: 0; padding: 4px 8px;" onclick="scanWifi()">
+          <button type="button" class="btn-test" style="margin-top: 0;" onclick="scanWifi()">
             <span id="wifi-scan-loader" class="spinner" style="display: none; width: 10px; height: 10px; border-width: 1px;"></span>
             <span id="wifi-scan-text">Cerca Reti</span>
           </button>
@@ -610,12 +904,20 @@
             Clicca "Cerca Reti" per individuare le connessioni Wi-Fi visibili.
           </div>
         </div>
+
+        <select id="wifi-select" style="display: none; width: 100%;" onchange="handleDropdownSelect()">
+          <option value="">Cerca reti Wi-Fi...</option>
+        </select>
       </div>
 
-      <div class="form-group" id="wifi-password-group" style="display: none;">
-        <label for="wifi-password">Password per <span id="selected-ssid-label" style="color: var(--primary);"></span></label>
+      <div class="form-group" id="wifi-password-group">
+        <label for="wifi-password">Password Wi-Fi <span id="selected-ssid-label" style="color: var(--primary);"></span></label>
         <div style="position: relative; display: flex; align-items: center;">
-          <input type="password" id="wifi-password" placeholder="Inserisci password Wi-Fi" style="padding-right: 44px;">
+          <input type="password" id="wifi-password" placeholder="Inserisci password Wi-Fi" style="padding-right: 72px;">
+          <button type="button" class="btn-password-visibility" onclick="togglePasswordVisibility('wifi-password', this)" style="position: absolute; right: 38px; z-index: 10; background: none; border: none; padding: 6px; color: var(--text-muted); cursor: pointer;" title="Mostra/Nascondi password">
+            <svg class="eye-open" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+            <svg class="eye-closed" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display: none;"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>
+          </button>
           <button type="button" class="btn-keyboard-toggle" onclick="toggleKeyboardFor('wifi-password')" style="position: absolute; right: 8px; z-index: 10;" title="Tastiera virtuale">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2" ry="2"></rect><line x1="6" y1="8" x2="6" y2="8"></line><line x1="10" y1="8" x2="10" y2="8"></line><line x1="14" y1="8" x2="14" y2="8"></line><line x1="18" y1="8" x2="18" y2="8"></line><line x1="6" y1="12" x2="6" y2="12"></line><line x1="18" y1="12" x2="18" y2="12"></line><line x1="7" y1="16" x2="17" y2="16"></line><line x1="10" y1="12" x2="14" y2="12"></line></svg>
           </button>
@@ -623,16 +925,66 @@
       </div>
 
       <div class="button-group" style="margin-top: 25px;">
-        <button type="button" class="btn-secondary" id="btn-skip-wifi" onclick="saveWithoutWifi()">Salta (Usa Ethernet)</button>
-        <button type="button" class="btn-primary" id="btn-connect-wifi" onclick="saveAndConnectWifi()">
-          <span>Salva e Riavvia Box</span>
-        </button>
+        <button type="button" class="btn-secondary desktop-btn" id="btn-skip-wifi" onclick="saveWithoutWifi()">Salta (Usa Ethernet)</button>
+        <button type="button" class="btn-primary desktop-btn" id="btn-connect-wifi" onclick="saveAndConnectWifi()">Salva e Riavvia Box</button>
+        
+        <!-- Mobile adjacent square buttons matching add-camera style -->
+        <div class="mobile-nav-buttons" style="display: none; justify-content: flex-end; gap: 10px; margin-left: auto;">
+          <button type="button" class="btn-nav-square active" id="btn-skip-wifi-mobile" onclick="saveWithoutWifi()" style="width: 50px; height: 50px; padding: 0; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 20px; font-weight: 900; background: #ffffff; color: #0c0d14; border: 1px solid #ffffff; cursor: pointer; transition: all 0.15s; box-shadow: 0 4px 12px rgba(255, 255, 255, 0.2); outline: none;">◀</button>
+          <button type="button" class="btn-nav-square active" id="btn-connect-wifi-mobile" onclick="saveAndConnectWifi()" style="width: 50px; height: 50px; padding: 0; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 20px; font-weight: 900; background: #ffffff; color: #0c0d14; border: 1px solid #ffffff; cursor: pointer; transition: all 0.15s; box-shadow: 0 4px 12px rgba(255, 255, 255, 0.2); outline: none;">▶</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- STEP 2: USER LOGIN (VIGIL.AI CREDENTIALS) -->
+    <div class="step-content" id="step-2-content">
+      <header>
+        <h2 class="mobile-35-title" style="display: none;">Collegamento Account</h2>
+        <h1 id="step-2-title">Configurazione Account</h1>
+        <p class="subtitle" id="step-2-subtitle" style="margin-bottom: 16px; line-height: 1.5;">
+          Accedi con le credenziali registrate sul sito Vigil.AI per collegare questo dispositivo al tuo account.
+        </p>
+      </header>
+
+      <div class="form-group">
+        <label for="login-email">Email / Utente</label>
+        <div style="position: relative; display: flex; align-items: center;">
+          <input type="email" id="login-email" placeholder="Inserisci la tua email" style="padding-right: 44px;">
+          <button type="button" class="btn-keyboard-toggle" onclick="toggleKeyboardFor('login-email')" style="position: absolute; right: 8px; z-index: 10;" title="Tastiera virtuale">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2" ry="2"></rect><line x1="6" y1="8" x2="6" y2="8"></line><line x1="10" y1="8" x2="10" y2="8"></line><line x1="14" y1="8" x2="14" y2="8"></line><line x1="18" y1="8" x2="18" y2="8"></line><line x1="6" y1="12" x2="6" y2="12"></line><line x1="18" y1="12" x2="18" y2="12"></line><line x1="7" y1="16" x2="17" y2="16"></line><line x1="10" y1="12" x2="14" y2="12"></line></svg>
+          </button>
+        </div>
+      </div>
+
+      <div class="form-group" style="margin-top: 15px;">
+        <label for="login-password">Password</label>
+        <div style="position: relative; display: flex; align-items: center;">
+          <input type="password" id="login-password" placeholder="Inserisci la tua password" style="padding-right: 72px;">
+          <button type="button" class="btn-password-visibility" onclick="togglePasswordVisibility('login-password', this)" style="position: absolute; right: 38px; z-index: 10; background: none; border: none; padding: 6px; color: var(--text-muted); cursor: pointer;" title="Mostra/Nascondi password">
+            <svg class="eye-open" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+            <svg class="eye-closed" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display: none;"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>
+          </button>
+          <button type="button" class="btn-keyboard-toggle" onclick="toggleKeyboardFor('login-password')" style="position: absolute; right: 8px; z-index: 10;" title="Tastiera virtuale">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2" ry="2"></rect><line x1="6" y1="8" x2="6" y2="8"></line><line x1="10" y1="8" x2="10" y2="8"></line><line x1="14" y1="8" x2="14" y2="8"></line><line x1="18" y1="8" x2="18" y2="8"></line><line x1="6" y1="12" x2="6" y2="12"></line><line x1="18" y1="12" x2="18" y2="12"></line><line x1="7" y1="16" x2="17" y2="16"></line><line x1="10" y1="12" x2="14" y2="12"></line></svg>
+          </button>
+        </div>
+      </div>
+
+      <div class="button-group" style="margin-top: 25px;">
+        <button type="button" class="btn-secondary desktop-btn" onclick="goToStep(1)">Indietro</button>
+        <button type="button" class="btn-primary desktop-btn" id="btn-login-account" onclick="loginAndSubmitConfig()">Accedi e Completa Setup</button>
+        
+        <!-- Mobile adjacent square buttons matching add-camera style -->
+        <div class="mobile-nav-buttons" style="display: none; justify-content: flex-end; gap: 10px; margin-left: auto;">
+          <button type="button" class="btn-nav-square active" onclick="goToStep(1)" style="width: 50px; height: 50px; padding: 0; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 20px; font-weight: 900; background: #ffffff; color: #0c0d14; border: 1px solid #ffffff; cursor: pointer; transition: all 0.15s; box-shadow: 0 4px 12px rgba(255, 255, 255, 0.2); outline: none;">◀</button>
+          <button type="button" class="btn-nav-square active" id="btn-login-account-mobile" onclick="loginAndSubmitConfig()" style="width: 50px; height: 50px; padding: 0; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 20px; font-weight: 900; background: #ffffff; color: #0c0d14; border: 1px solid #ffffff; cursor: pointer; transition: all 0.15s; box-shadow: 0 4px 12px rgba(255, 255, 255, 0.2); outline: none;">▶</button>
+        </div>
       </div>
     </div>
 
     <!-- SCHERMATA RIAVVIO IN CORSO -->
     <div id="reboot-panel" style="display: none; text-align: center; padding: 30px 10px;">
-      <div style="width: 56px; height: 56px; background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.2); color: var(--success); border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; margin-bottom: 20px;">
+      <div class="reboot-icon-wrap" style="width: 56px; height: 56px; background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.2); color: var(--success); border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; margin-bottom: 20px;">
         <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
           <polyline points="20 6 9 17 4 12"></polyline>
         </svg>
@@ -649,8 +1001,8 @@
         </button>
       </div>
 
-      <p class="subtitle" style="font-size: 12px; margin-top: 10px; line-height: 1.4;">
-        <strong>Nota:</strong> Se il riavvio automatico non risponde, puoi riavviare manualmente il Raspberry Pi scollegando e ricollegando il cavo dell'alimentazione.
+      <p class="subtitle note-text" style="font-size: 12px; margin-top: 10px; line-height: 1.4;">
+        <strong>Nota:</strong> Se il riavvio automatico non risponde, puoi riavviare manualmente il Raspberry Pi scollegando e ricollegando l'alimentazione.
       </p>
 
       <div id="countdown-wrapper" style="display: none; margin-top: 20px;">
@@ -659,9 +1011,542 @@
       </div>
     </div>
 
+    <!-- STEP 3: SIMULATED APP HOME SCREEN -->
+    <div id="home-panel">
+      <!-- Top Bar -->
+      <div class="home-top-bar">
+        <!-- Camera toggle icon -->
+        <button class="icon-btn active" id="btn-toggle-cam" onclick="toggleCamState()" title="Spegni/Accendi Camera">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 7l-7 5 7 5V7z"></path><rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect></svg>
+        </button>
+        <!-- AI on/off icon -->
+        <button class="icon-btn active" id="btn-toggle-ai" onclick="toggleAIState()" title="AI On/Off">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="2" ry="2"></rect><rect x="9" y="9" width="6" height="6"></rect><line x1="9" y1="1" x2="9" y2="4"></line><line x1="15" y1="1" x2="15" y2="4"></line><line x1="9" y1="20" x2="9" y2="23"></line><line x1="15" y1="20" x2="15" y2="23"></line><line x1="20" y1="9" x2="23" y2="9"></line><line x1="20" y1="15" x2="23" y2="15"></line><line x1="1" y1="9" x2="4" y2="9"></line><line x1="1" y1="15" x2="4" y2="15"></line></svg>
+        </button>
+        <!-- Zones icon -->
+        <button class="icon-btn" onclick="showMockAlert('Zone Rilevamento')" title="Zone di Rilevamento">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7V5a2 2 0 0 1 2-2h2"></path><path d="M17 3h2a2 2 0 0 1 2 2v2"></path><path d="M21 17v2a2 2 0 0 1-2 2h-2"></path><path d="M7 21H5a2 2 0 0 1-2-2v-2"></path></svg>
+        </button>
+        <!-- AI Scan overlay toggle button -->
+        <button class="icon-btn" id="btn-toggle-aiscan" onclick="toggleAIScan()" title="AI Realtime Scan">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M22 12h-4M4 12H2M12 2v2M12 22v-2M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8z"/></svg>
+        </button>
+        <!-- Alarms/Events log toggle button -->
+        <button class="icon-btn" id="btn-toggle-events" onclick="toggleEventsLog()" title="Foto Allarmi Rilevati">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>
+        </button>
+        <!-- Config (Gear) icon -->
+        <button class="icon-btn" id="btn-config-gear" onclick="toggleSimulatedConfigModal()" title="Impostazioni">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+        </button>
+        <!-- Add Cam icon -->
+        <button class="icon-btn" id="btn-add-camera" onclick="openAddCameraModal()" title="Aggiungi Telecamera">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+        </button>
+        <!-- Exit icon (moved as the first icon to the left of navigation arrows) -->
+        <button class="icon-btn danger-active" onclick="exitToSetup()" title="Esci ed entra in Setup" style="color: #ef4444; background: rgba(239, 68, 68, 0.1);">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
+        </button>
+        
+        <!-- Navigation arrows (CAM 1, 2...) -->
+        <div class="cam-nav-group">
+          <button class="cam-nav-btn" onclick="switchCamera('prev')">◀</button>
+          <span style="font-size: 10px; font-weight: 800; color: #ffffff;" id="active-cam-label">CAM 1</span>
+          <button class="cam-nav-btn" onclick="switchCamera('next')">▶</button>
+        </div>
+      </div>
+
+      <!-- Main Layout Area -->
+      <div class="home-main-area">
+        <!-- Sidebar / Left Strip (Stacked bottom-to-top) -->
+        <div class="home-left-strip">
+          <!-- Quick Alarm Config Icon (placed above VPN status icon) -->
+          <button class="sidebar-icon active" id="sidebar-quick-alarm-btn" onclick="openAddCameraModalStep3Direct()" title="Configurazione Rapida Allarmi (Solo Pagina 3)" style="background: rgba(16, 185, 129, 0.1) !important; color: #10b981 !important; border: 1px solid rgba(16, 185, 129, 0.2) !important;">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+          </button>
+          
+          <!-- VPN Status Icon (Top-most in the bottom group) -->
+          <button class="sidebar-icon active" id="sidebar-vpn-btn" onclick="toggleVpnSim()" title="Stato VPN (Clicca per Cambiare)">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
+          </button>
+          
+          <!-- Site Link QR Code Icon (Middle) -->
+          <button class="sidebar-icon active" onclick="showSiteQrSim()" title="QR Link Sito Web">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><rect x="7" y="7" width="4" height="4"></rect><rect x="13" y="7" width="4" height="4"></rect><rect x="7" y="13" width="4" height="4"></rect><line x1="13" y1="13" x2="13" y2="13"></line><line x1="17" y1="13" x2="17" y2="13"></line><line x1="13" y1="17" x2="17" y2="17"></line></svg>
+          </button>
+          
+          <!-- ApiKey Icon (Bottom-most) -->
+          <button class="sidebar-icon active" id="sidebar-apikey-btn" onclick="toggleApiKeySim()" title="Stato ApiKey Gemini (Clicca per Cambiare)">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"></path></svg>
+          </button>
+        </div>
+
+        <!-- Camera Viewport (Bottom Right aligned) -->
+        <div class="cam-viewport">
+          <div class="cam-status-overlay" id="cam-status-overlay">
+            <div class="live-dot"></div>
+            <span>LIVE</span>
+          </div>
+          
+          <img src="/mock_camera_feed.png" id="camera-feed-img" class="cam-live-feed" alt="Surveillance feed">
+          
+          <div id="cam-off-screen" style="display: none; flex-direction: column; align-items: center; justify-content: center; gap: 10px; height: 100%;">
+            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--text-muted);"><path d="M16 16v1a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h2m5.66 0H14a2 2 0 0 1 2 2v3.34l1 1L23 7v10l-2.58-1.84M1 1l22 22"></path></svg>
+            <span style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em;">Camera Spenta</span>
+          </div>
+          
+          <!-- Terminal/Log Panel overlay -->
+          <div class="live-log-overlay" id="live-log-overlay"></div>
+
+          <!-- AI Realtime Scan overlay (Bounding boxes & detection details) -->
+          <div id="ai-scan-overlay" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: none; pointer-events: none; z-index: 1800;">
+            <div id="ai-box-person" style="position: absolute; border: 2px solid #ef4444; border-radius: 4px; top: 30px; left: 100px; width: 120px; height: 190px; box-shadow: 0 0 8px rgba(239, 68, 68, 0.4);">
+              <span style="position: absolute; top: -14px; left: -2px; background: #ef4444; color: white; font-size: 7px; font-weight: 800; padding: 1px 4px; border-radius: 2px; font-family: monospace;">PERSONA 98%</span>
+            </div>
+            <div id="ai-box-car" style="position: absolute; border: 2px solid #3b82f6; border-radius: 4px; top: 80px; right: 20px; width: 140px; height: 90px; box-shadow: 0 0 8px rgba(59, 130, 246, 0.4);">
+              <span style="position: absolute; top: -14px; left: -2px; background: #3b82f6; color: white; font-size: 7px; font-weight: 800; padding: 1px 4px; border-radius: 2px; font-family: monospace;">VEICOLO 94%</span>
+            </div>
+            <div id="ai-scan-status-strip" style="position: absolute; bottom: 8px; left: 8px; background: rgba(8, 9, 15, 0.85); border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; padding: 3px 6px; font-family: monospace; font-size: 7px; color: #60a5fa; pointer-events: auto;">
+              AI: ANALISI MODELLO IN CORSO (FPS: 18 - LATENZA: 34ms)
+            </div>
+          </div>
+
+          <!-- Alarms events list overlay (Photos & Description slider) -->
+          <div id="events-log-overlay" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: none; flex-direction: column; background: rgba(9, 10, 16, 0.96); z-index: 1900; padding: 8px 10px; box-sizing: border-box;">
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; border-bottom: 1px solid rgba(255,255,255,0.06); padding-bottom: 3px;">
+              <span style="font-size: 8.5px; font-weight: 800; text-transform: uppercase; color: #f59e0b; letter-spacing: 0.05em; display: flex; align-items: center; gap: 4px;">
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+                Log Eventi Critici
+              </span>
+              <span id="event-slider-counter" style="font-size: 8px; color: var(--text-muted); font-family: monospace;">1 di 3</span>
+            </div>
+
+            <div style="flex: 1; display: flex; gap: 8px; min-height: 0; align-items: center; position: relative;">
+              <button type="button" onclick="slideEvent('prev')" style="width: 18px; height: 32px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; color: #fff; display: flex; align-items: center; justify-content: center; font-size: 9px; cursor: pointer; user-select: none; z-index: 10; position: absolute; left: 0; outline: none;">◀</button>
+              
+              <div style="flex: 1; display: flex; gap: 8px; height: 100%; padding: 0 22px; box-sizing: border-box;">
+                <div style="width: 130px; height: 100%; border-radius: 6px; border: 1px solid rgba(255,255,255,0.08); background: #000; overflow: hidden; display: flex; align-items: center; justify-content: center; flex-shrink: 0; position: relative;">
+                  <img id="event-slider-img" src="/mock_camera_feed.png" style="width: 100%; height: 100%; object-fit: cover;" alt="Alarm Frame">
+                  <span id="event-slider-badge" style="position: absolute; bottom: 4px; left: 4px; background: #ef4444; color: white; font-size: 6px; font-weight: 800; padding: 1px 3px; border-radius: 2px; text-transform: uppercase;">Intrusione</span>
+                </div>
+                <div style="flex: 1; display: flex; flex-direction: column; justify-content: center; gap: 3px; min-width: 0;">
+                  <div style="font-size: 10px; font-weight: 700; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" id="event-slider-title">CAM 1 - Giardino Retro</div>
+                  <div style="font-size: 8px; color: var(--text-muted); font-family: monospace;" id="event-slider-time">Oggi, 19:12:04</div>
+                  <div style="height: 1px; background: rgba(255,255,255,0.06); margin: 2px 0;"></div>
+                  <div style="font-size: 8px; color: #e5e7eb; line-height: 1.35; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical;" id="event-slider-desc">Persona sospetta rilevata vicino alla recinzione esterna. Rilevato movimento anomalo prolungato.</div>
+                </div>
+              </div>
+
+              <button type="button" onclick="slideEvent('next')" style="width: 18px; height: 32px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; color: #fff; display: flex; align-items: center; justify-content: center; font-size: 9px; cursor: pointer; user-select: none; z-index: 10; position: absolute; right: 0; outline: none;">▶</button>
+            </div>
+
+            <div style="margin-top: 5px;">
+              <button type="button" onclick="closeEventsLog()" style="width: 100%; height: 22px; padding: 0; background: rgba(255,255,255,0.08); color: #fff; font-size: 8px; font-weight: 800; text-transform: uppercase; border-radius: 5px; border: 1px solid rgba(255,255,255,0.1); cursor: pointer; outline: none;">Chiudi Log Allarmi</button>
+            </div>
+          </div>
+        </div> <!-- Close cam-viewport -->
+          
+        <!-- Simulated Add Camera Modal Overlay (Paginated Wizard) placed under home-main-area -->
+        <div id="simulated-add-camera-modal" style="position: absolute; top: 0; left: 60px; width: 360px; height: 280px; display: none; flex-direction: column; background: rgba(9, 10, 16, 0.98); z-index: 2100; padding: 6px 8px; border-radius: 0; box-sizing: border-box; pointer-events: auto;">
+            <!-- Confirmation modal sub-overlay -->
+            <div id="simulated-add-cam-confirm-modal" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: none; flex-direction: column; justify-content: center; align-items: center; background: rgba(9, 10, 16, 0.95); z-index: 2500; padding: 15px; text-align: center; box-sizing: border-box;">
+              <div style="width: 32px; height: 32px; background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.2); color: var(--success); border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; margin-bottom: 8px;">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+              </div>
+              <h4 style="font-size: 14px; font-weight: bold; margin-bottom: 4px; color: #fff;">Salvataggio Completato!</h4>
+              <p style="font-size: 8.5px; color: var(--text-muted); line-height: 1.3; margin-bottom: 10px;" id="confirm-modal-detail-text">La telecamera è stata configurata.</p>
+              <button type="button" class="btn-primary" style="height: 36px; width: 100%; max-width: 240px; font-size: 13px; border-radius: 8px; font-weight: bold; padding: 0; letter-spacing: 0.03em;" onclick="dismissAddCamConfirmModal()">OK</button>
+            </div>
+
+            <!-- Header slider layout -->
+            <div id="add-cam-header-bar" style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 5px; border-bottom: 1px solid rgba(255,255,255,0.06); padding-bottom: 3px;">
+              <span id="add-cam-header-title" style="font-size: 8.5px; font-weight: 800; text-transform: uppercase; color: #5c62ec; letter-spacing: 0.05em;">Nuova Telecamera</span>
+              <span id="add-cam-step-counter" style="font-size: 8px; color: var(--text-muted); font-family: monospace;">Pagina 1 di 3</span>
+            </div>
+
+            <!-- Steps contents (takes all available height) -->
+            <div style="flex: 1; display: flex; flex-direction: column; justify-content: space-between; min-height: 0; box-sizing: border-box; padding-bottom: 4px;">
+              
+              <!-- Step 1: Info Generali (Nome, Posizione, Tipo Segnale) -->
+              <div id="add-cam-step-1" class="add-cam-step" style="display: flex; flex-direction: column; gap: 4px; width: 100%;">
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px;">
+                  <div>
+                    <label style="font-size: 7px; margin-bottom: 1px; display: block; text-transform: uppercase; color: var(--text-muted);">Nome Identificativo</label>
+                    <div style="position: relative; display: flex; align-items: center; width: 100%;">
+                      <input type="text" id="add-cam-name" value="Tapo C220" style="padding: 3px 20px 3px 6px; font-size: 9px; height: 20px; background: rgba(0,0,0,0.3); border-radius: 4px; border: 1px solid rgba(255,255,255,0.08); width: 100%; color: #fff;" />
+                      <button type="button" class="btn-keyboard-toggle" onclick="toggleKeyboardFor('add-cam-name')" style="position: absolute; right: 4px; z-index: 10; background: none; border: none; padding: 2px; color: var(--text-muted); cursor: pointer; display: flex; align-items: center;" title="Tastiera virtuale">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2" ry="2"></rect><line x1="6" y1="8" x2="6" y2="8"></line><line x1="10" y1="8" x2="10" y2="8"></line><line x1="14" y1="8" x2="14" y2="8"></line><line x1="18" y1="8" x2="18" y2="8"></line><line x1="6" y1="12" x2="6" y2="12"></line><line x1="18" y1="12" x2="18" y2="12"></line><line x1="7" y1="16" x2="17" y2="16"></line><line x1="10" y1="12" x2="14" y2="12"></line></svg>
+                      </button>
+                    </div>
+                  </div>
+                  <div>
+                    <label style="font-size: 7px; margin-bottom: 1px; display: block; text-transform: uppercase; color: var(--text-muted);">Posizione Fisica</label>
+                    <div style="position: relative; display: flex; align-items: center; width: 100%;">
+                      <input type="text" id="add-cam-pos" value="Ingresso" style="padding: 3px 20px 3px 6px; font-size: 9px; height: 20px; background: rgba(0,0,0,0.3); border-radius: 4px; border: 1px solid rgba(255,255,255,0.08); width: 100%; color: #fff;" />
+                      <button type="button" class="btn-keyboard-toggle" onclick="toggleKeyboardFor('add-cam-pos')" style="position: absolute; right: 4px; z-index: 10; background: none; border: none; padding: 2px; color: var(--text-muted); cursor: pointer; display: flex; align-items: center;" title="Tastiera virtuale">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2" ry="2"></rect><line x1="6" y1="8" x2="6" y2="8"></line><line x1="10" y1="8" x2="10" y2="8"></line><line x1="14" y1="8" x2="14" y2="8"></line><line x1="18" y1="8" x2="18" y2="8"></line><line x1="6" y1="12" x2="6" y2="12"></line><line x1="18" y1="12" x2="18" y2="12"></line><line x1="7" y1="16" x2="17" y2="16"></line><line x1="10" y1="12" x2="14" y2="12"></line></svg>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+                <div>
+                  <label style="font-size: 7px; margin-bottom: 2px; display: block; text-transform: uppercase; color: var(--text-muted);">Tipo Segnale</label>
+                  <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 5px;">
+                    <input type="hidden" id="add-cam-type" value="ONVIF" />
+                    <!-- Tasti stile applicazione grandi e larghi il doppio in altezza (52px) -->
+                    <button type="button" id="btn-cam-type-onvif" onclick="setCamType('ONVIF')" style="height: 52px; display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 10px; font-weight: 800; border-radius: 6px; border: 1px solid #5c62ec; background: rgba(92,98,236,0.25); color: #fff; cursor: pointer; transition: all 0.15s; outline: none;">
+                      <span>ONVIF</span>
+                    </button>
+                    <button type="button" id="btn-cam-type-tapo" onclick="setCamType('Tapo')" style="height: 52px; display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 10px; font-weight: 800; border-radius: 6px; border: 1px solid rgba(255,255,255,0.08); background: rgba(255,255,255,0.04); color: #8e95a5; cursor: pointer; transition: all 0.15s; outline: none;">
+                      <span>TAPO</span>
+                    </button>
+                    <button type="button" id="btn-cam-type-ipcam" onclick="setCamType('IP Cam')" style="height: 52px; display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 9.5px; font-weight: 800; border-radius: 6px; border: 1px solid rgba(255,255,255,0.08); background: rgba(255,255,255,0.04); color: #8e95a5; cursor: pointer; transition: all 0.15s; outline: none;">
+                      <span>IP CAM</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Step 2: Configurazione Protocollo (IP, Porta, Credenziali, Path) -->
+              <div id="add-cam-step-2" class="add-cam-step" style="display: none; flex-direction: column; gap: 4px; width: 100%;">
+                <div style="display: grid; grid-template-columns: 1.3fr 0.7fr; gap: 6px;">
+                  <div>
+                    <label style="font-size: 7px; margin-bottom: 1px; display: block; text-transform: uppercase; color: var(--text-muted);">Indirizzo IP</label>
+                    <div style="position: relative; display: flex; align-items: center; width: 100%;">
+                      <input type="text" id="add-cam-ip" value="192.168.1." style="padding: 3px 20px 3px 6px; font-size: 9px; height: 20px; background: rgba(0,0,0,0.3); border-radius: 4px; border: 1px solid rgba(255,255,255,0.08); width: 100%; color: #fff; font-family: monospace;" />
+                      <button type="button" class="btn-keyboard-toggle" onclick="toggleKeyboardFor('add-cam-ip')" style="position: absolute; right: 4px; z-index: 10; background: none; border: none; padding: 2px; color: var(--text-muted); cursor: pointer; display: flex; align-items: center;" title="Tastiera virtuale">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2" ry="2"></rect><line x1="6" y1="8" x2="6" y2="8"></line><line x1="10" y1="8" x2="10" y2="8"></line><line x1="14" y1="8" x2="14" y2="8"></line><line x1="18" y1="8" x2="18" y2="8"></line><line x1="6" y1="12" x2="6" y2="12"></line><line x1="18" y1="12" x2="18" y2="12"></line><line x1="7" y1="16" x2="17" y2="16"></line><line x1="10" y1="12" x2="14" y2="12"></line></svg>
+                      </button>
+                    </div>
+                  </div>
+                  <div>
+                    <label style="font-size: 7px; margin-bottom: 1px; display: block; text-transform: uppercase; color: var(--text-muted);">Porta RTSP</label>
+                    <div style="position: relative; display: flex; align-items: center; width: 100%;">
+                      <input type="text" id="add-cam-port" value="554" style="padding: 3px 20px 3px 6px; font-size: 9px; height: 20px; background: rgba(0,0,0,0.3); border-radius: 4px; border: 1px solid rgba(255,255,255,0.08); width: 100%; color: #fff; font-family: monospace;" />
+                      <button type="button" class="btn-keyboard-toggle" onclick="toggleKeyboardFor('add-cam-port')" style="position: absolute; right: 4px; z-index: 10; background: none; border: none; padding: 2px; color: var(--text-muted); cursor: pointer; display: flex; align-items: center;" title="Tastiera virtuale">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2" ry="2"></rect><line x1="6" y1="8" x2="6" y2="8"></line><line x1="10" y1="8" x2="10" y2="8"></line><line x1="14" y1="8" x2="14" y2="8"></line><line x1="18" y1="8" x2="18" y2="8"></line><line x1="6" y1="12" x2="6" y2="12"></line><line x1="18" y1="12" x2="18" y2="12"></line><line x1="7" y1="16" x2="17" y2="16"></line><line x1="10" y1="12" x2="14" y2="12"></line></svg>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px;">
+                  <div>
+                    <label style="font-size: 7px; margin-bottom: 1px; display: block; text-transform: uppercase; color: var(--text-muted);">Username</label>
+                    <div style="position: relative; display: flex; align-items: center; width: 100%;">
+                      <input type="text" id="add-cam-user" value="Testcamera" style="padding: 3px 20px 3px 6px; font-size: 9px; height: 20px; background: rgba(0,0,0,0.3); border-radius: 4px; border: 1px solid rgba(255,255,255,0.08); width: 100%; color: #fff;" />
+                      <button type="button" class="btn-keyboard-toggle" onclick="toggleKeyboardFor('add-cam-user')" style="position: absolute; right: 4px; z-index: 10; background: none; border: none; padding: 2px; color: var(--text-muted); cursor: pointer; display: flex; align-items: center;" title="Tastiera virtuale">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2" ry="2"></rect><line x1="6" y1="8" x2="6" y2="8"></line><line x1="10" y1="8" x2="10" y2="8"></line><line x1="14" y1="8" x2="14" y2="8"></line><line x1="18" y1="8" x2="18" y2="8"></line><line x1="6" y1="12" x2="6" y2="12"></line><line x1="18" y1="12" x2="18" y2="12"></line><line x1="7" y1="16" x2="17" y2="16"></line><line x1="10" y1="12" x2="14" y2="12"></line></svg>
+                      </button>
+                    </div>
+                  </div>
+                  <div>
+                    <label style="font-size: 7px; margin-bottom: 1px; display: block; text-transform: uppercase; color: var(--text-muted);">Password</label>
+                    <div style="position: relative; display: flex; align-items: center; width: 100%;">
+                      <input type="password" id="add-cam-pass" value="password" style="padding: 3px 20px 3px 6px; font-size: 9px; height: 20px; background: rgba(0,0,0,0.3); border-radius: 4px; border: 1px solid rgba(255,255,255,0.08); width: 100%; color: #fff;" />
+                      <button type="button" class="btn-keyboard-toggle" onclick="toggleKeyboardFor('add-cam-pass')" style="position: absolute; right: 4px; z-index: 10; background: none; border: none; padding: 2px; color: var(--text-muted); cursor: pointer; display: flex; align-items: center;" title="Tastiera virtuale">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2" ry="2"></rect><line x1="6" y1="8" x2="6" y2="8"></line><line x1="10" y1="8" x2="10" y2="8"></line><line x1="14" y1="8" x2="14" y2="8"></line><line x1="18" y1="8" x2="18" y2="8"></line><line x1="6" y1="12" x2="6" y2="12"></line><line x1="18" y1="12" x2="18" y2="12"></line><line x1="7" y1="16" x2="17" y2="16"></line><line x1="10" y1="12" x2="14" y2="12"></line></svg>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+                <div>
+                  <label style="font-size: 7px; margin-bottom: 1px; display: block; text-transform: uppercase; color: var(--text-muted);">Percorso (Path)</label>
+                  <div style="position: relative; display: flex; align-items: center; width: 100%;">
+                    <input type="text" id="add-cam-path" value="/stream1" style="padding: 3px 20px 3px 6px; font-size: 9px; height: 20px; background: rgba(0,0,0,0.3); border-radius: 4px; border: 1px solid rgba(255,255,255,0.08); width: 100%; color: #fff; font-family: monospace;" />
+                    <button type="button" class="btn-keyboard-toggle" onclick="toggleKeyboardFor('add-cam-path')" style="position: absolute; right: 4px; z-index: 10; background: none; border: none; padding: 2px; color: var(--text-muted); cursor: pointer; display: flex; align-items: center;" title="Tastiera virtuale">
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2" ry="2"></rect><line x1="6" y1="8" x2="6" y2="8"></line><line x1="10" y1="8" x2="10" y2="8"></line><line x1="14" y1="8" x2="14" y2="8"></line><line x1="18" y1="8" x2="18" y2="8"></line><line x1="6" y1="12" x2="6" y2="12"></line><line x1="18" y1="12" x2="18" y2="12"></line><line x1="7" y1="16" x2="17" y2="16"></line><line x1="10" y1="12" x2="14" y2="12"></line></svg>
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Step 3: Trigger Allarmi AI Attivi (Occupano tutta l'area disponibile con altezza estesa) -->
+              <div id="add-cam-step-3" class="add-cam-step" style="display: none; flex-direction: column; gap: 3px; width: 100%; flex-grow: 1;">
+                <!-- Hidden inputs per conservare lo stato booleano degli allarmi -->
+                <input type="hidden" id="alarm-intrusione" value="true" />
+                <input type="hidden" id="alarm-violenza" value="false" />
+                <input type="hidden" id="alarm-incendio" value="true" />
+                <input type="hidden" id="alarm-fumo" value="true" />
+                <input type="hidden" id="alarm-dpi" value="false" />
+                <input type="hidden" id="alarm-cadute" value="false" />
+                <input type="hidden" id="alarm-allagamento" value="false" />
+                <input type="hidden" id="alarm-terremoto" value="false" />
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: repeat(4, 34px); gap: 5px; width: 100%; flex-grow: 1; align-content: center;">
+                  <!-- Pulsante Intrusione -->
+                  <button type="button" id="btn-alarm-intrusione" onclick="toggleAlarmSim('intrusione')"
+                    style="height: 34px; font-size: 11.5px; font-weight: bold; border-radius: 5px; border: 1px solid #10b981; background: rgba(16,185,129,0.15); color: #10b981; cursor: pointer; outline: none; padding: 0; pointer-events: auto;">
+                    Intrusione
+                  </button>
+                  <!-- Pulsante Violenza -->
+                  <button type="button" id="btn-alarm-violenza" onclick="toggleAlarmSim('violenza')"
+                    style="height: 34px; font-size: 11.5px; font-weight: bold; border-radius: 5px; border: 1px solid rgba(255,255,255,0.06); background: rgba(255,255,255,0.04); color: #8e95a5; cursor: pointer; outline: none; padding: 0; pointer-events: auto;">
+                    Violenza
+                  </button>
+                  <!-- Pulsante Incendio -->
+                  <button type="button" id="btn-alarm-incendio" onclick="toggleAlarmSim('incendio')"
+                    style="height: 34px; font-size: 11.5px; font-weight: bold; border-radius: 5px; border: 1px solid #10b981; background: rgba(16,185,129,0.15); color: #10b981; cursor: pointer; outline: none; padding: 0; pointer-events: auto;">
+                    Incendio
+                  </button>
+                  <!-- Pulsante Fumo -->
+                  <button type="button" id="btn-alarm-fumo" onclick="toggleAlarmSim('fumo')"
+                    style="height: 34px; font-size: 11.5px; font-weight: bold; border-radius: 5px; border: 1px solid #10b981; background: rgba(16,185,129,0.15); color: #10b981; cursor: pointer; outline: none; padding: 0; pointer-events: auto;">
+                    Fumo
+                  </button>
+                  <!-- Pulsante DPI -->
+                  <button type="button" id="btn-alarm-dpi" onclick="toggleAlarmSim('dpi')"
+                    style="height: 34px; font-size: 11.5px; font-weight: bold; border-radius: 5px; border: 1px solid rgba(255,255,255,0.06); background: rgba(255,255,255,0.04); color: #8e95a5; cursor: pointer; outline: none; padding: 0; pointer-events: auto;">
+                    DPI
+                  </button>
+                  <!-- Pulsante Cadute -->
+                  <button type="button" id="btn-alarm-cadute" onclick="toggleAlarmSim('cadute')"
+                    style="height: 34px; font-size: 11.5px; font-weight: bold; border-radius: 5px; border: 1px solid rgba(255,255,255,0.06); background: rgba(255,255,255,0.04); color: #8e95a5; cursor: pointer; outline: none; padding: 0; pointer-events: auto;">
+                    Cadute
+                  </button>
+                  <!-- Pulsante Allagamento -->
+                  <button type="button" id="btn-alarm-allagamento" onclick="toggleAlarmSim('allagamento')"
+                    style="height: 34px; font-size: 11.5px; font-weight: bold; border-radius: 5px; border: 1px solid rgba(255,255,255,0.06); background: rgba(255,255,255,0.04); color: #8e95a5; cursor: pointer; outline: none; padding: 0; pointer-events: auto;">
+                    Allagamento
+                  </button>
+                  <!-- Pulsante Terremoto -->
+                  <button type="button" id="btn-alarm-terremoto" onclick="toggleAlarmSim('terremoto')"
+                    style="height: 34px; font-size: 11.5px; font-weight: bold; border-radius: 5px; border: 1px solid rgba(255,255,255,0.06); background: rgba(255,255,255,0.04); color: #8e95a5; cursor: pointer; outline: none; padding: 0; pointer-events: auto;">
+                    Terremoto
+                  </button>
+                </div>
+              </div>
+
+              <!-- Navigation Controls: Bottom Right aligned like the setup initial wizard -->
+              <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 6px;">
+                <button type="button" id="btn-add-cam-quick-save" onclick="slideAddCamStep('next')" class="btn-primary" style="display: none; height: 50px; width: 100%; font-size: 13px; font-weight: 800; border-radius: 10px; background: #10b981; border: 1px solid #10b981; color: #ffffff; cursor: pointer; box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3); outline: none;">Salva e Chiudi</button>
+                <button type="button" id="btn-add-cam-prev" onclick="slideAddCamStep('prev')" class="btn-nav-square active" style="width: 50px; height: 50px; padding: 0; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 20px; font-weight: 900; background: #ffffff; color: #0c0d14; border: 1px solid #ffffff; cursor: pointer; transition: all 0.15s; box-shadow: 0 4px 12px rgba(255, 255, 255, 0.2); outline: none;">◀</button>
+                <button type="button" id="btn-add-cam-next" onclick="slideAddCamStep('next')" class="btn-nav-square active" style="width: 50px; height: 50px; padding: 0; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 20px; font-weight: 900; background: #ffffff; color: #0c0d14; border: 1px solid #ffffff; cursor: pointer; transition: all 0.15s; box-shadow: 0 4px 12px rgba(255, 255, 255, 0.2); outline: none;">▶</button>
+              </div>
+
+            </div><!-- end flex wrapper -->
+          </div><!-- end simulated-add-camera-modal -->
+
+          <!-- Simulated Config Modal Overlay -->
+          <div id="simulated-config-modal" style="position: absolute; top: -5px; left: 60px; width: 420px; height: 285px; display: none; flex-direction: column; background: rgba(9, 10, 16, 0.97); z-index: 2000; padding: 8px 10px 0px 10px; border-radius: 0; box-sizing: border-box; pointer-events: auto;">
+            
+            <!-- 5 Pulsanti Quadrati su 1 Riga con Icona + Label -->
+            <div style="display: flex; gap: 5px; margin-bottom: 8px;">
+
+              <!-- AI APIKEY -->
+              <button type="button" onclick="setSimulatedTab('ai')" id="btn-sim-tab-ai"
+                style="flex: 1; aspect-ratio: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
+                       border-radius: 9px; border: 1px solid rgba(255,255,255,0.12); background: rgba(92,98,236,0.2);
+                       color: #9ea2f5; cursor: pointer; transition: all 0.15s; padding: 4px 2px;">
+                <!-- Icon: Brain/Chip -->
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/>
+                  <line x1="9" y1="1" x2="9" y2="4"/><line x1="15" y1="1" x2="15" y2="4"/>
+                  <line x1="9" y1="20" x2="9" y2="23"/><line x1="15" y1="20" x2="15" y2="23"/>
+                  <line x1="20" y1="9" x2="23" y2="9"/><line x1="20" y1="15" x2="23" y2="15"/>
+                  <line x1="1" y1="9" x2="4" y2="9"/><line x1="1" y1="15" x2="4" y2="15"/>
+                </svg>
+                <span style="font-size: 6.5px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.03em; text-align: center; line-height: 1.1;">AI<br>APIKEY</span>
+              </button>
+
+              <!-- EMAIL -->
+              <button type="button" onclick="setSimulatedTab('email')" id="btn-sim-tab-email"
+                style="flex: 1; aspect-ratio: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
+                       border-radius: 9px; border: 1px solid rgba(255,255,255,0.06); background: rgba(255,255,255,0.04);
+                       color: #6b7280; cursor: pointer; transition: all 0.15s; padding: 4px 2px;">
+                <!-- Icon: Mail -->
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/>
+                  <polyline points="22,6 12,13 2,6"/>
+                </svg>
+                <span style="font-size: 6.5px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.03em; text-align: center; line-height: 1.1;">EMAIL<br>DEST.</span>
+              </button>
+
+              <!-- TELEGRAM -->
+              <button type="button" onclick="setSimulatedTab('telegram')" id="btn-sim-tab-telegram"
+                style="flex: 1; aspect-ratio: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
+                       border-radius: 9px; border: 1px solid rgba(255,255,255,0.06); background: rgba(255,255,255,0.04);
+                       color: #6b7280; cursor: pointer; transition: all 0.15s; padding: 4px 2px;">
+                <!-- Icon: Paper Plane (Telegram) -->
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <line x1="22" y1="2" x2="11" y2="13"/>
+                  <polygon points="22 2 15 22 11 13 2 9 22 2"/>
+                </svg>
+                <span style="font-size: 6.5px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.03em; text-align: center; line-height: 1.1;">ID<br>TELEGR.</span>
+              </button>
+
+              <!-- ANTI-SLEEP -->
+              <button type="button" onclick="setSimulatedTab('sleep')" id="btn-sim-tab-sleep"
+                style="flex: 1; aspect-ratio: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
+                       border-radius: 9px; border: 1px solid rgba(255,255,255,0.06); background: rgba(255,255,255,0.04);
+                       color: #6b7280; cursor: pointer; transition: all 0.15s; padding: 4px 2px;">
+                <!-- Icon: Moon/Sleep -->
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+                </svg>
+                <span style="font-size: 6.5px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.03em; text-align: center; line-height: 1.1;">ANTI-<br>SLEEP</span>
+              </button>
+
+              <!-- TEST ALARM -->
+              <button type="button" onclick="setSimulatedTab('test')" id="btn-sim-tab-test"
+                style="flex: 1; aspect-ratio: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
+                       border-radius: 9px; border: 1px solid rgba(255,255,255,0.06); background: rgba(255,255,255,0.04);
+                       color: #6b7280; cursor: pointer; transition: all 0.15s; padding: 4px 2px;">
+                <!-- Icon: Bell -->
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+                  <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+                </svg>
+                <span style="font-size: 6.5px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.03em; text-align: center; line-height: 1.1;">TEST<br>ALARM</span>
+              </button>
+
+            </div>
+
+            <div style="height: 1px; background: rgba(255,255,255,0.06); margin-bottom: 7px;"></div>
+
+            <!-- Contents Area -->
+            <div style="flex-grow: 1; overflow: hidden; display: flex; flex-direction: column;">
+
+              <!-- AI Content: grid 2 col, QR spans entrambe le righe -->
+              <div id="sim-content-ai" class="sim-tab-content"
+                style="display: grid; grid-template-columns: 1fr 60px; grid-template-rows: auto auto; gap: 4px 8px; align-items: center;">
+                <!-- Riga 1 col 1: Motore AI -->
+                <div style="grid-column:1; grid-row:1;">
+                  <label style="font-size: 8px; margin-bottom: 2px; display: block; text-transform: uppercase; color: var(--text-muted);">Motore AI</label>
+                  <select style="padding: 4px 8px; font-size: 10px; height: 22px; background: rgba(0,0,0,0.3); border-radius: 5px; border: 1px solid rgba(255,255,255,0.08); width: 100%; color: #fff;">
+                    <option>Gemini 3.0 Flash</option>
+                  </select>
+                </div>
+                <!-- QR Code: col 2, span 2 righe -->
+                <a href="https://aistudio.google.com/app/apikey" target="_blank"
+                  style="grid-column:2; grid-row:1/3; text-decoration:none; display:flex; flex-direction:column; align-items:center; gap:3px; align-self:stretch; justify-content:center;">
+                  <img
+                    src="https://api.qrserver.com/v1/create-qr-code/?size=60x60&data=https://aistudio.google.com/app/apikey&bgcolor=0a0b12&color=ffffff&margin=3"
+                    alt="QR Google AI Studio" width="60" height="60"
+                    style="border-radius:6px; border:1px solid rgba(255,255,255,0.1); display:block;"
+                  />
+                  <span style="font-size:6px; color:#6b7280; text-align:center; line-height:1.2; text-transform:uppercase;">Scan<br>API Key</span>
+                </a>
+                <!-- Riga 2 col 1: Chiave API -->
+                <div style="grid-column:1; grid-row:2;">
+                  <label style="font-size: 8px; margin-bottom: 2px; display: block; text-transform: uppercase; color: var(--text-muted);">Chiave API</label>
+                  <input type="password" value="AIzaSyA1B2C3D4E5F6G7H8I9J0K"
+                    style="padding: 4px 8px; font-size: 10px; height: 22px; background: rgba(0,0,0,0.3); border-radius: 5px; border: 1px solid rgba(255,255,255,0.08); width: 100%; color: #fff; font-family: monospace;" />
+                </div>
+              </div>
+
+              <!-- Email Content -->
+              <div id="sim-content-email" class="sim-tab-content" style="display: none; flex-direction: column; gap: 5px;">
+                <!-- Destinatari salvati -->
+                <label style="font-size: 8px; margin-bottom: 1px; display: block; text-transform: uppercase; color: var(--text-muted);">Destinatari memorizzati</label>
+                <div style="background: rgba(0,0,0,0.25); border: 1px solid rgba(255,255,255,0.06); border-radius: 6px; padding: 4px 6px; display: flex; flex-direction: column; gap: 3px; max-height: 62px; overflow-y: auto;">
+                  <div style="display: flex; align-items: center; justify-content: space-between; gap: 4px;">
+                    <span style="font-size: 9px; color: #c7caff; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">mario.rossi@email.com</span>
+                    <button type="button" onclick="removeSimEmail(this)" style="flex-shrink:0; background:none; border:none; color:#ef4444; font-size:11px; cursor:pointer; padding:0 2px; line-height:1;">&times;</button>
+                  </div>
+                  <div style="display: flex; align-items: center; justify-content: space-between; gap: 4px;">
+                    <span style="font-size: 9px; color: #c7caff; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">anna.verdi@gmail.com</span>
+                    <button type="button" onclick="removeSimEmail(this)" style="flex-shrink:0; background:none; border:none; color:#ef4444; font-size:11px; cursor:pointer; padding:0 2px; line-height:1;">&times;</button>
+                  </div>
+                </div>
+                <!-- Aggiungi nuovo -->
+                <label style="font-size: 8px; margin-bottom: 1px; display: block; text-transform: uppercase; color: var(--text-muted);">Aggiungi destinatario</label>
+                <div style="display: flex; gap: 4px;">
+                  <input type="email" id="sim-email-new" placeholder="nuova@email.com" style="flex: 1; padding: 4px 8px; font-size: 10px; height: 22px; background: rgba(0,0,0,0.3); border-radius: 5px; border: 1px solid rgba(255,255,255,0.08); color: #fff;" />
+                  <button type="button" onclick="addSimEmail()" style="height: 22px; padding: 0 8px; background: #5c62ec; border: none; border-radius: 5px; color: #fff; font-size: 10px; font-weight: 800; cursor: pointer;">+</button>
+                </div>
+              </div>
+
+              <!-- Telegram Content: grid 2 col, QR spans entrambe le righe -->
+              <div id="sim-content-telegram" class="sim-tab-content"
+                style="display: none; grid-template-columns: 1fr 60px; grid-template-rows: auto auto; gap: 4px 8px; align-items: center;">
+                <!-- Riga 1 col 1: Bot Token -->
+                <div style="grid-column:1; grid-row:1;">
+                  <label style="font-size: 8px; margin-bottom: 2px; display: block; text-transform: uppercase; color: var(--text-muted);">Bot Token</label>
+                  <input type="password" value="789012345:AAFefGhIjKlMnOpQrStUvWxYz"
+                    style="padding: 4px 8px; font-size: 10px; height: 22px; background: rgba(0,0,0,0.3); border-radius: 5px; border: 1px solid rgba(255,255,255,0.08); width: 100%; color: #fff; font-family: monospace;" />
+                </div>
+                <!-- QR Code: col 2, span 2 righe -->
+                <a href="https://t.me/BotFather" target="_blank"
+                  style="grid-column:2; grid-row:1/3; text-decoration:none; display:flex; flex-direction:column; align-items:center; gap:3px; align-self:stretch; justify-content:center;">
+                  <img
+                    src="https://api.qrserver.com/v1/create-qr-code/?size=60x60&data=https://t.me/BotFather&bgcolor=0a0b12&color=ffffff&margin=3"
+                    alt="QR BotFather Telegram" width="60" height="60"
+                    style="border-radius:6px; border:1px solid rgba(255,255,255,0.1); display:block;"
+                  />
+                  <span style="font-size:6px; color:#6b7280; text-align:center; line-height:1.2; text-transform:uppercase;">Scan<br>BotFather</span>
+                </a>
+                <!-- Riga 2 col 1: Chat ID -->
+                <div style="grid-column:1; grid-row:2;">
+                  <label style="font-size: 8px; margin-bottom: 2px; display: block; text-transform: uppercase; color: var(--text-muted);">Chat ID</label>
+                  <input type="text" value="8832732995"
+                    style="padding: 4px 8px; font-size: 10px; height: 22px; background: rgba(0,0,0,0.3); border-radius: 5px; border: 1px solid rgba(255,255,255,0.08); width: 100%; color: #fff;" />
+                </div>
+              </div>
+
+              <!-- Anti-sleep Content -->
+              <div id="sim-content-sleep" class="sim-tab-content" style="display: none; padding-top: 4px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px 10px; background: rgba(255,255,255,0.02); border-radius: 8px; border: 1px solid rgba(255,255,255,0.04);">
+                  <span style="font-size: 10px; font-weight: bold; color: #fff;">Anti-Sleep Mode</span>
+                  <button type="button" id="btn-sim-sleep-toggle" onclick="toggleSimSleep()" style="width: 32px; height: 18px; padding: 0; border-radius: 9px; background: #5c62ec; border: none; position: relative; cursor: pointer;">
+                    <div style="width: 12px; height: 12px; border-radius: 50%; background: #fff; position: absolute; top: 3px; right: 3px; transition: all 0.2s;"></div>
+                  </button>
+                </div>
+              </div>
+
+              <!-- Test Content: 2 colonne side by side, riempiono area disponibile -->
+              <div id="sim-content-test" class="sim-tab-content"
+                style="display: none; flex-direction: row; gap: 6px; flex: 1; min-height: 0;">
+                <!-- Test Email -->
+                <button type="button" onclick="alert('Simulazione: Inviata Mail di Test!')"
+                  style="flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;
+                         border-radius: 10px; background: rgba(245,158,11,0.12); border: 1px solid rgba(245,158,11,0.35);
+                         color: #f59e0b; cursor: pointer; padding: 8px 4px; min-height: 80px;">
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/>
+                  </svg>
+                  <span style="font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.04em; text-align:center;">Test<br>Email</span>
+                </button>
+                <!-- Test Telegram -->
+                <button type="button" onclick="alert('Simulazione: Inviato Messaggio Telegram di Test!')"
+                  style="flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;
+                         border-radius: 10px; background: rgba(92,98,236,0.12); border: 1px solid rgba(92,98,236,0.35);
+                         color: #9ea2f5; cursor: pointer; padding: 8px 4px; min-height: 80px;">
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
+                  </svg>
+                  <span style="font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.04em; text-align:center;">Test<br>Telegram</span>
+                </button>
+              </div>
+
+            </div>
+
+            <div style="margin-top: 5px; margin-bottom: 0px; padding-bottom: 0px;">
+              <button type="button" onclick="closeSimulatedConfigModal()" style="width: 100%; height: 28px; padding: 0; background: #5c62ec; color: #fff; font-size: 9px; font-weight: 800; text-transform: uppercase; border-radius: 6px; border: none; cursor: pointer; display: block; margin-bottom: 0px;">Salva e Chiudi</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
   </div>
 
   <script>
+    // Mostra/Nasconde i caratteri della password
+    function togglePasswordVisibility(inputId, btn) {
+      const input = document.getElementById(inputId);
+      const eyeOpen = btn.querySelector('.eye-open');
+      const eyeClosed = btn.querySelector('.eye-closed');
+      
+      if (input.type === 'password') {
+        input.type = 'text';
+        eyeOpen.style.display = 'none';
+        eyeClosed.style.display = 'block';
+      } else {
+        input.type = 'password';
+        eyeOpen.style.display = 'block';
+        eyeClosed.style.display = 'none';
+      }
+    }
+
     // Configurazione dell'applicazione
     const config = {
       hostname: 'vigilai-box',
@@ -686,6 +1571,8 @@
     let selectedSsidIsSecured = false;
     let currentStep = 1;
     let supabaseClient = null;
+    let currentAddCamStep = 1;
+    const totalAddCamSteps = 3;
 
     // Tastiera virtuale variabili
     const normalRows = [
@@ -709,39 +1596,40 @@
     // Gestione passi
     function goToStep(step) {
       currentStep = step;
-      document.querySelectorAll('.step-content').forEach(el => el.style.display = 'none');
-      document.querySelectorAll('.step-indicator').forEach(el => {
-        el.style.borderBottomColor = 'var(--border-color)';
-        el.style.color = 'var(--text-muted)';
-      });
-      
-      document.getElementById(`step-${step}-content`).style.display = 'block';
-      const indicator = document.getElementById(`step-${step}-indicator`);
-      if (indicator) {
-        indicator.style.borderBottomColor = 'var(--primary)';
-        indicator.style.color = 'var(--text)';
-      }
+      document.querySelectorAll('.step-content').forEach(el => el.classList.remove('active'));
+      document.getElementById(`step-${step}-content`).classList.add('active');
       hideAlerts();
     }
 
-    // Gestione avvisi
+    // Gestione avvisi via Modal
     function showAlert(type, msg) {
-      const errAlert = document.getElementById('error-alert');
-      const succAlert = document.getElementById('success-alert');
-      hideAlerts();
+      const modal = document.getElementById('alert-modal');
+      const iconContainer = document.getElementById('alert-modal-icon-container');
+      const text = document.getElementById('alert-modal-text');
+      
+      text.innerText = msg;
+      
       if (type === 'error') {
-        errAlert.innerText = msg;
-        errAlert.style.display = 'block';
+        iconContainer.style.background = 'rgba(239, 68, 68, 0.1)';
+        iconContainer.style.border = '1px solid rgba(239, 68, 68, 0.2)';
+        iconContainer.style.color = '#ef4444';
+        iconContainer.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>';
       } else {
-        succAlert.innerText = msg;
-        succAlert.style.display = 'block';
+        iconContainer.style.background = 'rgba(16, 185, 129, 0.1)';
+        iconContainer.style.border = '1px solid rgba(16, 185, 129, 0.2)';
+        iconContainer.style.color = '#10b981';
+        iconContainer.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>';
       }
+      
+      modal.style.display = 'flex';
     }
 
     // Nasconde tutti gli avvisi
     function hideAlerts() {
-      document.getElementById('error-alert').style.display = 'none';
-      document.getElementById('success-alert').style.display = 'none';
+      const modal = document.getElementById('alert-modal');
+      if (modal) {
+        modal.style.display = 'none';
+      }
     }
 
     // Inizializza client Supabase
@@ -773,10 +1661,12 @@
       const loader = document.getElementById('wifi-scan-loader');
       const text = document.getElementById('wifi-scan-text');
       const list = document.getElementById('wifi-list');
+      const select = document.getElementById('wifi-select');
 
       loader.style.display = 'inline-block';
       text.innerText = 'Scansione...';
       list.innerHTML = '<div style="padding: 20px; text-align: center;"><span class="spinner"></span><div style="margin-top: 8px; font-size: 12px; color: var(--text-muted);">Ricerca reti Wi-Fi in corso...</div></div>';
+      select.innerHTML = '<option value="">Ricerca reti Wi-Fi...</option>';
 
       try {
         const res = await fetch('/api/wifi/scan');
@@ -784,7 +1674,17 @@
         
         if (res.ok && data.success && data.networks.length > 0) {
           list.innerHTML = '';
+          select.innerHTML = '<option value="">Seleziona una rete...</option>';
+
           data.networks.forEach(net => {
+            // Aggiunge opzione al dropdown select
+            const opt = document.createElement('option');
+            opt.value = net.ssid;
+            opt.dataset.secured = net.security ? 'true' : 'false';
+            opt.innerText = `${net.ssid} (${net.signal}%) ${net.security ? '🔒' : ''}`;
+            select.appendChild(opt);
+
+            // Crea elemento per la lista classica (desktop)
             const wifiItem = document.createElement('div');
             wifiItem.className = 'wifi-item';
             wifiItem.onclick = () => selectWifiNetwork(net.ssid, !!net.security, wifiItem);
@@ -809,12 +1709,35 @@
           });
         } else {
           list.innerHTML = '<div style="padding: 15px; text-align: center; font-size: 12px; color: var(--text-muted);">Nessuna rete Wi-Fi trovata. Assicurati che l\'antenna sia collegata.</div>';
+          select.innerHTML = '<option value="">Nessuna rete trovata</option>';
         }
       } catch (err) {
         list.innerHTML = `<div style="padding: 15px; text-align: center; font-size: 12px; color: var(--error);">Errore di scansione: ${err.message}</div>`;
+        select.innerHTML = '<option value="">Errore scansione</option>';
       } finally {
         loader.style.display = 'none';
         text.innerText = 'Cerca Reti';
+      }
+    }
+
+    // Seleziona una rete Wi-Fi tramite dropdown select (3.5" display)
+    function handleDropdownSelect() {
+      const select = document.getElementById('wifi-select');
+      const selectedOpt = select.options[select.selectedIndex];
+      if (!selectedOpt || !selectedOpt.value) {
+        selectedSsid = '';
+        selectedSsidIsSecured = false;
+        document.getElementById('selected-ssid-label').innerText = '';
+        return;
+      }
+      selectedSsid = selectedOpt.value;
+      selectedSsidIsSecured = selectedOpt.dataset.secured === 'true';
+      if (selectedSsidIsSecured) {
+        document.getElementById('selected-ssid-label').innerText = `(${selectedSsid})`;
+        document.getElementById('wifi-password').value = '';
+      } else {
+        document.getElementById('selected-ssid-label').innerText = `(${selectedSsid} - Aperta)`;
+        document.getElementById('wifi-password').value = '';
       }
     }
 
@@ -825,122 +1748,129 @@
       document.querySelectorAll('.wifi-item').forEach(el => el.classList.remove('selected'));
       element.classList.add('selected');
       if (isSecured) {
-        document.getElementById('wifi-password-group').style.display = 'block';
-        document.getElementById('selected-ssid-label').innerText = ssid;
+        document.getElementById('selected-ssid-label').innerText = `(${ssid})`;
         document.getElementById('wifi-password').value = '';
         document.getElementById('wifi-password').focus();
       } else {
-        document.getElementById('wifi-password-group').style.display = 'none';
+        document.getElementById('selected-ssid-label').innerText = `(${ssid} - Aperta)`;
         document.getElementById('wifi-password').value = '';
       }
     }
 
-    // Salva l'hostname ed invia i dati di setup al server per il riavvio in modalità Ethernet
-    async function saveWithoutWifi() {
+    // Temporaneamente memorizza l'hostname e salta il Wi-Fi per procedere all'account login
+    function saveWithoutWifi() {
       const hostnameInput = document.getElementById('hostname').value.trim();
       if (!hostnameInput) {
         showAlert('error', 'Nome box obbligatorio.');
         return;
       }
-
-      const btn = document.getElementById('btn-skip-wifi');
-      const btnMain = document.getElementById('btn-connect-wifi');
-      btn.disabled = true;
-      btnMain.disabled = true;
-      btn.innerHTML = '<span class="spinner"></span> <span>Configurazione...</span>';
-      hideAlerts();
-
-      try {
-        // 1. Salva Hostname
-        const hostRes = await fetch('/api/system/hostname', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ hostname: hostnameInput })
-        });
-        const hostData = await hostRes.json();
-        if (!hostRes.ok || !hostData.success) {
-          throw new Error("Impossibile salvare l'hostname.");
-        }
-        config.hostname = hostnameInput;
-
-        // 2. Invia setup vuoto (Ethernet)
-        const setupRes = await fetch('/api/setup', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            WIFI_SSID: '',
-            WIFI_PASSWORD: '',
-            GEMINI_API_KEY: '',
-            VITE_GEMINI_API_KEY: '',
-            EMAIL_USER: '',
-            EMAIL_PASS: '',
-            NOTIFICATION_EMAILS: '',
-            cameras: []
-          })
-        });
-        const setupData = await setupRes.json();
-        if (!setupRes.ok || !setupData.success) {
-          throw new Error(setupData.error || "Salvataggio configurazione fallito.");
-        }
-
-        // Mostra pannello di riavvio
-        document.getElementById('step-1-content').style.display = 'none';
-        document.getElementById('reboot-panel').style.display = 'block';
-        triggerSystemReboot();
-
-      } catch (err) {
-        showAlert('error', err.message);
-        btn.disabled = false;
-        btnMain.disabled = false;
-        btn.innerHTML = 'Salta (Usa Ethernet)';
-      }
+      config.hostname = hostnameInput;
+      config.wifi.ssid = '';
+      config.wifi.password = '';
+      goToStep(2);
     }
 
-    // Salva l'hostname ed invia i dati di setup al server con Wi-Fi
-    async function saveAndConnectWifi() {
+    // Temporaneamente memorizza l'hostname e Wi-Fi e procede all'account login
+    function saveAndConnectWifi() {
       const hostnameInput = document.getElementById('hostname').value.trim();
+      
+      // Seleziona la sorgente di SSID basandosi sulla visibilità degli elementi
+      const select = document.getElementById('wifi-select');
+      const selectSSID = select.value;
+      const selectSSIDIsSecured = select.options[select.selectedIndex]?.dataset.secured === 'true';
+
+      const finalSsid = window.getComputedStyle(select).display !== 'none' ? selectSSID : selectedSsid;
+      const finalSsidSecured = window.getComputedStyle(select).display !== 'none' ? selectSSIDIsSecured : selectedSsidIsSecured;
       const pwdInput = document.getElementById('wifi-password').value;
 
       if (!hostnameInput) {
         showAlert('error', 'Nome box obbligatorio.');
         return;
       }
-      if (!selectedSsid) {
+      if (!finalSsid) {
         showAlert('error', 'Seleziona una rete Wi-Fi prima di procedere.');
         return;
       }
-      if (selectedSsidIsSecured && !pwdInput) {
+      if (finalSsidSecured && !pwdInput) {
         showAlert('error', 'La password è obbligatoria per le reti Wi-Fi protette.');
         return;
       }
 
-      const btn = document.getElementById('btn-connect-wifi');
-      const btnSkip = document.getElementById('btn-skip-wifi');
-      btn.disabled = true;
-      btnSkip.disabled = true;
-      btn.innerHTML = '<span class="spinner"></span> <span>Connessione...</span>';
+      config.hostname = hostnameInput;
+      config.wifi.ssid = finalSsid;
+      config.wifi.password = pwdInput;
+      goToStep(2);
+    }
+
+    // Logga con Supabase e invia l'intera configurazione al server
+    async function loginAndSubmitConfig() {
+      const email = document.getElementById('login-email').value.trim();
+      const password = document.getElementById('login-password').value;
+
+      if (!email || !password) {
+        showAlert('error', 'Email e password richieste per il collegamento account.');
+        return;
+      }
+
+      const btn = document.getElementById('btn-login-account');
+      const btnMobile = document.getElementById('btn-login-account-mobile');
+      const btnBack = document.querySelector('#step-2-content .desktop-btn.btn-secondary');
+      const btnBackMobile = document.querySelector('#step-2-content .mobile-nav-buttons button:first-child');
+      
+      if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner"></span> <span>Verifica Account...</span>';
+      }
+      if (btnMobile) {
+        btnMobile.disabled = true;
+        btnMobile.classList.remove('active');
+        btnMobile.innerHTML = '<span class="spinner" style="width: 14px; height: 14px; border-width: 1.5px; border-top-color: #0c0d14;"></span>';
+      }
+      if (btnBack) btnBack.disabled = true;
+      if (btnBackMobile) {
+        btnBackMobile.disabled = true;
+        btnBackMobile.classList.remove('active');
+      }
       hideAlerts();
 
       try {
+        if (!supabaseClient) {
+          initSupabaseClient();
+        }
+
+        if (!supabaseClient) {
+          throw new Error("Client di autenticazione fallito o non caricato.");
+        }
+
+        const { data, error } = await supabaseClient.auth.signInWithPassword({
+          email: email,
+          password: password
+        });
+
+        if (error) {
+          throw new Error("Credenziali non valide o errore: " + error.message);
+        }
+
+        btn.innerHTML = '<span class="spinner"></span> <span>Salvataggio Config...</span>';
+
         // 1. Salva Hostname
         const hostRes = await fetch('/api/system/hostname', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ hostname: hostnameInput })
+          body: JSON.stringify({ hostname: config.hostname })
         });
         const hostData = await hostRes.json();
         if (!hostRes.ok || !hostData.success) {
-          throw new Error("Impossibile salvare l'hostname.");
+          throw new Error("Impossibile salvare l'hostname sul box.");
         }
-        config.hostname = hostnameInput;
 
-        // 2. Invia setup con Wi-Fi e riavvia
+        // 2. Invia setup completo e riavvia
         const setupRes = await fetch('/api/setup', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            WIFI_SSID: selectedSsid,
-            WIFI_PASSWORD: pwdInput,
+            WIFI_SSID: config.wifi.ssid,
+            WIFI_PASSWORD: config.wifi.password,
             GEMINI_API_KEY: '',
             VITE_GEMINI_API_KEY: '',
             EMAIL_USER: '',
@@ -955,15 +1885,26 @@
         }
 
         // Mostra pannello di riavvio
-        document.getElementById('step-1-content').style.display = 'none';
+        document.getElementById('step-2-content').style.display = 'none';
         document.getElementById('reboot-panel').style.display = 'block';
         triggerSystemReboot();
 
       } catch (err) {
         showAlert('error', err.message);
-        btn.disabled = false;
-        btnSkip.disabled = false;
-        btn.innerHTML = '<span>Salva e Riavvia Box</span>';
+        if (btn) {
+          btn.disabled = false;
+          btn.innerHTML = 'Accedi e Completa Setup';
+        }
+        if (btnMobile) {
+          btnMobile.disabled = false;
+          btnMobile.classList.add('active');
+          btnMobile.innerHTML = '▶';
+        }
+        if (btnBack) btnBack.disabled = false;
+        if (btnBackMobile) {
+          btnBackMobile.disabled = false;
+          btnBackMobile.classList.add('active');
+        }
       }
     }
 
@@ -981,7 +1922,7 @@
         const data = await res.json();
         if (res.ok && data.success) {
           btn.innerHTML = '<span>Riavvio Inviato!</span>';
-          let timeLeft = 15;
+          let timeLeft = 3; // Shortened countdown for quick simulation feedback
           const countdownEl = document.getElementById('reboot-countdown-box');
           document.getElementById('countdown-wrapper').style.display = 'block';
 
@@ -990,16 +1931,603 @@
             countdownEl.innerText = timeLeft;
             if (timeLeft <= 0) {
               clearInterval(interval);
-              window.location.href = `http://${config.hostname}.local:3088/`;
+              goToHome();
             }
           }, 1000);
         } else {
           throw new Error(data.error || 'Impossibile inviare il comando di riavvio.');
         }
       } catch (err) {
-        alert('Impossibile riavviare automaticamente: ' + err.message + '\n\nProcedi riavviando manualmente scollegando e ricollegando l\'alimentazione.');
-        btn.disabled = false;
-        btn.innerHTML = '<span>Riavvia Raspberry Pi</span>';
+        // In local Windows development without Raspberry systemctl reboot, go to Home direct
+        console.warn('Riavvio fallito o in simulazione locale. Apertura Home.');
+        btn.innerHTML = '<span>Riavvio Simulato!</span>';
+        setTimeout(() => {
+          goToHome();
+        }, 1500);
+      }
+    }
+
+    // --- HOME SCREEN SIMULATOR FUNCTIONS ---
+    let logInterval = null;
+    let logLines = [
+      "Vigil.AI OS v2.0.4 - Sistema Caricato.",
+      "Connessione al server di elaborazione AI stabilita.",
+      "Telecamera 1 (Giardino Retro) - Connessa.",
+      "Flusso RTSP decodificato con successo (H264 @ 15fps).",
+      "AI Core: Modello rilevamento oggetti inizializzato.",
+      "Scena stabile. Nessun movimento rilevato.",
+      "Analisi attiva. In attesa di eventi..."
+    ];
+    
+    let activeCamIndex = 1;
+    let aiEnabled = true;
+    let camEnabled = true;
+
+    function goToHome() {
+      // Nasconde i pannelli del setup wizard
+      document.querySelectorAll('.step-content').forEach(el => el.classList.remove('active'));
+      document.getElementById('reboot-panel').style.display = 'none';
+      
+      // Attiva la schermata home
+      document.getElementById('home-panel').classList.add('active');
+      startSimulatedLogs();
+      updateSidebarQuickAlarmIcon();
+    }
+
+    function exitToSetup() {
+      // Ferma i log simulati
+      if (logInterval) clearInterval(logInterval);
+      
+      // Riattiva il setup
+      document.getElementById('home-panel').classList.remove('active');
+      goToStep(1);
+    }
+
+    function toggleLiveLog() {
+      const logPanel = document.getElementById('live-log-overlay');
+      const logBtn = document.querySelector('.icon-btn[title="Log Attività"]');
+      if (logPanel.style.display === 'block') {
+        logPanel.style.display = 'none';
+        logBtn.classList.remove('active');
+      } else {
+        logPanel.style.display = 'block';
+        logBtn.classList.add('active');
+        logPanel.scrollTop = logPanel.scrollHeight;
+      }
+    }
+
+    function toggleAIState() {
+      const btn = document.getElementById('btn-toggle-ai');
+      aiEnabled = !aiEnabled;
+      if (aiEnabled) {
+        btn.classList.add('active');
+        appendLogLine("AI Core riattivato con successo. Modello in esecuzione.");
+      } else {
+        btn.classList.remove('active');
+        appendLogLine("AI Core disattivato dall'operatore. Elaborazione scene sospesa.");
+      }
+    }
+
+    function toggleCamState() {
+      const btn = document.getElementById('btn-toggle-cam');
+      const img = document.getElementById('camera-feed-img');
+      const offScreen = document.getElementById('cam-off-screen');
+      const overlay = document.getElementById('cam-status-overlay');
+      
+      camEnabled = !camEnabled;
+      if (camEnabled) {
+        btn.classList.add('active');
+        img.style.display = 'block';
+        offScreen.style.display = 'none';
+        overlay.style.display = 'flex';
+        appendLogLine("Riconnessione flusso video completata. Telecamera online.");
+      } else {
+        btn.classList.remove('active');
+        img.style.display = 'none';
+        offScreen.style.display = 'flex';
+        overlay.style.display = 'none';
+        appendLogLine("Flusso video telecamera interrotto dall'utente.");
+      }
+    }
+
+    const mockCamFeeds = {
+      1: { name: "CAM 1 - Giardino Retro", img: "/mock_camera_feed.png" },
+      2: { name: "CAM 2 - Ingresso Principale", img: "/mock_camera_feed.png" },
+      3: { name: "CAM 3 - Garage / Esterno", img: "/mock_camera_feed.png" }
+    };
+
+    function switchCamera(dir) {
+      if (dir === 'next') {
+        activeCamIndex = activeCamIndex < 3 ? activeCamIndex + 1 : 1;
+      } else {
+        activeCamIndex = activeCamIndex > 1 ? activeCamIndex - 1 : 3;
+      }
+      
+      document.getElementById('active-cam-label').innerText = `CAM ${activeCamIndex}`;
+      appendLogLine(`Passaggio a: ${mockCamFeeds[activeCamIndex].name}...`);
+      
+      // Simula caricamento o cambio feed cambiando momentaneamente l'opacità
+      const img = document.getElementById('camera-feed-img');
+      img.style.opacity = '0.3';
+      
+      setTimeout(() => {
+        img.style.opacity = '1';
+        if (activeCamIndex === 2) {
+          img.style.filter = 'hue-rotate(90deg) saturate(0.8) contrast(1.1)';
+        } else if (activeCamIndex === 3) {
+          img.style.filter = 'contrast(1.2) brightness(0.8) sepia(0.2)';
+        } else {
+          img.style.filter = 'none';
+        }
+        appendLogLine(`Flusso live stabilizzato per ${mockCamFeeds[activeCamIndex].name}.`);
+      }, 300);
+    }
+
+    function showMockAlert(title) {
+      showAlert('success', `Opzione Simulata: hai cliccato su "${title}".`);
+    }
+
+    function toggleSimulatedConfigModal() {
+      const modal = document.getElementById('simulated-config-modal');
+      const gearBtn = document.getElementById('btn-config-gear');
+      const isOpen = modal.style.display === 'flex';
+      if (isOpen) {
+        modal.style.display = 'none';
+        gearBtn.classList.remove('active');
+      } else {
+        // Chiudi gli altri overlay
+        const scanOverlay = document.getElementById('ai-scan-overlay');
+        const scanBtn = document.getElementById('btn-toggle-aiscan');
+        scanOverlay.style.display = 'none';
+        scanBtn.classList.remove('active');
+        closeEventsLog();
+
+        modal.style.display = 'flex';
+        gearBtn.classList.add('active');
+        setSimulatedTab('ai');
+      }
+    }
+
+    function closeSimulatedConfigModal() {
+      document.getElementById('simulated-config-modal').style.display = 'none';
+      const gearBtn = document.getElementById('btn-config-gear');
+      if (gearBtn) gearBtn.classList.remove('active');
+    }
+
+    function setSimulatedTab(tab) {
+      // Nascondi tutti i contenuti delle tab
+      document.querySelectorAll('.sim-tab-content').forEach(el => {
+        el.style.display = 'none';
+      });
+      // Mostra il contenuto selezionato con il display corretto per tipo
+      const displayMap = { ai: 'grid', email: 'flex', telegram: 'grid', sleep: 'block', test: 'flex' };
+      document.getElementById(`sim-content-${tab}`).style.display = displayMap[tab] || 'block';
+
+      // Cambia gli stili visivi dei bottoni
+      const tabs = ['ai', 'email', 'telegram', 'sleep', 'test'];
+      tabs.forEach(t => {
+        const btn = document.getElementById(`btn-sim-tab-${t}`);
+        if (t === tab) {
+          btn.style.background = 'rgba(92,98,236,0.35)';
+          btn.style.color = '#c7caff';
+          btn.style.borderColor = 'rgba(92,98,236,0.6)';
+        } else {
+          btn.style.background = 'rgba(255,255,255,0.04)';
+          btn.style.color = '#6b7280';
+          btn.style.borderColor = 'rgba(255,255,255,0.06)';
+        }
+      });
+    }
+
+    let simSleepActive = true;
+    function toggleSimSleep() {
+      simSleepActive = !simSleepActive;
+      const toggleBtn = document.getElementById('btn-sim-sleep-toggle');
+      const innerDot = toggleBtn.querySelector('div');
+      if (simSleepActive) {
+        toggleBtn.style.background = '#5c62ec';
+        innerDot.style.right = '3px';
+        innerDot.style.left = 'auto';
+      } else {
+        toggleBtn.style.background = '#27272a';
+        innerDot.style.left = '3px';
+        innerDot.style.right = 'auto';
+      }
+    }
+
+    function addSimEmail() {
+      const input = document.getElementById('sim-email-new');
+      const val = input.value.trim();
+      if (!val || !val.includes('@')) return;
+      const list = document.querySelector('#sim-content-email div[style*="max-height"]');
+      const row = document.createElement('div');
+      row.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:4px;';
+      row.innerHTML = `<span style="font-size:9px;color:#c7caff;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${val}</span><button type="button" onclick="removeSimEmail(this)" style="flex-shrink:0;background:none;border:none;color:#ef4444;font-size:11px;cursor:pointer;padding:0 2px;line-height:1;">&times;</button>`;
+      list.appendChild(row);
+      input.value = '';
+    }
+
+    function removeSimEmail(btn) {
+      btn.parentElement.remove();
+    }
+
+    // --- CONTROLLI AI SCAN E EVENTI ALLARME SLIDER ---
+    let currentEventIndex = 0;
+    const mockEventsList = [
+      {
+        title: "CAM 1 - Giardino Retro",
+        time: "Oggi, 19:12:04",
+        desc: "Persona sospetta rilevata vicino alla recinzione esterna. Rilevato movimento anomalo prolungato.",
+        badge: "Persona",
+        img: "/mock_camera_feed.png",
+        filter: "none"
+      },
+      {
+        title: "CAM 2 - Ingresso Principale",
+        time: "Oggi, 18:45:12",
+        desc: "Veicolo sconosciuto parcheggiato nell'area di divieto per oltre 5 minuti. Avviso inviato.",
+        badge: "Veicolo",
+        img: "/mock_camera_feed.png",
+        filter: "hue-rotate(90deg) saturate(0.8) contrast(1.1)"
+      },
+      {
+        title: "CAM 3 - Garage / Esterno",
+        time: "Oggi, 17:30:58",
+        desc: "Rilevata presenza animale (gatto selvatico) in zona non protetta. Nessuna notifica push inviata.",
+        badge: "Animale",
+        img: "/mock_camera_feed.png",
+        filter: "contrast(1.2) brightness(0.8) sepia(0.2)"
+      }
+    ];
+
+    function toggleAIScan() {
+      const scanOverlay = document.getElementById('ai-scan-overlay');
+      const scanBtn = document.getElementById('btn-toggle-aiscan');
+      const isVisible = scanOverlay.style.display === 'block';
+
+      if (isVisible) {
+        scanOverlay.style.display = 'none';
+        scanBtn.classList.remove('active');
+        appendLogLine("AI Scan Overlay disattivato dall'operatore.");
+      } else {
+        // Chiudi gli altri overlay
+        closeEventsLog();
+        closeSimulatedConfigModal();
+        
+        scanOverlay.style.display = 'block';
+        scanBtn.classList.add('active');
+        appendLogLine("AI Scan Overlay attivo: rendering Bounding Boxes in tempo reale.");
+      }
+    }
+
+    function toggleEventsLog() {
+      const eventsOverlay = document.getElementById('events-log-overlay');
+      const eventsBtn = document.getElementById('btn-toggle-events');
+      const isVisible = eventsOverlay.style.display === 'flex';
+
+      if (isVisible) {
+        closeEventsLog();
+      } else {
+        // Chiudi gli altri overlay
+        const scanOverlay = document.getElementById('ai-scan-overlay');
+        const scanBtn = document.getElementById('btn-toggle-aiscan');
+        scanOverlay.style.display = 'none';
+        scanBtn.classList.remove('active');
+        closeSimulatedConfigModal();
+
+        eventsOverlay.style.display = 'flex';
+        eventsBtn.classList.add('active');
+        currentEventIndex = 0;
+        updateEventSlider();
+        appendLogLine("Visualizzazione Log Allarmi con fotogrammi ed eventi critici.");
+      }
+    }
+
+    function closeEventsLog() {
+      const eventsOverlay = document.getElementById('events-log-overlay');
+      const eventsBtn = document.getElementById('btn-toggle-events');
+      if (eventsOverlay) eventsOverlay.style.display = 'none';
+      if (eventsBtn) eventsBtn.classList.remove('active');
+    }
+
+    function slideEvent(dir) {
+      if (dir === 'next') {
+        currentEventIndex = (currentEventIndex + 1) % mockEventsList.length;
+      } else {
+        currentEventIndex = (currentEventIndex - 1 + mockEventsList.length) % mockEventsList.length;
+      }
+      updateEventSlider();
+    }
+
+    function updateEventSlider() {
+      const ev = mockEventsList[currentEventIndex];
+      document.getElementById('event-slider-counter').innerText = `${currentEventIndex + 1} di ${mockEventsList.length}`;
+      document.getElementById('event-slider-img').src = ev.img;
+      document.getElementById('event-slider-img').style.filter = ev.filter;
+      document.getElementById('event-slider-badge').innerText = ev.badge;
+      document.getElementById('event-slider-title').innerText = ev.title;
+      document.getElementById('event-slider-time').innerText = ev.time;
+      document.getElementById('event-slider-desc').innerText = ev.desc;
+    }
+
+    function appendLogLine(line) {
+      const logPanel = document.getElementById('live-log-overlay');
+      if (!logPanel) return;
+      
+      const timeStr = new Date().toLocaleTimeString('it-IT');
+      const newline = document.createElement('div');
+      newline.style.marginBottom = '2px';
+      newline.innerText = `[${timeStr}] ${line}`;
+      logPanel.appendChild(newline);
+      
+      while (logPanel.childNodes.length > 50) {
+        logPanel.removeChild(logPanel.firstChild);
+      }
+      
+      logPanel.scrollTop = logPanel.scrollHeight;
+    }
+
+    function startSimulatedLogs() {
+      const logPanel = document.getElementById('live-log-overlay');
+      logPanel.innerHTML = '';
+      
+      logLines.forEach(line => {
+        appendLogLine(line);
+      });
+      
+      const randomLogs = [
+        "Analisi in corso: rilevata vegetazione in movimento (vento). Rifiuto allarme.",
+        "Scansione completata. Scena inalterata.",
+        "AI Core: Frame processato in 45ms.",
+        "Rilevato gatto nella zona 2 (Nessun allarme impostato).",
+        "Segnale di rete stabile. Banda: 2.4 Mbps.",
+        "AI Core: Precisione di rilevamento attuale: 96%."
+      ];
+      
+      if (logInterval) clearInterval(logInterval);
+      logInterval = setInterval(() => {
+        if (!aiEnabled || !camEnabled) return;
+        const randomLine = randomLogs[Math.floor(Math.random() * randomLogs.length)];
+        appendLogLine(randomLine);
+      }, 4000);
+    }
+
+    let quickAlarmDirectOpen = false;
+
+    function openAddCameraModalStep3Direct() {
+      // Chiudi altri overlay
+      const scanOverlay = document.getElementById('ai-scan-overlay');
+      const scanBtn = document.getElementById('btn-toggle-aiscan');
+      scanOverlay.style.display = 'none';
+      scanBtn.classList.remove('active');
+      closeEventsLog();
+      closeSimulatedConfigModal();
+
+      document.getElementById('simulated-add-camera-modal').style.display = 'flex';
+      quickAlarmDirectOpen = true;
+      currentAddCamStep = 3;
+      updateAddCamStepView();
+      appendLogLine("Apertura rapida impostazioni allarmi AI (Pagina 3).");
+    }
+
+    function updateSidebarQuickAlarmIcon() {
+      const alarms = ['intrusione', 'violenza', 'incendio', 'fumo', 'dpi', 'cadute', 'allagamento', 'terremoto'];
+      let activeCount = 0;
+      alarms.forEach(a => {
+        const val = document.getElementById(`alarm-${a}`)?.value;
+        if (val === 'true') activeCount++;
+      });
+
+      const iconBtn = document.getElementById('sidebar-quick-alarm-btn');
+      if (iconBtn) {
+        if (activeCount > 0) {
+          iconBtn.style.setProperty('background', 'rgba(16, 185, 129, 0.15)', 'important');
+          iconBtn.style.setProperty('color', '#10b981', 'important');
+          iconBtn.style.setProperty('border', '1px solid rgba(16, 185, 129, 0.3)', 'important');
+          iconBtn.classList.add('active');
+        } else {
+          iconBtn.style.setProperty('background', 'rgba(255, 255, 255, 0.04)', 'important');
+          iconBtn.style.setProperty('color', '#6b7280', 'important');
+          iconBtn.style.setProperty('border', '1px solid rgba(255, 255, 255, 0.06)', 'important');
+          iconBtn.classList.remove('active');
+        }
+      }
+    }
+
+    function openAddCameraModal() {
+      // Chiudi altri overlay
+      const scanOverlay = document.getElementById('ai-scan-overlay');
+      const scanBtn = document.getElementById('btn-toggle-aiscan');
+      scanOverlay.style.display = 'none';
+      scanBtn.classList.remove('active');
+      closeEventsLog();
+      closeSimulatedConfigModal();
+
+      document.getElementById('simulated-add-camera-modal').style.display = 'flex';
+      document.getElementById('btn-add-camera').classList.add('active');
+      quickAlarmDirectOpen = false;
+      currentAddCamStep = 1;
+      updateAddCamStepView();
+      appendLogLine("Apertura configurazione nuova telecamera guidata.");
+    }
+
+    function closeAddCameraModal() {
+      document.getElementById('simulated-add-camera-modal').style.display = 'none';
+      document.getElementById('btn-add-camera').classList.remove('active');
+      quickAlarmDirectOpen = false;
+    }
+
+    function setCamType(type) {
+      document.getElementById('add-cam-type').value = type;
+      const types = ['ONVIF', 'Tapo', 'IP Cam'];
+      types.forEach(t => {
+        const btnId = `btn-cam-type-${t.toLowerCase().replace(' ', '')}`;
+        const btn = document.getElementById(btnId);
+        if (btn) {
+          if (t === type) {
+            btn.style.background = 'rgba(92,98,236,0.25)';
+            btn.style.borderColor = '#5c62ec';
+            btn.style.color = '#fff';
+          } else {
+            btn.style.background = 'rgba(255,255,255,0.04)';
+            btn.style.borderColor = 'rgba(255,255,255,0.08)';
+            btn.style.color = '#8e95a5';
+          }
+        }
+      });
+      appendLogLine(`Aggiungi Cam: Tipo segnale impostato su ${type}.`);
+    }
+
+    function toggleAlarmSim(alarmName) {
+      const input = document.getElementById(`alarm-${alarmName}`);
+      const btn = document.getElementById(`btn-alarm-${alarmName}`);
+      const isActive = input.value === 'true';
+      
+      if (isActive) {
+        input.value = 'false';
+        btn.style.background = 'rgba(255,255,255,0.04)';
+        btn.style.borderColor = 'rgba(255,255,255,0.06)';
+        btn.style.color = '#8e95a5';
+        appendLogLine(`Disattivato allarme AI: ${alarmName.toUpperCase()}`);
+      } else {
+        input.value = 'true';
+        btn.style.background = 'rgba(16,185,129,0.15)';
+        btn.style.borderColor = '#10b981';
+        btn.style.color = '#10b981';
+        appendLogLine(`Attivato allarme AI: ${alarmName.toUpperCase()}`);
+      }
+      updateSidebarQuickAlarmIcon();
+    }
+
+    function slideAddCamStep(dir) {
+      if (dir === 'next') {
+        if (quickAlarmDirectOpen) {
+          // In quick direct mode, we save directly from step 3
+          const camName = document.getElementById('add-cam-name').value.trim() || "Tapo C220";
+          const camPos = document.getElementById('add-cam-pos').value.trim() || "Ingresso";
+          document.getElementById('confirm-modal-detail-text').innerHTML = `Allarmi configurati con successo per <strong>${camName}</strong> (${camPos}).`;
+          document.getElementById('simulated-add-cam-confirm-modal').style.display = 'flex';
+          appendLogLine(`Configurazione rapida allarmi salvata per: ${camName}`);
+          return;
+        }
+        if (currentAddCamStep < totalAddCamSteps) {
+          currentAddCamStep++;
+          updateAddCamStepView();
+        } else {
+          // Salva la telecamera (Simulato con dettagli completi)
+          const camName = document.getElementById('add-cam-name').value.trim() || "Tapo C220";
+          const camPos = document.getElementById('add-cam-pos').value.trim() || "Ingresso";
+          const camType = document.getElementById('add-cam-type').value;
+          const camIp = document.getElementById('add-cam-ip').value.trim();
+          const camPort = document.getElementById('add-cam-port').value.trim();
+          const camPath = document.getElementById('add-cam-path').value.trim();
+          
+          document.getElementById('confirm-modal-detail-text').innerHTML = `Telecamera <strong>${camName}</strong> (${camPos}) configurata con successo.<br><span style="color:#8e95a5; font-size:7.5px;">URL: rtsp://${camIp}:${camPort}${camPath}</span>`;
+          document.getElementById('simulated-add-cam-confirm-modal').style.display = 'flex';
+          appendLogLine(`Telecamera salvata: ${camName} (${camPos}) su rtsp://${camIp}:${camPort}${camPath}`);
+        }
+      } else {
+        if (quickAlarmDirectOpen) {
+          closeAddCameraModal();
+          appendLogLine("Configurazione rapida allarmi annullata.");
+          return;
+        }
+        if (currentAddCamStep > 1) {
+          currentAddCamStep--;
+          updateAddCamStepView();
+        } else {
+          closeAddCameraModal();
+          appendLogLine("Configurazione nuova telecamera annullata.");
+        }
+      }
+    }
+
+    function dismissAddCamConfirmModal() {
+      document.getElementById('simulated-add-cam-confirm-modal').style.display = 'none';
+      closeAddCameraModal();
+    }
+
+    function updateAddCamStepView() {
+      // Header bar: hide step counter in quick alarm mode, show in normal mode
+      const headerBar = document.getElementById('add-cam-header-bar');
+      const stepCounter = document.getElementById('add-cam-step-counter');
+      const headerTitle = document.getElementById('add-cam-header-title');
+
+      if (quickAlarmDirectOpen) {
+        // In quick alarm mode: hide counter, set title
+        if (stepCounter) stepCounter.style.display = 'none';
+        if (headerTitle) headerTitle.innerText = 'Allarmi AI Attivi';
+      } else {
+        // Normal wizard mode: show counter and update title
+        if (stepCounter) {
+          stepCounter.style.display = 'inline';
+          stepCounter.innerText = `Pagina ${currentAddCamStep} di ${totalAddCamSteps}`;
+        }
+        if (currentAddCamStep === 2) {
+          headerTitle.innerText = 'Configurazione ONVIF';
+        } else if (currentAddCamStep === 3) {
+          headerTitle.innerText = 'Trigger Allarmi AI Attivi';
+        } else {
+          headerTitle.innerText = 'Nuova Telecamera';
+        }
+      }
+
+      // Toggle display of each step panel
+      for (let i = 1; i <= totalAddCamSteps; i++) {
+        const stepEl = document.getElementById(`add-cam-step-${i}`);
+        if (!stepEl) continue;
+        if (i === currentAddCamStep) {
+          stepEl.style.display = i === 3 ? 'flex' : 'flex';
+        } else {
+          stepEl.style.display = 'none';
+        }
+      }
+
+      // Update navigation buttons
+      const prevBtn = document.getElementById('btn-add-cam-prev');
+      const nextBtn = document.getElementById('btn-add-cam-next');
+      const quickSaveBtn = document.getElementById('btn-add-cam-quick-save');
+
+      if (quickAlarmDirectOpen) {
+        // Hide directional buttons, show full-width quick save button
+        if (prevBtn) prevBtn.style.setProperty('display', 'none', 'important');
+        if (nextBtn) nextBtn.style.setProperty('display', 'none', 'important');
+        if (quickSaveBtn) quickSaveBtn.style.setProperty('display', 'block', 'important');
+      } else {
+        // Show directional buttons, hide quick save button
+        if (prevBtn) prevBtn.style.setProperty('display', 'flex', 'important');
+        if (nextBtn) nextBtn.style.setProperty('display', 'flex', 'important');
+        if (quickSaveBtn) quickSaveBtn.style.setProperty('display', 'none', 'important');
+
+        // Style next button
+        if (currentAddCamStep === totalAddCamSteps) {
+          nextBtn.innerText = '✔';
+          nextBtn.style.setProperty('background', '#10b981', 'important');
+          nextBtn.style.setProperty('border-color', '#10b981', 'important');
+          nextBtn.style.setProperty('color', '#ffffff', 'important');
+          nextBtn.style.setProperty('box-shadow', '0 4px 12px rgba(16, 185, 129, 0.3)', 'important');
+        } else {
+          nextBtn.innerText = '▶';
+          nextBtn.style.setProperty('background', '#ffffff', 'important');
+          nextBtn.style.setProperty('border-color', '#ffffff', 'important');
+          nextBtn.style.setProperty('color', '#0c0d14', 'important');
+          nextBtn.style.setProperty('box-shadow', '0 4px 12px rgba(255, 255, 255, 0.2)', 'important');
+        }
+
+        // Style prev button
+        if (currentAddCamStep === 1) {
+          prevBtn.innerText = '✖';
+          prevBtn.style.setProperty('background', 'rgba(239, 68, 68, 0.1)', 'important');
+          prevBtn.style.setProperty('border-color', 'rgba(239, 68, 68, 0.2)', 'important');
+          prevBtn.style.setProperty('color', '#ef4444', 'important');
+          prevBtn.style.setProperty('box-shadow', 'none', 'important');
+        } else {
+          prevBtn.innerText = '◀';
+          prevBtn.style.setProperty('background', '#ffffff', 'important');
+          prevBtn.style.setProperty('border-color', '#ffffff', 'important');
+          prevBtn.style.setProperty('color', '#0c0d14', 'important');
+          prevBtn.style.setProperty('box-shadow', '0 4px 12px rgba(255, 255, 255, 0.2)', 'important');
+        }
       }
     }
 
@@ -1027,7 +2555,6 @@
           }
         }
       };
-      // Utilizziamo mousedown/touchstart a livello document catturati in anticipo per non interferire con click di tastiera/input
       document.addEventListener('mousedown', handleOutsideClick, true);
       document.addEventListener('touchstart', handleOutsideClick, true);
     }
@@ -1149,11 +2676,44 @@
       }
     }
 
+    let vpnActive = true;
+    let apiKeyPresent = true;
+
+    function toggleVpnSim() {
+      const btn = document.getElementById('sidebar-vpn-btn');
+      vpnActive = !vpnActive;
+      if (vpnActive) {
+        btn.classList.add('active');
+        appendLogLine("VPN: Connessione Tunnel stabilita con successo (Verde).");
+      } else {
+        btn.classList.remove('active');
+        appendLogLine("VPN: Disconnessione Tunnel eseguita (Rossa).");
+      }
+    }
+
+    function toggleApiKeySim() {
+      const btn = document.getElementById('sidebar-apikey-btn');
+      apiKeyPresent = !apiKeyPresent;
+      if (apiKeyPresent) {
+        btn.classList.add('active');
+        appendLogLine("API Key: Gemini API Key valida rilevata nel sistema (Verde).");
+      } else {
+        btn.classList.remove('active');
+        appendLogLine("API Key: Gemini API Key mancante. Funzioni AI generative disabilitate (Rossa).");
+      }
+    }
+
+    function showSiteQrSim() {
+      showAlert('success', "QR Code Sito: Link di associazione generato! Inquadra con il telefono per registrare il dispositivo su vigil.ai.");
+      appendLogLine("QR Code: Generazione QR Link per associazione guidata sito web.");
+    }
+
     // Carica hostname default all'avvio e inizializza tastiera virtuale
     window.addEventListener('DOMContentLoaded', () => {
       loadDefaultHostname();
       setupVirtualKeyboard();
       initSupabaseClient();
+      updateSidebarQuickAlarmIcon();
     });
   </script>
 </body>
