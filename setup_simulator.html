@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Simulazione display 3,5 - Vigil.AI</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-gradient: linear-gradient(135deg, #090a10 0%, #0f101a 100%);
+      --panel-bg: rgba(18, 20, 32, 0.6);
+      --border-color: rgba(255, 255, 255, 0.08);
+      --primary: #5c62ec;
+      --text: #f3f4f6;
+      --text-muted: #8e95a5;
+      --font: 'Outfit', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: var(--font);
+      background: var(--bg-gradient);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      overflow: hidden;
+      position: relative;
+    }
+
+    /* Ambient glow */
+    body::before {
+      content: '';
+      position: absolute;
+      width: 450px;
+      height: 450px;
+      border-radius: 50%;
+      background: var(--primary);
+      filter: blur(140px);
+      opacity: 0.12;
+      z-index: 0;
+      pointer-events: none;
+    }
+
+    .simulator-container {
+      text-align: center;
+      z-index: 10;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 20px;
+    }
+
+    .title {
+      font-size: 26px;
+      font-weight: 700;
+      background: linear-gradient(135deg, #ffffff 0%, #a2a8c2 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      margin-bottom: 2px;
+    }
+
+    /* 3.5 Inch Device Case Frame */
+    .device-bezel {
+      width: 530px;
+      height: 370px;
+      background: #181922;
+      border-radius: 20px;
+      border: 2px solid #282a36;
+      padding: 25px;
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7),
+                  0 0 40px rgba(92, 98, 236, 0.05);
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    /* Screen Frame */
+    .screen-container {
+      width: 480px;
+      height: 320px;
+      background: #000;
+      border-radius: 6px;
+      overflow: hidden;
+      position: relative;
+      box-shadow: inset 0 0 20px rgba(0,0,0,0.9), 0 0 10px rgba(0,0,0,0.5);
+    }
+
+    /* Bezel Details */
+    .bezel-text {
+      position: absolute;
+      bottom: 8px;
+      font-size: 9px;
+      color: #4e5166;
+      font-weight: 600;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+    }
+
+    .status-light {
+      position: absolute;
+      top: 10px;
+      left: 20px;
+      width: 6px;
+      height: 6px;
+      background: #10b981;
+      border-radius: 50%;
+      box-shadow: 0 0 8px #10b981;
+    }
+
+    iframe {
+      width: 480px;
+      height: 320px;
+      border: none;
+      background: #090a10;
+      display: block;
+    }
+
+    .instructions {
+      font-size: 13px;
+      color: var(--text-muted);
+      max-width: 450px;
+      line-height: 1.5;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="simulator-container">
+    <div class="title">Simulazione display 3,5</div>
+    
+    <div class="device-bezel">
+      <div class="status-light"></div>
+      <div class="screen-container">
+        <iframe src="/setup-wizard"></iframe>
+      </div>
+      <div class="bezel-text">Vigil.AI - 3.5" Touch Display (480x320)</div>
+    </div>
+
+    <div class="instructions">
+      Questo simulatore mostra il setup esattamente come appare sullo schermo LCD del Raspberry Pi. Clicca sui campi per far apparire la tastiera virtuale simulata.
+    </div>
+  </div>
+
+</body>
+</html>
