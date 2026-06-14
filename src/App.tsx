@@ -1953,10 +1953,10 @@ export default function App() {
       <main className={`flex-1 flex flex-col min-w-0 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 ${isMobile35 ? 'h-screen w-screen overflow-hidden p-0 m-0 pb-0' : 'pb-20 lg:pb-0 overflow-y-auto'}`}>
         
         {!isMobile35 && (
-          <header className="glass m-0 sm:m-4 lg:m-8 p-1.5 sm:p-4 lg:p-6 rounded-none sm:rounded-[32px] lg:rounded-[40px] flex flex-row items-center justify-between sticky top-0 sm:top-4 lg:top-8 z-[100] border-white/5 shadow-2xl shrink-0">
+          <header className="glass m-0 sm:m-4 lg:m-8 p-3 sm:p-4 lg:p-6 rounded-none sm:rounded-[32px] lg:rounded-[40px] flex flex-col xl:flex-row items-start xl:items-center justify-between gap-3 xl:gap-0 sticky top-0 sm:top-4 lg:top-8 z-[100] border-white/5 shadow-2xl shrink-0">
           
           {/* TOP ROW / IDENTITY */}
-          <div className="flex items-center gap-2 sm:gap-4 lg:gap-6">
+          <div className="flex items-center gap-2 sm:gap-4 lg:gap-6 w-full xl:w-auto justify-between xl:justify-start">
             <div className="flex items-center gap-2 sm:gap-4">
               <div className="w-8 h-8 sm:w-10 sm:h-10 lg:w-14 lg:h-14 glass rounded-xl sm:rounded-2xl lg:rounded-3xl flex items-center justify-center bg-blue-600/10 border-blue-500/20 group hover:scale-110 transition-all duration-500 shrink-0">
                 <ShieldCheck size={20} className="text-blue-400 drop-shadow-[0_0_8px_rgba(96,165,250,0.5)] sm:w-6 sm:h-6" />
@@ -1992,8 +1992,8 @@ export default function App() {
           </div>
 
           {/* ACTION BUTTONS / TOOLBAR */}
-          <div className="flex items-center gap-1.5 sm:gap-2 lg:gap-4 w-auto justify-end">
-            <div className="flex items-center gap-1.5 sm:gap-2">
+          <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 lg:gap-4 w-full xl:w-auto justify-start xl:justify-end">
+            <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
               <button 
                 onClick={() => setIsMultiView(!isMultiView)}
                 className={`p-2 sm:p-3 rounded-lg sm:rounded-xl lg:rounded-2xl transition-all border ${isMultiView ? 'bg-white/10 border-white/20 text-white' : 'glass border-white/5 text-slate-500 hover:text-white'}`}
