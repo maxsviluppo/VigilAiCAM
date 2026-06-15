@@ -193,6 +193,7 @@ async function startServer() {
 
       if (error && error.code !== 'PGRST116') {
         console.error("[Sync Cloud] Errore lettura global_settings:", error.message);
+        throw new Error(`Errore global_settings: ${error.message}`);
       }
 
       if (data) {
@@ -227,6 +228,7 @@ async function startServer() {
 
       if (settingsError && settingsError.code !== 'PGRST116') {
         console.error("[Sync Cloud] Errore lettura settings (Gemini):", settingsError.message);
+        throw new Error(`Errore letture settings: ${settingsError.message}`);
       }
 
       if (settingsData && settingsData.gemini_part1 && settingsData.gemini_part2) {
@@ -261,6 +263,7 @@ async function startServer() {
 
     } catch (err: any) {
       console.error("[Sync Cloud] Eccezione durante la sincronizzazione:", err.message);
+      throw err;
     }
   };
 
@@ -270,11 +273,11 @@ async function startServer() {
   if (isRaspberry) {
     syncSettingsFromCloud();
     
-    // Sincronizzazione automatica ogni 3 ore (10800000 ms)
+    // Sincronizzazione automatica ogni 5 minuti (300000 ms)
     setInterval(() => {
-      console.log("[Auto-Sync] Avvio sincronizzazione cloud periodica (3 ore)...");
+      console.log("[Auto-Sync] Avvio sincronizzazione cloud periodica (5 minuti)...");
       syncSettingsFromCloud();
-    }, 3 * 60 * 60 * 1000);
+    }, 5 * 60 * 1000);
   } else {
     console.log("[Auto-Sync] Sync automatico disattivato su PC locale. Attivo solo su Raspberry Pi.");
   }
@@ -927,7 +930,7 @@ async function startServer() {
       });
     }
 
-    const FFMPEG_BIN = ffmpeg || "ffmpeg";
+    const FFMPEG_BIN = process.platform === "win32" ? (ffmpeg || "ffmpeg.exe") : "ffmpeg";
     const args = [
       "-rtsp_transport", "tcp",
       "-timeout", "5000000", // 5 secondi
@@ -1120,7 +1123,7 @@ async function startServer() {
 
   // --- IP CAMERA STREAM MANAGER ---
   const { spawn } = await import("child_process");
-  const FFMPEG_BIN = ffmpeg || (process.platform === "win32" ? "ffmpeg.exe" : "ffmpeg");
+  const FFMPEG_BIN = process.platform === "win32" ? (ffmpeg || "ffmpeg.exe") : "ffmpeg";
   const activeStreams = new Map<string, { latestFrame: Buffer | null, lastAccessed: number, startTime: number, process: any }>();
   
   const SOI = Buffer.from([0xFF, 0xD8]);

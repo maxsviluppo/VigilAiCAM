@@ -1176,7 +1176,7 @@ export default function App() {
             }
           }
         }
-      } catch (err) {
+} catch (err) {
         console.error("[VigilAI Sync] Errore critico nel processo di sincronizzazione impostazioni:", err);
       }
     };
@@ -1184,10 +1184,67 @@ export default function App() {
     const timer = setTimeout(() => {
       syncAppSettings();
     }, 1500);
-    return () => clearTimeout(timer);
+
+    let channel: any;
+    if (user) {
+      channel = supabase
+        .channel('global-settings-realtime')
+        .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'global_settings', filter: 'id=eq.master' }, (payload: any) => {
+          console.log('[VigilAI Realtime] Rilevato aggiornamento global_settings:', payload.new);
+          const newData = payload.new;
+          if (newData) {
+            const finalUser = newData.smtp_user || "";
+            const finalPass = newData.smtp_pass || "";
+            const finalChatId = newData.telegram_chat_id || "";
+            const finalToken = newData.telegram_bot_token || "";
+            let finalRecipients: string[] = [];
+            if (newData.notification_emails) {
+              finalRecipients = newData.notification_emails.split(",").map((e: string) => e.trim()).filter(Boolean);
+            }
+
+            localStorage.setItem("vigilai_email_user", finalUser);
+            localStorage.setItem("vigilai_email_pass", finalPass);
+            localStorage.setItem("vigilai_telegram_chat_id", finalChatId);
+            localStorage.setItem("vigilai_telegram_token", finalToken);
+            localStorage.setItem("vigilai_notification_emails", JSON.stringify(finalRecipients));
+
+            setAppSettings(prev => ({
+              ...prev,
+              emailUser: finalUser,
+              emailPass: finalPass,
+              telegramChatId: finalChatId,
+              telegramToken: finalToken
+            }));
+            setNotificationEmails(finalRecipients);
+
+            // Sincronizza con il server locale
+            fetch("/api/settings", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                emailUser: finalUser,
+                emailPass: finalPass,
+                telegramChatId: finalChatId,
+                telegramToken: finalToken,
+                notificationEmails: finalRecipients
+              })
+            }).then(res => res.json()).then(resData => {
+              if (resData.success) {
+                console.log("[VigilAI Realtime] Server locale allineato con successo.");
+              }
+            }).catch(err => console.warn("[VigilAI Realtime] Errore allineamento server locale:", err));
+          }
+        })
+        .subscribe();
+    }
+
+    return () => {
+      clearTimeout(timer);
+      if (channel) {
+        supabase.removeChannel(channel);
+      }
+    };
   }, [user]);
-
-
   
   const fetchUserData = useCallback(async () => {
 
