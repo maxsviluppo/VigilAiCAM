@@ -1087,12 +1087,12 @@ export default function App() {
         }
 
         const needsLocalUpdate = 
-          (!localKey && cloudKey) || 
-          (!localEmailUser && cloudEmailUser) || 
-          (!localEmailPass && cloudEmailPass) || 
-          (!localTelegramChatId && cloudTelegramChatId) ||
-          (!localTelegramToken && cloudTelegramToken) ||
-          (localRecipients.length === 1 && localRecipients[0] === "castromassimo@gmail.com" && cloudRecipients.length > 0);
+          (cloudKey && cloudKey !== localKey) || 
+          (cloudEmailUser && cloudEmailUser !== localEmailUser) || 
+          (cloudEmailPass && cloudEmailPass !== localEmailPass) || 
+          (cloudTelegramChatId && cloudTelegramChatId !== localTelegramChatId) ||
+          (cloudTelegramToken && cloudTelegramToken !== localTelegramToken) ||
+          (cloudRecipients.length > 0 && JSON.stringify(cloudRecipients) !== JSON.stringify(localRecipients));
 
         const saveToLocalServer = (key: string, userMail: string, passMail: string, tgChatId: string, tgToken: string, recs: string[]) => {
           fetch("/api/settings", {
@@ -1114,7 +1114,7 @@ export default function App() {
         };
 
         if (needsLocalUpdate) {
-          console.log("[VigilAI Sync] Rilevate impostazioni nel cloud. Ripristino in locale...");
+          console.log("[VigilAI Sync] Rilevate impostazioni differenti o più recenti nel cloud. Sincronizzazione locale...");
           
           const finalKey = cloudKey || localKey;
           const finalEmailUser = cloudEmailUser || localEmailUser;
@@ -1150,11 +1150,12 @@ export default function App() {
           });
         } else {
           const needsCloudUpdate = 
-            (localKey && !cloudKey) || 
-            (localEmailUser && !cloudEmailUser) || 
-            (localEmailPass && !cloudEmailPass) ||
-            (localTelegramChatId && !cloudTelegramChatId) ||
-            (localTelegramToken && !cloudTelegramToken);
+            (!cloudKey && localKey) || 
+            (!cloudEmailUser && localEmailUser) || 
+            (!cloudEmailPass && localEmailPass) ||
+            (!cloudTelegramChatId && localTelegramChatId) ||
+            (!cloudTelegramToken && localTelegramToken) ||
+            (cloudRecipients.length === 0 && localRecipients.length > 0);
 
           if (needsCloudUpdate) {
             console.log("[VigilAI Sync] Caricamento impostazioni locali su cloud (backup)...");
