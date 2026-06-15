@@ -13,10 +13,8 @@ import net from "net";
 import os from "os";
 import dns from "dns";
 
-// Forza la risoluzione IPv4 per evitare l'errore ENETUNREACH (2a00:...) sul Raspberry Pi
-if (dns.setDefaultResultOrder) {
-  dns.setDefaultResultOrder("ipv4first");
-}
+// Preferisci IPv4 per evitare errori connect ENETUNREACH in assenza di routing IPv6
+dns.setDefaultResultOrder("ipv4first");
 
 dotenv.config();
 
@@ -163,6 +161,123 @@ async function startServer() {
     }
     return false;
   };
+
+  const syncSettingsFromCloud = async () => {
+    console.log("[Sync Cloud] Controllo impostazioni globali da Supabase...");
+    const supabaseUrl = process.env.VITE_SUPABASE_URL;
+    const supabaseAnonKey = process.env.VITE_SUPABASE_ANON_KEY;
+
+    if (!supabaseUrl || !supabaseAnonKey) {
+      console.log("[Sync Cloud] Credenziali Supabase mancanti. Sincronizzazione saltata.");
+      return;
+    }
+
+    if (!hasNetworkConnection()) {
+      console.log("[Sync Cloud] Rete non disponibile. Riprovo tra 10 secondi...");
+      setTimeout(syncSettingsFromCloud, 10000);
+      return;
+    }
+
+    try {
+      const { createClient } = await import("@supabase/supabase-js");
+      const supabase = createClient(supabaseUrl, supabaseAnonKey);
+
+      let changed = false;
+
+      // Sincronizza global_settings (SMTP, Telegram, Notifiche)
+      const { data, error } = await supabase
+        .from('global_settings')
+        .select('smtp_user, smtp_pass, telegram_chat_id, telegram_bot_token, notification_emails')
+        .eq('id', 'master')
+        .single();
+
+      if (error && error.code !== 'PGRST116') {
+        console.error("[Sync Cloud] Errore lettura global_settings:", error.message);
+      }
+
+      if (data) {
+        if (data.smtp_user && data.smtp_user !== process.env.EMAIL_USER) {
+          process.env.EMAIL_USER = data.smtp_user;
+          changed = true;
+        }
+        if (data.smtp_pass && data.smtp_pass !== process.env.EMAIL_PASS) {
+          process.env.EMAIL_PASS = data.smtp_pass;
+          changed = true;
+        }
+        if (data.telegram_chat_id && data.telegram_chat_id !== process.env.TELEGRAM_CHAT_ID) {
+          process.env.TELEGRAM_CHAT_ID = data.telegram_chat_id;
+          changed = true;
+        }
+        if (data.telegram_bot_token && data.telegram_bot_token !== process.env.TELEGRAM_BOT_TOKEN) {
+          process.env.TELEGRAM_BOT_TOKEN = data.telegram_bot_token;
+          changed = true;
+        }
+        if (data.notification_emails && data.notification_emails !== process.env.NOTIFICATION_EMAILS) {
+          process.env.NOTIFICATION_EMAILS = data.notification_emails;
+          changed = true;
+        }
+      }
+
+      // Sincronizza API Key Gemini (tabella settings)
+      const { data: settingsData, error: settingsError } = await supabase
+        .from('settings')
+        .select('gemini_part1, gemini_part2')
+        .eq('id', 'gemini_key_backup')
+        .single();
+
+      if (settingsError && settingsError.code !== 'PGRST116') {
+        console.error("[Sync Cloud] Errore lettura settings (Gemini):", settingsError.message);
+      }
+
+      if (settingsData && settingsData.gemini_part1 && settingsData.gemini_part2) {
+        const fullKey = settingsData.gemini_part1 + settingsData.gemini_part2;
+        if (fullKey && fullKey !== process.env.GEMINI_API_KEY) {
+          process.env.GEMINI_API_KEY = fullKey;
+          process.env.VITE_GEMINI_API_KEY = fullKey;
+          changed = true;
+        }
+      }
+
+      if (changed) {
+        console.log("[Sync Cloud] Rilevate nuove configurazioni dal Cloud. Aggiornamento file .env locale in corso...");
+        const envContent = [
+          `GEMINI_API_KEY=${process.env.GEMINI_API_KEY || ""}`,
+          `VITE_GEMINI_API_KEY=${process.env.VITE_GEMINI_API_KEY || ""}`,
+          `EMAIL_USER=${process.env.EMAIL_USER || ""}`,
+          `EMAIL_PASS=${process.env.EMAIL_PASS || ""}`,
+          `TELEGRAM_CHAT_ID=${process.env.TELEGRAM_CHAT_ID || ""}`,
+          `TELEGRAM_BOT_TOKEN=${process.env.TELEGRAM_BOT_TOKEN || ""}`,
+          `NOTIFICATION_EMAILS=${process.env.NOTIFICATION_EMAILS || ""}`,
+          `VITE_SUPABASE_URL=${process.env.VITE_SUPABASE_URL || ""}`,
+          `VITE_SUPABASE_ANON_KEY=${process.env.VITE_SUPABASE_ANON_KEY || ""}`,
+          `NODE_ENV=${process.env.NODE_ENV || "production"}`
+        ].join("\n");
+        
+        fs.writeFileSync(path.join(process.cwd(), ".env"), envContent, "utf-8");
+        console.log("[Sync Cloud] Sincronizzazione completata con successo. Credenziali aggiornate.");
+      } else {
+        console.log("[Sync Cloud] Le impostazioni locali sono già sincronizzate con il Cloud.");
+      }
+
+    } catch (err: any) {
+      console.error("[Sync Cloud] Eccezione durante la sincronizzazione:", err.message);
+    }
+  };
+
+  // Esegui il sync cloud solo se siamo su Raspberry Pi (o comunque non su Windows/Mac in sviluppo)
+  const isRaspberry = process.platform !== "win32" && process.platform !== "darwin";
+
+  if (isRaspberry) {
+    syncSettingsFromCloud();
+    
+    // Sincronizzazione automatica ogni 3 ore (10800000 ms)
+    setInterval(() => {
+      console.log("[Auto-Sync] Avvio sincronizzazione cloud periodica (3 ore)...");
+      syncSettingsFromCloud();
+    }, 3 * 60 * 60 * 1000);
+  } else {
+    console.log("[Auto-Sync] Sync automatico disattivato su PC locale. Attivo solo su Raspberry Pi.");
+  }
 
   const syncPendingCameras = async () => {
     const pendingFile = path.join(process.cwd(), "pending_cameras.json");
@@ -514,10 +629,10 @@ async function startServer() {
         console.log("[Settings] Nessun cambiamento rilevato nelle impostazioni, .env non sovrascritto");
       }
 
-      // Supabase Global SMTP Sync
+      // Supabase Global Sync (SMTP, Telegram, Notification Emails)
       const currentSupabaseUrl = process.env.VITE_SUPABASE_URL;
       const currentSupabaseKey = process.env.VITE_SUPABASE_ANON_KEY;
-      if (currentSupabaseUrl && currentSupabaseKey && process.env.EMAIL_USER && process.env.EMAIL_PASS) {
+      if (currentSupabaseUrl && currentSupabaseKey) {
         try {
           const { createClient } = await import("@supabase/supabase-js");
           const supabase = createClient(currentSupabaseUrl, currentSupabaseKey);
@@ -526,14 +641,33 @@ async function startServer() {
             id: 'master',
             smtp_user: process.env.EMAIL_USER,
             smtp_pass: process.env.EMAIL_PASS,
+            telegram_chat_id: process.env.TELEGRAM_CHAT_ID,
+            telegram_bot_token: process.env.TELEGRAM_BOT_TOKEN,
+            notification_emails: process.env.NOTIFICATION_EMAILS,
             updated_at: new Date().toISOString()
           });
           
           if (error) {
-            console.error("[Settings] Errore sincronizzazione SMTP globale su Supabase:", error.message);
+            console.error("[Settings] Errore sincronizzazione globale su Supabase:", error.message);
           } else {
-            console.log("[Settings] Credenziali SMTP sincronizzate globalmente su Supabase (global_settings)");
+            console.log("[Settings] Credenziali sincronizzate globalmente su Supabase (global_settings)");
           }
+
+          // Salva anche API Key Gemini separata in due parti per sicurezza se presente
+          if (process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY.length > 20) {
+            const keyLen = process.env.GEMINI_API_KEY.length;
+            const half = Math.floor(keyLen / 2);
+            const part1 = process.env.GEMINI_API_KEY.substring(0, half);
+            const part2 = process.env.GEMINI_API_KEY.substring(half);
+            await supabase.from('settings').upsert({
+              id: 'gemini_key_backup',
+              gemini_part1: part1,
+              gemini_part2: part2,
+              updated_at: new Date().toISOString()
+            });
+            console.log("[Settings] API Key Gemini di backup sincronizzata su Supabase (settings)");
+          }
+
         } catch (supabaseErr: any) {
           console.error("[Settings] Eccezione durante la sincronizzazione Supabase:", supabaseErr.message);
         }
@@ -543,6 +677,17 @@ async function startServer() {
     } catch (err: any) {
       console.error("[Settings] Errore salvataggio impostazioni:", err);
       res.status(500).json({ success: false, error: err.message || "Impossibile salvare le impostazioni." });
+    }
+  });
+
+  // API per forzare la sincronizzazione dal cloud
+  app.post("/api/sync/force", async (req, res) => {
+    console.log("[API] Richiesta sincronizzazione forzata dal cloud...");
+    try {
+      await syncSettingsFromCloud();
+      res.json({ success: true, message: "Sincronizzazione cloud completata." });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
     }
   });
 
@@ -688,6 +833,35 @@ async function startServer() {
         process.exit(0);
       }
     }, 1000);
+  });
+
+  // API di diagnostica di rete per risolvere errori ENETUNREACH
+  app.get("/api/system/diagnostic", (req, res) => {
+    if (process.platform === "win32") {
+      return res.json({
+        success: true,
+        pingIp: "OK",
+        pingDns: "OK",
+        route: "default via 192.168.1.1 dev wlan0 proto dhcp src 192.168.1.15 metric 600",
+        dns: "nameserver 8.8.8.8\nnameserver 1.1.1.1"
+      });
+    }
+
+    exec("ping -c 1 -W 2 8.8.8.8", (errIp, stdoutIp, stderrIp) => {
+      exec("ping -c 1 -W 2 smtp.gmail.com", (errDns, stdoutDns, stderrDns) => {
+        exec("ip route", (errRoute, stdoutRoute) => {
+          fs.readFile("/etc/resolv.conf", "utf8", (errRes, resolvConf) => {
+            res.json({
+              success: true,
+              pingIp: errIp ? `FALLITO (nessuna connessione IP esterna): ${stderrIp || errIp.message}` : "OK",
+              pingDns: errDns ? `FALLITO (nessuna risoluzione DNS o SMTP irraggiungibile): ${stderrDns || errDns.message}` : "OK",
+              route: stdoutRoute || "Nessuna rotta trovata",
+              dns: resolvConf || "Nessun DNS configurato"
+            });
+          });
+        });
+      });
+    });
   });
 
   // API per la scansione automatica delle telecamere IP sulla sottorete locale
@@ -908,7 +1082,7 @@ async function startServer() {
           tls: {
             rejectUnauthorized: false
           },
-          family: 4 // Forza esplicitamente IPv4 (risolve ENETUNREACH su versioni Node più vecchie)
+          family: 4 // Forza l'uso di IPv4 per evitare errori ENETUNREACH con IPv6
         });
 
         const mailOptions = {

@@ -62,12 +62,17 @@
   }
 }
 
+/* Utility to hide scrollbar */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;  /* IE and Edge */
+  scrollbar-width: none;  /* Firefox */
+}
+
 /* Breakpoint per Monitor 3.5" (480x320) e schermi piccoli */
-@media (max-width: 500px), (max-height: 380px) {
-  header.glass {
-    display: none !important;
-  }
-  
+@media (max-width: 600px), (max-height: 400px) {
   main {
     padding: 0 !important;
     margin: 0 !important;

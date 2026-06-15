@@ -36,7 +36,10 @@ import {
   Key,
   ExternalLink,
   Keyboard,
-  Send
+  Send,
+  ChevronUp,
+  ChevronDown,
+  CameraOff
 } from "lucide-react";
 import * as Lucide from "lucide-react";
 import { motion, AnimatePresence, Reorder } from "framer-motion";
@@ -532,7 +535,7 @@ export default function App() {
   const [showPlans, setShowPlans] = useState(false);
   const [showCameraModal, setShowCameraModal] = useState(false);
   const [editingCamera, setEditingCamera] = useState<Camera | null>(null);
-  const [activeCameraTab, setActiveCameraTab] = useState<'info' | 'source' | 'triggers'>('info');
+  const [activeCameraTab, setActiveCameraTab] = useState<'info' | 'source' | 'triggers' | 'client'>('info');
   const [activeCamStatuses, setActiveCamStatuses] = useState<Record<string, boolean>>({});
   const [cameraToDelete, setCameraToDelete] = useState<string | null>(null);
   const [isNightMode, setIsNightMode] = useState(false);
@@ -556,11 +559,40 @@ export default function App() {
   const [isMobile35, setIsMobile35] = useState(false);
   const [showMobileOverlay, setShowMobileOverlay] = useState(false);
   const [showMobileLogsModal, setShowMobileLogsModal] = useState(false);
+  const [showCredentialsModal, setShowCredentialsModal] = useState(false);
+  const [showDiagnosticModal, setShowDiagnosticModal] = useState(false);
+  const [diagnosticResult, setDiagnosticResult] = useState<any>(null);
+  const [loadingDiagnostic, setLoadingDiagnostic] = useState(false);
 
   useEffect(() => {
     const handleResize = () => {
-      // Sogli allargata per intercettare anche simulatori o scale DPI elevate (fino a 600px x 400px)
-      const is35 = window.innerWidth <= 600 && window.innerHeight <= 450;
+      const urlParams = new URLSearchParams(window.location.search);
+      if (urlParams.get('mode') === 'pc') {
+        setIsMobile35(false);
+        return;
+      }
+      
+      if (urlParams.get('mode') === 'pi') {
+        setIsMobile35(true);
+        setIsMultiView(false);
+        return;
+      }
+
+      // Rilevamento avanzato per separare Smartphone (Alto) e Raspberry (Schiacciato)
+      const w = window.innerWidth;
+      const h = window.innerHeight;
+      const ua = navigator.userAgent.toLowerCase();
+
+      // 1. Vero Raspberry Pi (Hardware fisico)
+      const isRealRaspberry = ua.includes('linux arm') && !ua.includes('android');
+
+      // 2. Test in locale per Raspberry (Finestra piccola e SCHIACCIATA)
+      const isSquatWindow = w <= 800 && h <= 450;
+
+      // Se il dispositivo è un vero Raspberry o se la finestra del PC è stata schiacciata -> Modalità 3.5"
+      // Se apri da Smartphone (es. 390x844), l'altezza è > 450 -> Modalità Smartphone Responsive
+      const is35 = isRealRaspberry || isSquatWindow;
+      
       setIsMobile35(is35);
       if (is35) {
         setIsMultiView(false);
@@ -648,7 +680,8 @@ export default function App() {
     telegramToken: localStorage.getItem("vigilai_telegram_token") || "",
   });
   const [disabledAiCameraIds, setDisabledAiCameraIds] = useState<string[]>([]);
-  const [activeSettingsTab, setActiveSettingsTab] = useState<"ai" | "email" | "telegram" | "sleep" | "test">("ai");
+  const [activeSettingsTab, setActiveSettingsTab] = useState<"ai" | "email" | "telegram" | "sleep" | "test" | "log">("ai");
+  const [logStartIndex, setLogStartIndex] = useState(0);
 
   const toggleCameraAi = (camId: string) => {
     setDisabledAiCameraIds(prev => 
@@ -1000,6 +1033,22 @@ export default function App() {
     };
     if (user) checkTable();
   }, [user]);
+
+  const forceSyncFromCloud = async () => {
+    try {
+      setGlobalModal({ type: 'info', title: 'Sync Cloud', message: 'Sincronizzazione in corso dal database Supabase...' });
+      const res = await fetch('/api/sync/force', { method: 'POST' });
+      const result = await res.json();
+      if (result.success) {
+        setGlobalModal({ type: 'success', title: 'Sync Completato', message: 'Impostazioni cloud applicate con successo! Riavvio in corso...' });
+        setTimeout(() => window.location.reload(), 2000);
+      } else {
+        setGlobalModal({ type: 'error', title: 'Errore Sync', message: 'Impossibile sincronizzare: ' + result.error });
+      }
+    } catch (err: any) {
+      setGlobalModal({ type: 'error', title: 'Errore', message: 'Errore di rete durante la sincronizzazione cloud.' });
+    }
+  };
 
   // Recupero e allineamento delle impostazioni da Supabase all'avvio
   useEffect(() => {
@@ -1953,11 +2002,11 @@ export default function App() {
       <main className={`flex-1 flex flex-col min-w-0 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 ${isMobile35 ? 'h-screen w-screen overflow-hidden p-0 m-0 pb-0' : 'pb-20 lg:pb-0 overflow-y-auto'}`}>
         
         {!isMobile35 && (
-          <header className="glass m-0 sm:m-4 lg:m-8 p-3 sm:p-4 lg:p-6 rounded-none sm:rounded-[32px] lg:rounded-[40px] flex flex-row items-center justify-between sticky top-0 sm:top-4 lg:top-8 z-[100] border-white/5 shadow-2xl shrink-0 w-full">
+          <header className="glass m-0 md:m-4 lg:m-8 p-2.5 md:p-6 rounded-none md:rounded-[32px] lg:rounded-[40px] flex flex-col md:flex-row items-center justify-between gap-2 md:gap-4 sticky top-0 z-[100] border-b md:border border-white/5 bg-slate-950/90 md:bg-transparent backdrop-blur-xl md:backdrop-blur-none shadow-2xl shrink-0">
           
           {/* TOP ROW / IDENTITY */}
-          <div className="flex items-center gap-2 sm:gap-4 lg:gap-6 shrink-0">
-            <div className="flex items-center gap-2 sm:gap-4 shrink-0">
+          <div className="flex items-center justify-between w-full md:w-auto shrink-0">
+            <div className="flex items-center gap-2 sm:gap-4">
               <div className="w-8 h-8 sm:w-10 sm:h-10 lg:w-14 lg:h-14 glass rounded-xl sm:rounded-2xl lg:rounded-3xl flex items-center justify-center bg-blue-600/10 border-blue-500/20 group hover:scale-110 transition-all duration-500 shrink-0">
                 <ShieldCheck size={20} className="text-blue-400 drop-shadow-[0_0_8px_rgba(96,165,250,0.5)] sm:w-6 sm:h-6" />
               </div>
@@ -1978,22 +2027,22 @@ export default function App() {
               </div>
             </div>
 
-            {/* Mobile-only status badge - Hidden on tiny screens */}
-            <div className="hidden sm:flex md:hidden items-center gap-3 bg-white/5 px-4 py-2 rounded-2xl border border-white/5 shrink-0">
-              <div className="flex items-center gap-2 text-[9px] font-black text-slate-400 uppercase tracking-widest">
-                <span className={`w-2 h-2 rounded-full ${isMonitoring ? 'bg-green-500 shadow-[0_0_8px_#22c55e]' : 'bg-slate-700'}`} />
+            {/* Mobile/Tablet badge - Always visible on small screens */}
+            <div className="flex md:hidden items-center gap-1.5 sm:gap-3 bg-white/5 px-3 py-1.5 rounded-full border border-white/5">
+              <div className="flex items-center gap-1.5 text-[8px] sm:text-[9px] font-black text-slate-300 uppercase tracking-widest">
+                <span className={`w-1.5 h-1.5 rounded-full ${isMonitoring ? 'bg-green-500 shadow-[0_0_8px_#22c55e]' : 'bg-slate-700'}`} />
                 {isMonitoring ? 'Attivo' : 'Attesa'}
               </div>
               <div className="w-px h-3 bg-white/10" />
-              <div className="flex items-center gap-1 text-[9px] font-black text-blue-400 uppercase tracking-widest">
+              <div className="flex items-center gap-1 text-[8px] sm:text-[9px] font-black text-blue-400 uppercase tracking-widest">
                 {cameras.length} CAM
               </div>
             </div>
           </div>
 
           {/* ACTION BUTTONS / TOOLBAR */}
-          <div className="flex items-center gap-1.5 sm:gap-2 lg:gap-4 overflow-x-auto custom-scrollbar flex-nowrap w-full pl-2 justify-end">
-            <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+          <div className="flex items-center justify-start md:justify-end gap-1.5 sm:gap-2 lg:gap-4 w-full md:w-auto overflow-x-auto flex-nowrap pb-1.5 md:pb-0 no-scrollbar md:custom-scrollbar shrink-0">
+            <div className="flex items-center gap-1.5 sm:gap-2">
               <button 
                 onClick={() => setIsMultiView(!isMultiView)}
                 className={`p-2 sm:p-3 rounded-lg sm:rounded-xl lg:rounded-2xl transition-all border ${isMultiView ? 'bg-white/10 border-white/20 text-white' : 'glass border-white/5 text-slate-500 hover:text-white'}`}
@@ -2472,16 +2521,6 @@ export default function App() {
                           <span className="text-[6px] font-black uppercase tracking-widest mt-0.5">Opz</span>
                         </button>
 
-                        {/* Logs button */}
-                        <button
-                          type="button"
-                          onClick={() => setShowMobileLogsModal(true)}
-                          className="w-10 h-[34px] rounded-lg bg-white/5 border border-white/5 flex flex-col items-center justify-center text-slate-400 hover:text-white active:scale-95 cursor-pointer"
-                          title="Logs"
-                        >
-                          <History size={14} />
-                          <span className="text-[6px] font-black uppercase tracking-widest mt-0.5">Log</span>
-                        </button>
 
                         {/* AI Core Toggle button */}
                         <button
@@ -2531,6 +2570,17 @@ export default function App() {
                         >
                           <Scan size={14} className={isEditingZones ? 'animate-pulse' : ''} />
                           <span className="text-[6px] font-black uppercase tracking-widest mt-0.5">Zone</span>
+                        </button>
+
+                        {/* Sync Cloud Toggle button */}
+                        <button
+                          type="button"
+                          onClick={forceSyncFromCloud}
+                          className="w-10 h-[34px] rounded-lg bg-green-600/20 border border-green-500/30 flex flex-col items-center justify-center text-green-400 hover:text-white active:scale-95 cursor-pointer mt-0.5"
+                          title="Sincronizza Profilo Online (Cloud)"
+                        >
+                          <Lucide.RefreshCw size={14} />
+                          <span className="text-[6px] font-black uppercase tracking-widest mt-0.5">Sync</span>
                         </button>
                       </div>
 
@@ -3148,6 +3198,16 @@ export default function App() {
                       >
                         <Cpu size={14} />
                       </button>
+                      <button
+                        type="button"
+                        onClick={() => setActiveCameraTab('client')}
+                        className={`p-2 rounded-lg border text-xs font-black transition-all active:scale-95 cursor-pointer ${
+                          activeCameraTab === 'client' ? 'bg-blue-600 border-blue-400 text-white shadow-lg' : 'bg-white/5 border-white/5 text-slate-400'
+                        }`}
+                        title="Connessione Tablet"
+                      >
+                        <Scan size={14} />
+                      </button>
                     </div>
                   )}
                 </div>
@@ -3326,6 +3386,49 @@ export default function App() {
                       </div>
                     </div>
                   )}
+
+                  {/* CLIENT CONNECTION (New Tab) */}
+                  {(!isMobile35 || activeCameraTab === 'client') && serverInfo && (
+                    <div className="space-y-3 animate-fade-in">
+                      <div className="p-4 bg-green-500/5 border border-green-500/10 rounded-2xl space-y-4">
+                        <div className="flex items-center gap-2 text-green-400">
+                          <Monitor size={16} />
+                          <span className="text-[10px] font-black uppercase tracking-widest">Connessione Smartphone / Tablet</span>
+                        </div>
+                        <p className="text-[9px] text-slate-400 uppercase font-bold leading-relaxed">
+                          Inquadra il QR code o inserisci l'indirizzo nel browser dello smartphone/tablet:
+                        </p>
+                        
+                        <div className="flex flex-col sm:flex-row gap-4 items-center sm:items-start">
+                          <div className="space-y-2 flex-1 w-full">
+                            {serverInfo.ips.map(ip => (
+                              <div key={ip} className="flex items-center justify-between bg-black/20 p-3 rounded-xl border border-white/5">
+                                <code className="text-[10px] sm:text-xs text-blue-400 font-mono break-all">http://{ip}:{serverInfo.port}</code>
+                                <span className="text-[8px] font-black text-slate-600 uppercase ml-2">WiFi Locale</span>
+                              </div>
+                            ))}
+                          </div>
+                          
+                          {serverInfo.ips.length > 0 && (
+                            <div className="bg-white p-2 rounded-xl shrink-0">
+                              <QRCodeCanvas
+                                value={`http://${serverInfo.ips.find(ip => (ip.startsWith('192.168.') || ip.startsWith('10.')) && ip !== '10.42.0.1') || serverInfo.ips.find(ip => !ip.startsWith('100.') && ip !== '127.0.0.1') || serverInfo.ips[0]}:${serverInfo.port}`}
+                                size={90}
+                                level="M"
+                                includeMargin={false}
+                              />
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="p-2 bg-blue-600/10 rounded-xl border border-blue-500/20 mt-2">
+                          <p className="text-[8px] text-blue-400 font-black uppercase tracking-widest text-center">
+                            💡 Tocca "Aggiungi a Home" sul tablet per installarla come App
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 {saveStatus && (
@@ -3358,33 +3461,7 @@ export default function App() {
                   </button>
                 </div>
 
-                <div className="h-px w-full bg-white/5" />
 
-                {/* Local Connection Guide */}
-                {serverInfo && (
-                  <div className="p-6 bg-green-500/5 border border-green-500/10 rounded-3xl space-y-4">
-                    <div className="flex items-center gap-2 text-green-400">
-                      <Monitor size={16} />
-                      <span className="text-[10px] font-black uppercase tracking-widest">Connessione Tablet Cliente</span>
-                    </div>
-                    <p className="text-[9px] text-slate-400 uppercase font-bold leading-relaxed">
-                      Per collegare un tablet, apri il browser sul dispositivo e inserisci uno dei seguenti indirizzi:
-                    </p>
-                    <div className="space-y-2">
-                      {serverInfo.ips.map(ip => (
-                        <div key={ip} className="flex items-center justify-between bg-black/20 p-3 rounded-xl border border-white/5">
-                          <code className="text-xs text-blue-400 font-mono">http://{ip}:{serverInfo.port}</code>
-                          <span className="text-[8px] font-black text-slate-600 uppercase">WiFi Locale</span>
-                        </div>
-                      ))}
-                    </div>
-                    <div className="p-3 bg-blue-600/10 rounded-xl border border-blue-500/20">
-                      <p className="text-[8px] text-blue-400 font-black uppercase tracking-widest text-center">
-                        💡 Tocca "Aggiungi a Home" sul tablet per installarla come App
-                      </p>
-                    </div>
-                  </div>
-                )}
               </div>
             </motion.div>
           </motion.div>
@@ -3530,7 +3607,17 @@ export default function App() {
               initial={{ scale: 0.9, y: 20 }} animate={{ scale: 1, y: 0 }}
               className="glass bg-slate-900/95 lg:bg-slate-900/60 w-full h-full sm:h-auto sm:max-h-[90vh] max-w-lg rounded-none sm:rounded-[32px] lg:rounded-[40px] p-4 sm:p-6 lg:p-10 space-y-3 sm:space-y-6 lg:space-y-8 overflow-y-auto custom-scrollbar shadow-2xl border-white/5"
             >
-              <h2 className="text-lg sm:text-2xl font-black text-white uppercase">Impostazioni Sistema</h2>
+              <div className="flex justify-between items-center mb-1">
+                <h2 className="text-lg sm:text-2xl font-black text-white uppercase">Impostazioni Sistema</h2>
+                <button
+                  type="button"
+                  onClick={() => setShowSettings(false)}
+                  className="p-2 bg-red-600/20 text-red-400 rounded-lg hover:bg-red-600 hover:text-white transition-all border border-red-500/30"
+                  title="Chiudi Configurazione"
+                >
+                  <X size={18} />
+                </button>
+              </div>
               
               {/* Menu Grid - 2 Colonne */}
               {isMobile35 ? (
@@ -3561,27 +3648,15 @@ export default function App() {
                   </button>
                   <button
                     type="button"
-                    onClick={() => setActiveSettingsTab("telegram")}
+                    onClick={() => { setActiveSettingsTab("log"); setLogStartIndex(0); }}
                     className={`flex-1 flex items-center justify-center p-2 rounded-xl border transition-all active:scale-95 cursor-pointer ${
-                      activeSettingsTab === "telegram"
+                      activeSettingsTab === "log"
                         ? "bg-blue-600 border-blue-400 text-white shadow-lg shadow-blue-500/25"
                         : "bg-white/5 border-white/5 text-slate-400 hover:bg-white/10 hover:text-white"
                     }`}
-                    title="ID Telegram"
+                    title="Log Allarmi"
                   >
-                    <Send size={16} />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setActiveSettingsTab("sleep")}
-                    className={`flex-1 flex items-center justify-center p-2 rounded-xl border transition-all active:scale-95 cursor-pointer ${
-                      activeSettingsTab === "sleep"
-                        ? "bg-blue-600 border-blue-400 text-white shadow-lg shadow-blue-500/25"
-                        : "bg-white/5 border-white/5 text-slate-400 hover:bg-white/10 hover:text-white"
-                    }`}
-                    title="MODE Anti-sleep"
-                  >
-                    <Lock size={16} />
+                    <History size={16} />
                   </button>
                   <button
                     type="button"
@@ -3680,13 +3755,15 @@ export default function App() {
                           </div>
                         </div>
                         
-                        <select 
-                          value={aiModel}
-                          onChange={(e) => setAiModel(e.target.value)}
-                          className="w-full bg-black/40 border border-white/10 px-4 py-3 rounded-xl text-xs text-white outline-none focus:border-blue-500/50 transition-all font-bold appearance-none cursor-pointer"
-                        >
-                          <option value="gemini-3-flash-preview" className="bg-[#0f172a]">Gemini 3.0 Flash</option>
-                        </select>
+                        <div className="flex items-center gap-2">
+                          <select 
+                            value={aiModel}
+                            onChange={(e) => setAiModel(e.target.value)}
+                            className="w-full bg-black/40 border border-white/10 px-4 py-3 rounded-xl text-xs text-white outline-none focus:border-blue-500/50 transition-all font-bold appearance-none cursor-pointer"
+                          >
+                            <option value="gemini-3-flash-preview" className="bg-[#0f172a]">Gemini 3.0 Flash</option>
+                          </select>
+                        </div>
                       </div>
                       
                       <input 
@@ -3707,48 +3784,44 @@ export default function App() {
                 {activeSettingsTab === "email" && (
                   <div className="space-y-4">
                     {/* Email Sender Configuration */}
-                    {!isMobile35 && (
-                      <>
-                        <div className="space-y-3">
-                          <div className="flex justify-between items-end">
-                            <label className="text-[9px] font-black uppercase tracking-widest text-slate-500">Mittente Notifiche Email</label>
-                            <a href="https://myaccount.google.com/apppasswords" target="_blank" rel="noreferrer" className="text-[8px] text-blue-400 hover:text-blue-300 uppercase font-black tracking-widest flex items-center gap-1">Password App Gmail <ChevronRight size={10}/></a>
-                          </div>
-                          <div className="flex flex-col gap-3">
-                            <input 
-                              type="email" 
-                              value={appSettings.emailUser} 
-                              onChange={(e) => setAppSettings({...appSettings, emailUser: e.target.value})}
-                              onFocus={() => { if (useVirtualKeyboard) setKeyboardTarget({ id: 'settingsEmailUser', title: 'Email SMTP Mittente' }); }}
-                              placeholder="Email mittente (lascia vuoto per default)"
-                              autoComplete="new-password"
-                              className="w-full bg-white/5 border border-white/10 px-4 py-3 rounded-xl text-xs text-white outline-none focus:border-blue-500 transition-colors"
-                            />
-                            <div className="relative">
-                              <input 
-                                type={showEmailPass ? "text" : "password"} 
-                                value={appSettings.emailPass} 
-                                onChange={(e) => setAppSettings({...appSettings, emailPass: e.target.value})}
-                                onFocus={() => { if (useVirtualKeyboard) setKeyboardTarget({ id: 'settingsEmailPass', title: 'Password App SMTP' }); }}
-                                placeholder="Password App (lascia vuoto per default)"
-                                autoComplete="new-password"
-                                className="w-full bg-white/5 border border-white/10 pl-4 pr-10 py-3 rounded-xl text-xs text-white outline-none focus:border-blue-500 transition-colors"
-                              />
-                              <button
-                                type="button"
-                                onClick={() => setShowEmailPass(!showEmailPass)}
-                                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white transition-colors"
-                              >
-                                {showEmailPass ? <EyeOff size={16} /> : <Eye size={16} />}
-                              </button>
-                            </div>
-                          </div>
-                          <p className="text-[8px] text-slate-500 uppercase tracking-widest">Usa una "Password per le app" se utilizzi Gmail per inviare gli allarmi.</p>
+                    <div className="space-y-3">
+                      <div className="flex justify-between items-end">
+                        <label className="text-[9px] font-black uppercase tracking-widest text-slate-500">Mittente Notifiche Email</label>
+                        <a href="https://myaccount.google.com/apppasswords" target="_blank" rel="noreferrer" className="text-[8px] text-blue-400 hover:text-blue-300 uppercase font-black tracking-widest flex items-center gap-1">Password App Gmail <ChevronRight size={10}/></a>
+                      </div>
+                      <div className="flex flex-col gap-3">
+                        <input 
+                          type="email" 
+                          value={appSettings.emailUser} 
+                          onChange={(e) => setAppSettings({...appSettings, emailUser: e.target.value})}
+                          onFocus={() => { if (useVirtualKeyboard) setKeyboardTarget({ id: 'settingsEmailUser', title: 'Email SMTP Mittente' }); }}
+                          placeholder="Email mittente (lascia vuoto per default)"
+                          autoComplete="new-password"
+                          className="w-full bg-white/5 border border-white/10 px-4 py-3 rounded-xl text-xs text-white outline-none focus:border-blue-500 transition-colors"
+                        />
+                        <div className="relative">
+                          <input 
+                            type={showEmailPass ? "text" : "password"} 
+                            value={appSettings.emailPass} 
+                            onChange={(e) => setAppSettings({...appSettings, emailPass: e.target.value})}
+                            onFocus={() => { if (useVirtualKeyboard) setKeyboardTarget({ id: 'settingsEmailPass', title: 'Password App SMTP' }); }}
+                            placeholder="Password App (lascia vuoto per default)"
+                            autoComplete="new-password"
+                            className="w-full bg-white/5 border border-white/10 pl-4 pr-10 py-3 rounded-xl text-xs text-white outline-none focus:border-blue-500 transition-colors"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setShowEmailPass(!showEmailPass)}
+                            className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white transition-colors"
+                          >
+                            {showEmailPass ? <EyeOff size={16} /> : <Eye size={16} />}
+                          </button>
                         </div>
+                      </div>
+                      <p className="text-[8px] text-slate-500 uppercase tracking-widest">Usa una "Password per le app" se utilizzi Gmail per inviare gli allarmi.</p>
+                    </div>
 
-                        <div className="h-px w-full bg-white/5" />
-                      </>
-                    )}
+                    <div className="h-px w-full bg-white/5" />
 
                     {/* Email Recipients Configuration */}
                     <div className="space-y-3">
@@ -3834,7 +3907,7 @@ export default function App() {
                 )}
 
                 {/* MODE Anti-sleep Tab */}
-                {activeSettingsTab === "sleep" && (
+                {(!isMobile35 && activeSettingsTab === "sleep") && (
                   <div className="flex items-center justify-between p-4 glass bg-white/5 rounded-2xl border border-white/5">
                     <div className="flex items-center gap-3">
                       <Lock size={16} className="text-blue-400" />
@@ -3905,74 +3978,263 @@ export default function App() {
                       <Send size={14} />
                       Test Telegram
                     </button>
+
+                    <button 
+                      type="button"
+                      onClick={() => setShowCredentialsModal(true)}
+                      className="col-span-2 py-3 bg-blue-500/10 border border-blue-500/20 rounded-xl text-[9px] font-black uppercase tracking-widest text-blue-400 hover:bg-blue-600 hover:text-white transition-all flex items-center justify-center gap-2"
+                    >
+                      <Eye size={12} />
+                      Visualizza Credenziali Mittente
+                    </button>
+
+                    <button 
+                      type="button"
+                      onClick={async () => {
+                        setLoadingDiagnostic(true);
+                        setShowDiagnosticModal(true);
+                        setDiagnosticResult(null);
+                        try {
+                          const res = await fetch("/api/system/diagnostic");
+                          const data = await res.json();
+                          setDiagnosticResult(data);
+                        } catch (err: any) {
+                          setDiagnosticResult({
+                            success: false,
+                            error: err.message
+                          });
+                        } finally {
+                          setLoadingDiagnostic(false);
+                        }
+                      }}
+                      className="col-span-2 py-3 bg-amber-500/10 border border-amber-500/20 rounded-xl text-[9px] font-black uppercase tracking-widest text-amber-400 hover:bg-amber-600 hover:text-white transition-all flex items-center justify-center gap-2"
+                    >
+                      <Activity size={12} />
+                      {loadingDiagnostic ? 'Diagnostica in corso...' : 'Diagnostica Rete (Risoluzione ENETUNREACH)'}
+                    </button>
+                  </div>
+                )}
+
+                {/* LOGS Tab */}
+                {activeSettingsTab === "log" && (
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Ultimi Allarmi Rilevati</h3>
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setLogStartIndex(Math.max(0, logStartIndex - 2))}
+                          disabled={logStartIndex === 0}
+                          className="p-2 bg-white/5 border border-white/10 rounded-lg text-slate-400 hover:bg-white/10 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+                        >
+                          <ChevronUp size={16} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setLogStartIndex(logStartIndex + 2)}
+                          disabled={logStartIndex + 2 >= incidents.length}
+                          className="p-2 bg-white/5 border border-white/10 rounded-lg text-slate-400 hover:bg-white/10 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+                        >
+                          <ChevronDown size={16} />
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      {incidents.length === 0 ? (
+                        <p className="text-center text-xs text-slate-500 py-4 font-bold uppercase tracking-widest">Nessun allarme registrato</p>
+                      ) : (
+                        incidents
+                          .slice(logStartIndex, logStartIndex + 2)
+                          .map((incident) => (
+                            <div key={incident.id} className="flex gap-3 bg-white/5 p-3 border border-white/5 rounded-xl h-24">
+                              {incident.screenshot ? (
+                                <img src={`data:image/jpeg;base64,${incident.screenshot}`} alt="Screenshot allarme" className="w-20 h-full object-cover rounded-lg border border-red-500/30 shrink-0" />
+                              ) : (
+                                <div className="w-20 h-full bg-black/40 rounded-lg flex items-center justify-center border border-white/5 shrink-0">
+                                  <CameraOff size={24} className="text-slate-600" />
+                                </div>
+                              )}
+                              <div className="flex-1 flex flex-col justify-start overflow-hidden">
+                                <span className="text-[9px] font-black uppercase text-red-400 tracking-widest mb-1">{new Date(incident.timestamp).toLocaleTimeString()}</span>
+                                <p className="text-[9px] sm:text-[10px] text-slate-300 font-medium leading-tight overflow-y-auto custom-scrollbar pr-1">{incident.description}</p>
+                              </div>
+                            </div>
+                          ))
+                      )}
+                    </div>
                   </div>
                 )}
               </div>
 
-                  <button 
-                    onClick={() => {
-                      localStorage.setItem("vigilai_gemini_key", appSettings.geminiKey);
-                      localStorage.setItem("vigilai_gemini_key_updated_at", new Date().toISOString());
-                      localStorage.setItem("vigilai_email_user", appSettings.emailUser);
-                      localStorage.setItem("vigilai_email_pass", appSettings.emailPass);
-                      localStorage.setItem("vigilai_telegram_chat_id", appSettings.telegramChatId);
-                      localStorage.setItem("vigilai_telegram_token", appSettings.telegramToken);
-                      localStorage.setItem("vigilai_model", aiModel);
-                      localStorage.setItem("vigilai_notification_emails", JSON.stringify(notificationEmails));
-                      
-                      // Salva le impostazioni sul server locale per persisterle nel file .env
-                      fetch("/api/settings", {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({
-                          geminiKey: appSettings.geminiKey,
-                          emailUser: appSettings.emailUser,
-                          emailPass: appSettings.emailPass,
-                          telegramChatId: appSettings.telegramChatId,
-                          telegramToken: appSettings.telegramToken,
-                          notificationEmails: notificationEmails
-                        })
-                      }).then(res => res.json()).then(resData => {
-                        if (resData.success) {
-                          console.log("[Settings] Impostazioni salvate sul server locale.");
-                        }
-                      }).catch(err => console.error("[Settings] Errore salvataggio server locale:", err));
-
-                      // Backup immediato della chiave Gemini su Supabase
-                      backupApiKeyToSupabase(appSettings.geminiKey);
-                      if (user) {
-                        supabase.auth.updateUser({
-                          data: {
-                            gemini_key: appSettings.geminiKey,
-                            email_user: appSettings.emailUser,
-                            email_pass: appSettings.emailPass,
-                            telegram_chat_id: appSettings.telegramChatId,
-                            telegram_token: appSettings.telegramToken,
-                            notification_emails: notificationEmails
-                          }
-                        }).catch((err: any) => console.warn("[Settings] Errore backup cloud:", err));
-                      }
-
-                      // Sincronizza direttamente su Supabase da frontend (necessario per la versione online)
-                      if (supabase && appSettings.emailUser && appSettings.emailPass) {
-                        supabase.from('global_settings').upsert({
-                          id: 'master',
-                          smtp_user: appSettings.emailUser,
-                          smtp_pass: appSettings.emailPass
-                        }).then(({error}) => {
-                          if (error) console.error("[Settings] Errore sync globale Supabase:", error);
-                          else console.log("[Settings] Credenziali globali salvate su Supabase.");
+              <div className="pt-4 border-t border-white/5 flex gap-3 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setShowSettings(false)}
+                  className="flex-1 py-3 bg-white/5 hover:bg-white/10 text-slate-400 rounded-xl text-xs font-black uppercase tracking-widest transition-all cursor-pointer"
+                >
+                  Annulla
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    localStorage.setItem("vigilai_gemini_key", appSettings.geminiKey);
+                    localStorage.setItem("vigilai_gemini_key_updated_at", new Date().toISOString());
+                    localStorage.setItem("vigilai_email_user", appSettings.emailUser);
+                    localStorage.setItem("vigilai_email_pass", appSettings.emailPass);
+                    localStorage.setItem("vigilai_telegram_chat_id", appSettings.telegramChatId);
+                    localStorage.setItem("vigilai_telegram_token", appSettings.telegramToken);
+                    localStorage.setItem("vigilai_model", aiModel);
+                    localStorage.setItem("vigilai_notification_emails", JSON.stringify(notificationEmails));
+                    
+                    fetch("/api/settings", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({
+                        geminiKey: appSettings.geminiKey,
+                        emailUser: appSettings.emailUser,
+                        emailPass: appSettings.emailPass,
+                        telegramChatId: appSettings.telegramChatId,
+                        telegramToken: appSettings.telegramToken,
+                        notificationEmails: notificationEmails
+                      })
+                    }).then(res => res.json()).then(resData => {
+                      if (resData.success) {
+                        console.log("[Settings] Impostazioni salvate con successo.");
+                        setGlobalModal({
+                          type: 'success',
+                          title: 'Impostazioni Salvate',
+                          message: 'Le impostazioni sono state applicate e sincronizzate con successo!'
                         });
                       }
+                    }).catch(err => console.error("[Settings] Errore salvataggio:", err));
 
-                      setShowSettings(false);
-                    }} 
-                    className="w-full py-4 bg-blue-600 rounded-2xl text-[10px] font-black uppercase tracking-widest text-white shadow-xl hover:bg-blue-500 transition-all"
-                  >
-                    Salva e Chiudi
-                  </button>
+                    backupApiKeyToSupabase(appSettings.geminiKey);
+                    if (user) {
+                      supabase.auth.updateUser({
+                        data: {
+                          gemini_key: appSettings.geminiKey,
+                          email_user: appSettings.emailUser,
+                          email_pass: appSettings.emailPass,
+                          telegram_chat_id: appSettings.telegramChatId,
+                          telegram_token: appSettings.telegramToken,
+                          notification_emails: notificationEmails
+                        }
+                      }).catch((err: any) => console.warn("[Settings] Errore backup cloud:", err));
+                    }
+
+                    setShowSettings(false);
+                  }}
+                  className="flex-1 py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-black uppercase tracking-widest transition-all shadow-lg shadow-blue-500/25 cursor-pointer"
+                >
+                  Salva Impostazioni
+                </button>
+              </div>
+
             </motion.div>
           </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Credentials Modal (Temporary for sender credentials view in plain text) */}
+      <AnimatePresence>
+        {showCredentialsModal && (
+          <div className="fixed inset-0 z-[150] flex items-center justify-center p-6 backdrop-blur-2xl bg-slate-950/80">
+            <motion.div 
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="glass max-w-md w-full p-6 rounded-[32px] border-white/10 space-y-6 shadow-2xl bg-[#0d101e]/90 text-center"
+            >
+              <div className="space-y-2">
+                <h3 className="text-lg font-black text-white uppercase tracking-tighter">Credenziali Mittente Email</h3>
+                <p className="text-slate-400 text-[10px] uppercase font-bold tracking-wider">Visualizzazione temporanea in chiaro</p>
+              </div>
+
+              <div className="space-y-4 bg-black/40 p-4 rounded-2xl border border-white/5 font-mono text-xs text-left">
+                <div className="space-y-1">
+                  <div className="text-[8px] font-black uppercase text-slate-500 tracking-wider">Email/Utente SMTP:</div>
+                  <div className="text-white break-all select-all">{appSettings.emailUser || "Non configurata (Usa default)"}</div>
+                </div>
+                <div className="space-y-1">
+                  <div className="text-[8px] font-black uppercase text-slate-500 tracking-wider">Password di App:</div>
+                  <div className="text-blue-400 break-all select-all font-bold">{appSettings.emailPass || "Non configurata (Usa default)"}</div>
+                </div>
+              </div>
+
+              <button 
+                type="button"
+                onClick={() => setShowCredentialsModal(false)}
+                className="w-full py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-[10px] font-black uppercase tracking-widest transition-all shadow-lg"
+              >
+                Chiudi
+              </button>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Network Diagnostic Modal */}
+      <AnimatePresence>
+        {showDiagnosticModal && (
+          <div className="fixed inset-0 z-[150] flex items-center justify-center p-6 backdrop-blur-2xl bg-slate-950/80">
+            <motion.div 
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="glass max-w-lg w-full p-6 rounded-[32px] border-white/10 space-y-6 shadow-2xl bg-[#0d101e]/90 text-center flex flex-col max-h-[85vh]"
+            >
+              <div className="space-y-2 shrink-0">
+                <h3 className="text-lg font-black text-white uppercase tracking-tighter">Diagnostica Connessione Rete</h3>
+                <p className="text-slate-400 text-[10px] uppercase font-bold tracking-wider">Verifica instradamento e DNS (Risoluzione ENETUNREACH)</p>
+              </div>
+
+              <div className="flex-1 overflow-y-auto custom-scrollbar space-y-4 pr-1 text-left text-xs font-mono">
+                {loadingDiagnostic ? (
+                  <div className="flex flex-col items-center justify-center py-10 gap-3">
+                    <div className="w-10 h-10 border-4 border-amber-500/20 border-t-amber-500 rounded-full animate-spin" />
+                    <span className="text-[10px] uppercase font-black tracking-wider text-amber-500">Analisi di rete in corso...</span>
+                  </div>
+                ) : diagnosticResult ? (
+                  <div className="space-y-4">
+                    <div className="space-y-1 bg-black/40 p-3 rounded-xl border border-white/5">
+                      <div className="text-[8px] font-black uppercase text-slate-500 tracking-wider">Ping Test (IP 8.8.8.8):</div>
+                      <div className={diagnosticResult.pingIp === 'OK' ? 'text-green-400 font-bold' : 'text-red-400 font-bold'}>
+                        {diagnosticResult.pingIp}
+                      </div>
+                    </div>
+
+                    <div className="space-y-1 bg-black/40 p-3 rounded-xl border border-white/5">
+                      <div className="text-[8px] font-black uppercase text-slate-500 tracking-wider">Risoluzione DNS (smtp.gmail.com):</div>
+                      <div className={diagnosticResult.pingDns === 'OK' ? 'text-green-400 font-bold' : 'text-red-400 font-bold'}>
+                        {diagnosticResult.pingDns}
+                      </div>
+                    </div>
+
+                    <div className="space-y-1 bg-black/40 p-3 rounded-xl border border-white/5">
+                      <div className="text-[8px] font-black uppercase text-slate-500 tracking-wider">Tabella di Rotte (Gateway):</div>
+                      <pre className="text-[10px] text-slate-300 whitespace-pre-wrap leading-tight">{diagnosticResult.route}</pre>
+                    </div>
+
+                    <div className="space-y-1 bg-black/40 p-3 rounded-xl border border-white/5">
+                      <div className="text-[8px] font-black uppercase text-slate-500 tracking-wider">Configurazione DNS (/etc/resolv.conf):</div>
+                      <pre className="text-[10px] text-slate-300 whitespace-pre-wrap leading-tight">{diagnosticResult.dns}</pre>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="text-center text-slate-500 uppercase tracking-widest font-bold py-6">Nessun dato diagnostico.</div>
+                )}
+              </div>
+
+              <button 
+                type="button"
+                onClick={() => setShowDiagnosticModal(false)}
+                className="w-full py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-[10px] font-black uppercase tracking-widest transition-all shadow-lg shrink-0"
+              >
+                Chiudi
+              </button>
+            </motion.div>
+          </div>
         )}
       </AnimatePresence>
 
@@ -4620,40 +4882,11 @@ export default function App() {
         )}
       </AnimatePresence>
 
-      {/* Floating control buttons (Hidden in smartphone mode as they are in the top menu) */}
-      {false && (
-        <div className="fixed bottom-4 right-4 z-[99] flex flex-col gap-3 md:hidden mobile-35-controls">
-          <button
-            type="button"
-            onClick={() => setShowSettings(true)}
-            className="w-12 h-12 rounded-full bg-slate-950/90 border border-white/20 flex items-center justify-center text-white shadow-2xl active:scale-95 cursor-pointer backdrop-blur-md"
-            title="Impostazioni"
-          >
-            <Settings size={20} />
-          </button>
-          <button
-            type="button"
-            onClick={toggleMonitoring}
-            className={`w-12 h-12 rounded-full border flex items-center justify-center text-white shadow-2xl active:scale-95 cursor-pointer backdrop-blur-md ${isMonitoring ? 'bg-red-600/90 border-red-500/30' : 'bg-blue-600/90 border-blue-500/30'}`}
-            title={isMonitoring ? "Disattiva Monitoraggio" : "Attiva Monitoraggio"}
-          >
-            {isMonitoring ? <VideoOff size={20} /> : <Video size={20} />}
-          </button>
-          <button
-            type="button"
-            onClick={() => setIsMultiView(!isMultiView)}
-            className={`w-12 h-12 rounded-full border flex items-center justify-center text-white shadow-2xl active:scale-95 cursor-pointer backdrop-blur-md ${isMultiView ? 'bg-white/10 border-white/20' : 'bg-slate-950/90 border border-white/20'}`}
-            title={isMultiView ? "Vista Singola" : "Vista Griglia"}
-          >
-            <LayoutGrid size={20} />
-          </button>
-        </div>
-      )}
 
       <canvas ref={canvasRef} className="hidden" />
       <style>{`
         .glass { background: rgba(255, 255, 255, 0.03); backdrop-filter: blur(20px); border: 1px solid rgba(255, 255, 255, 0.05); }
-        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; height: 4px; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.1); border-radius: 10px; }
         .logo { filter: drop-shadow(0 0 10px rgba(59, 130, 246, 0.5)); }
       `}</style>
