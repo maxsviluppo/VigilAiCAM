@@ -759,12 +759,6 @@ export default function App() {
     return () => clearInterval(interval);
   }, [checkNetworkStatus]);
 
-  useEffect(() => {
-    if (showSettings && activeSettingsTab === 'network' && isMobile35) {
-      scanWifiNetworks();
-    }
-  }, [showSettings, activeSettingsTab, isMobile35, scanWifiNetworks]);
-
   const getPrimaryNetworkIp = useCallback(() => {
     if (!serverInfo?.ips?.length) return null;
     return serverInfo.ips.find(ip => (ip.startsWith('192.168.') || ip.startsWith('10.')) && ip !== '10.42.0.1')
@@ -805,10 +799,14 @@ export default function App() {
   const [logStartIndex, setLogStartIndex] = useState(0);
 
   useEffect(() => {
-    if (showSettings && activeSettingsTab === 'test' && isMobile35) {
+    if (!showSettings || !isMobile35) return;
+    if (activeSettingsTab === 'test') {
       fetch('/api/info').then(res => res.json()).then(setServerInfo).catch(console.error);
     }
-  }, [showSettings, activeSettingsTab, isMobile35]);
+    if (activeSettingsTab === 'network') {
+      scanWifiNetworks();
+    }
+  }, [showSettings, activeSettingsTab, isMobile35, scanWifiNetworks]);
 
   const toggleCameraAi = (camId: string) => {
     setDisabledAiCameraIds(prev => 
