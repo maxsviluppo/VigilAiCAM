@@ -760,10 +760,17 @@ export default function App() {
   }, [checkNetworkStatus]);
 
   useEffect(() => {
-    if (!networkStatus.checking && isMobile35 && !networkStatus.online) {
+    if (showSettings && activeSettingsTab === 'network' && isMobile35) {
       scanWifiNetworks();
     }
-  }, [networkStatus.checking, networkStatus.online, isMobile35, scanWifiNetworks]);
+  }, [showSettings, activeSettingsTab, isMobile35, scanWifiNetworks]);
+
+  const getPrimaryNetworkIp = useCallback(() => {
+    if (!serverInfo?.ips?.length) return null;
+    return serverInfo.ips.find(ip => (ip.startsWith('192.168.') || ip.startsWith('10.')) && ip !== '10.42.0.1')
+      || serverInfo.ips.find(ip => !ip.startsWith('100.') && ip !== '127.0.0.1')
+      || serverInfo.ips[0];
+  }, [serverInfo]);
 
   const handleLogout = async () => {
     const { error } = await supabase.auth.signOut();
@@ -796,6 +803,12 @@ export default function App() {
   const [disabledAiCameraIds, setDisabledAiCameraIds] = useState<string[]>([]);
   const [activeSettingsTab, setActiveSettingsTab] = useState<"ai" | "email" | "telegram" | "sleep" | "test" | "log" | "network">("ai");
   const [logStartIndex, setLogStartIndex] = useState(0);
+
+  useEffect(() => {
+    if (showSettings && activeSettingsTab === 'test' && isMobile35) {
+      fetch('/api/info').then(res => res.json()).then(setServerInfo).catch(console.error);
+    }
+  }, [showSettings, activeSettingsTab, isMobile35]);
 
   const toggleCameraAi = (camId: string) => {
     setDisabledAiCameraIds(prev => 
@@ -2172,22 +2185,35 @@ export default function App() {
     setShowCameraModal(true);
   };
 
-  const renderWifiScreen35 = () => {
-    const totalPages = Math.max(1, Math.ceil(wifiNetworks.length / WIFI_NETWORKS_PER_PAGE_35));
+  const renderWifiScreen35 = (embedded = false) => {
+    const perPage = embedded ? 2 : WIFI_NETWORKS_PER_PAGE_35;
+    const totalPages = Math.max(1, Math.ceil(wifiNetworks.length / perPage));
     const pageNetworks = wifiNetworks.slice(
-      wifiNetworkPage * WIFI_NETWORKS_PER_PAGE_35,
-      wifiNetworkPage * WIFI_NETWORKS_PER_PAGE_35 + WIFI_NETWORKS_PER_PAGE_35
+      wifiNetworkPage * perPage,
+      wifiNetworkPage * perPage + perPage
     );
-    const emptySlots = WIFI_NETWORKS_PER_PAGE_35 - pageNetworks.length;
+    const emptySlots = pageNetworks.length > 0 ? perPage - pageNetworks.length : 0;
     const isKeyboardOpen = keyboardTarget?.id === 'wifiPassword';
+    const primaryIp = getPrimaryNetworkIp();
 
     return (
-      <div className="w-full h-full flex flex-col bg-[#050810] p-1.5 gap-1 overflow-hidden touch-manipulation">
-        {/* Banner */}
-        <div className="shrink-0 flex items-center gap-1.5 bg-amber-600 border border-amber-400/60 rounded-lg px-2 py-1.5">
-          <WifiOff size={13} className="text-white shrink-0 animate-pulse" />
+      <div className={`w-full flex flex-col gap-1 overflow-hidden touch-manipulation ${embedded ? 'flex-1 min-h-0' : 'h-full bg-[#050810] p-1.5'}`}>
+        {/* Banner stato rete */}
+        <div className={`shrink-0 flex items-center gap-1.5 rounded-lg px-2 py-1.5 border ${
+          networkStatus.online
+            ? 'bg-green-600/90 border-green-400/60'
+            : 'bg-amber-600 border-amber-400/60'
+        }`}>
+          {networkStatus.online ? (
+            <Wifi size={13} className="text-white shrink-0" />
+          ) : (
+            <WifiOff size={13} className="text-white shrink-0 animate-pulse" />
+          )}
           <span className="text-[8px] font-black text-white uppercase tracking-wide leading-tight flex-1">
-            {wifiStatusMessage?.message || 'Connessione assente — inserire credenziali'}
+            {wifiStatusMessage?.message
+              || (networkStatus.online
+                ? `Connesso${primaryIp ? ` — ${primaryIp}` : ''}`
+                : 'Connessione assente — inserire credenziali')}
           </span>
         </div>
 
@@ -2207,7 +2233,7 @@ export default function App() {
         {/* Elenco reti — 3 righe fisse, senza scroll */}
         <div className="shrink-0 flex flex-col gap-0.5">
           {pageNetworks.length === 0 ? (
-            <div className="h-[84px] flex items-center justify-center bg-black/40 border border-white/5 rounded-lg">
+            <div className={`flex items-center justify-center bg-black/40 border border-white/5 rounded-lg ${embedded ? 'h-[56px]' : 'h-[84px]'}`}>
               <span className="text-[8px] text-slate-500 font-bold uppercase tracking-widest text-center px-2">
                 {wifiScanning ? 'Ricerca in corso...' : 'Premi Cerca Reti'}
               </span>
@@ -2242,7 +2268,7 @@ export default function App() {
         </div>
 
         {/* Paginazione reti (solo se > 3) */}
-        {wifiNetworks.length > WIFI_NETWORKS_PER_PAGE_35 && (
+        {wifiNetworks.length > perPage && (
           <div className="shrink-0 flex items-center justify-between px-1">
             <button
               type="button"
@@ -2741,9 +2767,6 @@ export default function App() {
 
         {/* Content Scrolling Area */}
         {isMobile35 ? (
-          !networkStatus.online && !networkStatus.checking ? (
-            renderWifiScreen35()
-          ) : (
           <div className="w-full h-full flex flex-row bg-black p-1 gap-1 text-slate-300">
             {cameras.length > 0 && activeCameraId ? (
               (() => {
@@ -3089,7 +3112,17 @@ export default function App() {
                 );
               })()
             ) : (
-              <div className="w-full h-full flex flex-col items-center justify-center text-slate-500 text-xs gap-2">
+              <div className="w-full h-full flex flex-col items-center justify-center text-slate-500 text-xs gap-2 p-2">
+                {!networkStatus.online && !networkStatus.checking && (
+                  <button
+                    type="button"
+                    onClick={() => { setActiveSettingsTab("network"); setShowSettings(true); scanWifiNetworks(); }}
+                    className="w-full max-w-[220px] flex items-center gap-1.5 bg-amber-600/90 border border-amber-400/50 rounded-lg px-2 py-1.5 active:scale-95"
+                  >
+                    <WifiOff size={12} className="text-white shrink-0" />
+                    <span className="text-[8px] font-black text-white uppercase">Rete assente — tap Opz › WiFi</span>
+                  </button>
+                )}
                 <p className="text-[10px] font-black uppercase tracking-widest">Nessuna camera configurata</p>
                 <button
                   type="button"
@@ -3101,7 +3134,6 @@ export default function App() {
               </div>
             )}
           </div>
-          )
         ) : (
           <div className="flex-1 overflow-y-auto p-1 sm:p-4 lg:p-10 custom-scrollbar relative">
           <div className="max-w-none mx-auto space-y-3 sm:space-y-6 lg:space-y-10">
@@ -4094,26 +4126,31 @@ export default function App() {
           >
             <motion.div 
               initial={{ scale: 0.9, y: 20 }} animate={{ scale: 1, y: 0 }}
-              className={`glass bg-slate-900/95 lg:bg-slate-900/60 w-full h-full sm:h-auto sm:max-h-[90vh] max-w-lg rounded-none sm:rounded-[32px] lg:rounded-[40px] p-4 sm:p-6 lg:p-10 space-y-3 sm:space-y-6 lg:space-y-8 shadow-2xl border-white/5 ${
-                isMobile35 && activeSettingsTab === "network" ? 'overflow-hidden flex flex-col' : 'overflow-y-auto custom-scrollbar'
+              className={`glass bg-slate-900/95 lg:bg-slate-900/60 w-full h-full sm:h-auto sm:max-h-[90vh] max-w-lg rounded-none sm:rounded-[32px] lg:rounded-[40px] shadow-2xl border-white/5 ${
+                isMobile35
+                  ? 'overflow-hidden flex flex-col p-2 gap-1'
+                  : 'p-4 sm:p-6 lg:p-10 space-y-3 sm:space-y-6 lg:space-y-8 overflow-y-auto custom-scrollbar'
               }`}
             >
-              <div className={`flex justify-between items-center mb-1 ${isMobile35 && activeSettingsTab === "network" ? 'shrink-0' : ''}`}>
-                {!(isMobile35 && activeSettingsTab === "network") && (
+              <div className="flex justify-between items-center shrink-0">
+                {!isMobile35 && (
                   <h2 className="text-lg sm:text-2xl font-black text-white uppercase">Impostazioni Sistema</h2>
+                )}
+                {isMobile35 && (
+                  <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Impostazioni</span>
                 )}
                 <button
                   type="button"
                   onClick={() => setShowSettings(false)}
-                  className={`p-2 bg-red-600/20 text-red-400 rounded-lg hover:bg-red-600 hover:text-white transition-all border border-red-500/30 ${isMobile35 && activeSettingsTab === "network" ? 'ml-auto' : ''}`}
+                  className="p-2 bg-red-600/20 text-red-400 rounded-lg hover:bg-red-600 hover:text-white transition-all border border-red-500/30 ml-auto"
                   title="Chiudi Configurazione"
                 >
                   <X size={18} />
                 </button>
               </div>
               
-              {/* Menu Grid - 2 Colonne */}
-              {!(isMobile35 && activeSettingsTab === "network") && (isMobile35 ? (
+              {/* Tab menu 3.5" */}
+              {isMobile35 ? (
                 <div className="flex justify-between gap-1 mb-1">
                   <button
                     type="button"
@@ -4121,7 +4158,9 @@ export default function App() {
                     className={`flex-1 flex items-center justify-center p-2 rounded-xl border transition-all active:scale-95 cursor-pointer ${
                       activeSettingsTab === "network"
                         ? "bg-amber-600 border-amber-400 text-white shadow-lg shadow-amber-500/25"
-                        : "bg-white/5 border-white/5 text-slate-400 hover:bg-white/10 hover:text-white"
+                        : !networkStatus.online
+                          ? "bg-amber-600/20 border-amber-500/50 text-amber-400 animate-pulse"
+                          : "bg-white/5 border-white/5 text-slate-400 hover:bg-white/10 hover:text-white"
                     }`}
                     title="Rete Wi-Fi / Internet"
                   >
@@ -4251,17 +4290,19 @@ export default function App() {
                     <span>Test alarm</span>
                   </button>
                 </div>
-              ))}
-
-              {!(isMobile35 && activeSettingsTab === "network") && (
-              <div className="h-px w-full bg-white/5" />
               )}
 
-              <div className={`${isMobile35 && activeSettingsTab === "network" ? 'flex-1 min-h-0 flex flex-col' : 'space-y-6'}`}>
+              {!isMobile35 && <div className="h-px w-full bg-white/5" />}
+
+              <div className={`${
+                isMobile35
+                  ? `flex-1 min-h-0 flex flex-col ${activeSettingsTab === 'network' ? 'overflow-hidden' : 'overflow-y-auto custom-scrollbar'}`
+                  : 'space-y-6'
+              }`}>
                 {/* Network / WiFi Configuration Tab */}
                 {activeSettingsTab === "network" && (
                   isMobile35 ? (
-                    <div className="flex-1 min-h-0">{renderWifiScreen35()}</div>
+                    renderWifiScreen35(true)
                   ) : (
                   <div className="space-y-3">
                     <div className="space-y-1">
@@ -4457,6 +4498,27 @@ export default function App() {
 
                 {/* Test alarm Tab */}
                 {activeSettingsTab === "test" && (
+                  <div className="space-y-2">
+                    {isMobile35 && (
+                      <div className="p-2.5 bg-green-500/10 border border-green-500/30 rounded-xl space-y-1">
+                        <div className="flex items-center gap-1.5">
+                          <Globe size={12} className="text-green-400 shrink-0" />
+                          <span className="text-[8px] font-black uppercase tracking-widest text-green-400">Indirizzo IP Raspberry</span>
+                        </div>
+                        {getPrimaryNetworkIp() ? (
+                          <div className="space-y-0.5">
+                            <code className="text-[11px] text-white font-mono font-bold block">
+                              {getPrimaryNetworkIp()}:{serverInfo?.port || 3088}
+                            </code>
+                            {networkStatus.currentSsid && (
+                              <span className="text-[7px] text-slate-500 font-bold uppercase block">Wi-Fi: {networkStatus.currentSsid}</span>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="text-[8px] text-amber-400 font-bold uppercase">IP non rilevato — verifica connessione rete</span>
+                        )}
+                      </div>
+                    )}
                   <div className="grid grid-cols-2 gap-3">
                     <button 
                       type="button"
@@ -4524,6 +4586,7 @@ export default function App() {
                       Visualizza Credenziali Mittente
                     </button>
 
+                    {!isMobile35 && (
                     <button 
                       type="button"
                       onClick={async () => {
@@ -4548,6 +4611,8 @@ export default function App() {
                       <Activity size={12} />
                       {loadingDiagnostic ? 'Diagnostica in corso...' : 'Diagnostica Rete (Risoluzione ENETUNREACH)'}
                     </button>
+                    )}
+                  </div>
                   </div>
                 )}
 
