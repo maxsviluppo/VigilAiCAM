@@ -39,7 +39,10 @@ import {
   Send,
   ChevronUp,
   ChevronDown,
-  CameraOff
+  CameraOff,
+  Wifi,
+  WifiOff,
+  RefreshCw
 } from "lucide-react";
 import * as Lucide from "lucide-react";
 import { motion, AnimatePresence, Reorder } from "framer-motion";
@@ -564,6 +567,23 @@ export default function App() {
   const [diagnosticResult, setDiagnosticResult] = useState<any>(null);
   const [loadingDiagnostic, setLoadingDiagnostic] = useState(false);
 
+  const [networkStatus, setNetworkStatus] = useState<{
+    online: boolean;
+    hasLocalNetwork: boolean;
+    hasInternet: boolean;
+    currentSsid: string | null;
+    checking: boolean;
+  }>({ online: true, hasLocalNetwork: true, hasInternet: true, currentSsid: null, checking: true });
+  const [wifiNetworks, setWifiNetworks] = useState<{ ssid: string; signal: number; security: string }[]>([]);
+  const [selectedWifiSsid, setSelectedWifiSsid] = useState("");
+  const [wifiPassword, setWifiPassword] = useState("");
+  const [showWifiPassword, setShowWifiPassword] = useState(false);
+  const [wifiConnecting, setWifiConnecting] = useState(false);
+  const [wifiScanning, setWifiScanning] = useState(false);
+  const [wifiStatusMessage, setWifiStatusMessage] = useState<{ type: 'error' | 'success' | 'info'; message: string } | null>(null);
+  const [wifiNetworkPage, setWifiNetworkPage] = useState(0);
+  const WIFI_NETWORKS_PER_PAGE_35 = 3;
+
   useEffect(() => {
     const handleResize = () => {
       const urlParams = new URLSearchParams(window.location.search);
@@ -651,6 +671,100 @@ export default function App() {
       .catch(console.error);
   }, []);
 
+  const checkNetworkStatus = useCallback(async () => {
+    try {
+      const urlParams = new URLSearchParams(window.location.search);
+      const simulateOffline = urlParams.get('simulateOffline') === '1' ? '?simulateOffline=1' : '';
+      const res = await fetch(`/api/network/status${simulateOffline}`);
+      const data = await res.json();
+      setNetworkStatus({
+        online: !!data.online,
+        hasLocalNetwork: !!data.hasLocalNetwork,
+        hasInternet: !!data.hasInternet,
+        currentSsid: data.currentSsid || null,
+        checking: false
+      });
+      return data;
+    } catch {
+      setNetworkStatus(prev => ({
+        ...prev,
+        online: false,
+        hasLocalNetwork: false,
+        hasInternet: false,
+        checking: false
+      }));
+      return null;
+    }
+  }, []);
+
+  const scanWifiNetworks = useCallback(async () => {
+    setWifiScanning(true);
+    setWifiStatusMessage(null);
+    try {
+      const res = await fetch("/api/wifi/scan");
+      const data = await res.json();
+      if (data.success && Array.isArray(data.networks)) {
+        setWifiNetworks(data.networks);
+        setWifiNetworkPage(0);
+        if (data.networks.length === 0) {
+          setWifiStatusMessage({ type: 'info', message: 'Nessuna rete Wi-Fi rilevata. Riprova tra qualche secondo.' });
+        }
+      } else {
+        setWifiStatusMessage({ type: 'error', message: data.error || 'Impossibile scansionare le reti Wi-Fi.' });
+      }
+    } catch (err: any) {
+      setWifiStatusMessage({ type: 'error', message: err.message || 'Errore durante la scansione Wi-Fi.' });
+    } finally {
+      setWifiScanning(false);
+    }
+  }, []);
+
+  const connectToWifi = useCallback(async () => {
+    if (!selectedWifiSsid) {
+      setWifiStatusMessage({ type: 'error', message: 'Seleziona una rete Wi-Fi prima di connetterti.' });
+      return;
+    }
+    setWifiConnecting(true);
+    setWifiStatusMessage({ type: 'info', message: `Connessione a "${selectedWifiSsid}" in corso...` });
+    try {
+      const res = await fetch("/api/wifi/connect", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ssid: selectedWifiSsid, password: wifiPassword })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setWifiStatusMessage({ type: 'success', message: 'Connesso! Verifica connessione internet...' });
+        setWifiPassword("");
+        await new Promise(r => setTimeout(r, 3000));
+        const status = await checkNetworkStatus();
+        if (status?.online) {
+          setWifiStatusMessage({ type: 'success', message: 'Connesso!' });
+        } else {
+          setWifiStatusMessage({ type: 'error', message: 'Wi-Fi connesso ma internet non raggiungibile. Verifica router o password.' });
+        }
+      } else {
+        setWifiStatusMessage({ type: 'error', message: data.error || 'Connessione Wi-Fi fallita.' });
+      }
+    } catch (err: any) {
+      setWifiStatusMessage({ type: 'error', message: err.message || 'Errore durante la connessione Wi-Fi.' });
+    } finally {
+      setWifiConnecting(false);
+    }
+  }, [selectedWifiSsid, wifiPassword, checkNetworkStatus]);
+
+  useEffect(() => {
+    checkNetworkStatus();
+    const interval = setInterval(checkNetworkStatus, 30000);
+    return () => clearInterval(interval);
+  }, [checkNetworkStatus]);
+
+  useEffect(() => {
+    if (!networkStatus.checking && isMobile35 && !networkStatus.online) {
+      scanWifiNetworks();
+    }
+  }, [networkStatus.checking, networkStatus.online, isMobile35, scanWifiNetworks]);
+
   const handleLogout = async () => {
     const { error } = await supabase.auth.signOut();
     if (error) {
@@ -680,7 +794,7 @@ export default function App() {
     telegramToken: localStorage.getItem("vigilai_telegram_token") || "",
   });
   const [disabledAiCameraIds, setDisabledAiCameraIds] = useState<string[]>([]);
-  const [activeSettingsTab, setActiveSettingsTab] = useState<"ai" | "email" | "telegram" | "sleep" | "test" | "log">("ai");
+  const [activeSettingsTab, setActiveSettingsTab] = useState<"ai" | "email" | "telegram" | "sleep" | "test" | "log" | "network">("ai");
   const [logStartIndex, setLogStartIndex] = useState(0);
 
   const toggleCameraAi = (camId: string) => {
@@ -875,6 +989,12 @@ export default function App() {
       return {
         value: newEmail,
         setValue: setNewEmail
+      };
+    }
+    if (id === 'wifiPassword') {
+      return {
+        value: wifiPassword,
+        setValue: setWifiPassword
       };
     }
     if (id === 'modalGeminiKey') {
@@ -1297,6 +1417,12 @@ export default function App() {
   };
 
   useEffect(() => { if (user) fetchUserData(); }, [user, fetchUserData]);
+
+  useEffect(() => {
+    if (networkStatus.online && user) {
+      fetchUserData();
+    }
+  }, [networkStatus.online, user, fetchUserData]);
 
 
 
@@ -1976,9 +2102,15 @@ export default function App() {
       
       // Handle ONVIF URL construction
       if (finalCam.type === 'onvif' && finalCam.ip && finalCam.username) {
+        if (finalCam.ip.endsWith('.') || finalCam.ip === '192.168.1.') {
+          throw new Error("Indirizzo IP non completo. Assicurati di inserire l'IP completo (es. 192.168.1.10)");
+        }
         // Build the URL only if it's missing or needs update
         finalCam.url = `rtsp://${finalCam.username}:${finalCam.password}@${finalCam.ip}:${finalCam.port || 554}${finalCam.rtspPath || '/stream1'}`;
       } else if (finalCam.type === 'ip' && !finalCam.url) {
+        if (!finalCam.ip || finalCam.ip.endsWith('.') || finalCam.ip === '192.168.1.') {
+          throw new Error("Indirizzo IP non completo. Assicurati di inserire l'IP completo (es. 192.168.1.10)");
+        }
         // Fallback for IP type if URL is missing
         finalCam.url = `rtsp://${finalCam.username}:${finalCam.password}@${finalCam.ip}:${finalCam.port || 554}/stream1`;
       }
@@ -2039,6 +2171,303 @@ export default function App() {
     setActiveCameraTab('info');
     setShowCameraModal(true);
   };
+
+  const renderWifiScreen35 = () => {
+    const totalPages = Math.max(1, Math.ceil(wifiNetworks.length / WIFI_NETWORKS_PER_PAGE_35));
+    const pageNetworks = wifiNetworks.slice(
+      wifiNetworkPage * WIFI_NETWORKS_PER_PAGE_35,
+      wifiNetworkPage * WIFI_NETWORKS_PER_PAGE_35 + WIFI_NETWORKS_PER_PAGE_35
+    );
+    const emptySlots = WIFI_NETWORKS_PER_PAGE_35 - pageNetworks.length;
+    const isKeyboardOpen = keyboardTarget?.id === 'wifiPassword';
+
+    return (
+      <div className="w-full h-full flex flex-col bg-[#050810] p-1.5 gap-1 overflow-hidden touch-manipulation">
+        {/* Banner */}
+        <div className="shrink-0 flex items-center gap-1.5 bg-amber-600 border border-amber-400/60 rounded-lg px-2 py-1.5">
+          <WifiOff size={13} className="text-white shrink-0 animate-pulse" />
+          <span className="text-[8px] font-black text-white uppercase tracking-wide leading-tight flex-1">
+            {wifiStatusMessage?.message || 'Connessione assente — inserire credenziali'}
+          </span>
+        </div>
+
+        {!isKeyboardOpen && (
+          <>
+        {/* Cerca Reti */}
+        <button
+          type="button"
+          onClick={scanWifiNetworks}
+          disabled={wifiScanning}
+          className="shrink-0 w-full h-8 flex items-center justify-center gap-1.5 bg-blue-600 border border-blue-400 rounded-lg text-white text-[9px] font-black uppercase tracking-widest active:scale-95 disabled:opacity-60"
+        >
+          <RefreshCw size={12} className={wifiScanning ? 'animate-spin' : ''} />
+          {wifiScanning ? 'Ricerca...' : 'Cerca Reti'}
+        </button>
+
+        {/* Elenco reti — 3 righe fisse, senza scroll */}
+        <div className="shrink-0 flex flex-col gap-0.5">
+          {pageNetworks.length === 0 ? (
+            <div className="h-[84px] flex items-center justify-center bg-black/40 border border-white/5 rounded-lg">
+              <span className="text-[8px] text-slate-500 font-bold uppercase tracking-widest text-center px-2">
+                {wifiScanning ? 'Ricerca in corso...' : 'Premi Cerca Reti'}
+              </span>
+            </div>
+          ) : (
+            pageNetworks.map((net) => (
+              <button
+                key={net.ssid}
+                type="button"
+                onClick={() => {
+                  setSelectedWifiSsid(net.ssid);
+                  setWifiPassword("");
+                  setWifiStatusMessage(null);
+                }}
+                className={`h-7 w-full flex items-center justify-between px-2 rounded-lg border active:scale-[0.98] ${
+                  selectedWifiSsid === net.ssid
+                    ? 'bg-blue-600/30 border-blue-400 text-white'
+                    : 'bg-white/5 border-white/10 text-slate-300'
+                }`}
+              >
+                <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                  <Wifi size={11} className={selectedWifiSsid === net.ssid ? 'text-blue-300 shrink-0' : 'text-slate-500 shrink-0'} />
+                  <span className="text-[9px] font-bold truncate">{net.ssid}</span>
+                </div>
+                <span className="text-[7px] text-slate-500 font-mono shrink-0 ml-1">{net.signal}%</span>
+              </button>
+            ))
+          )}
+          {pageNetworks.length > 0 && emptySlots > 0 && Array.from({ length: emptySlots }).map((_, i) => (
+            <div key={`empty-${i}`} className="h-7 rounded-lg border border-transparent" />
+          ))}
+        </div>
+
+        {/* Paginazione reti (solo se > 3) */}
+        {wifiNetworks.length > WIFI_NETWORKS_PER_PAGE_35 && (
+          <div className="shrink-0 flex items-center justify-between px-1">
+            <button
+              type="button"
+              disabled={wifiNetworkPage === 0}
+              onClick={() => setWifiNetworkPage(p => Math.max(0, p - 1))}
+              className="w-8 h-6 flex items-center justify-center bg-white/5 border border-white/10 rounded text-slate-400 active:scale-95 disabled:opacity-30"
+            >
+              <ChevronLeft size={14} />
+            </button>
+            <span className="text-[7px] text-slate-600 font-bold uppercase">{wifiNetworkPage + 1}/{totalPages}</span>
+            <button
+              type="button"
+              disabled={wifiNetworkPage >= totalPages - 1}
+              onClick={() => setWifiNetworkPage(p => Math.min(totalPages - 1, p + 1))}
+              className="w-8 h-6 flex items-center justify-center bg-white/5 border border-white/10 rounded text-slate-400 active:scale-95 disabled:opacity-30"
+            >
+              <ChevronRight size={14} />
+            </button>
+          </div>
+        )}
+          </>
+        )}
+
+        {isKeyboardOpen && selectedWifiSsid && (
+          <div className="shrink-0 px-1 py-1">
+            <span className="text-[8px] text-blue-400 font-black uppercase tracking-widest">Rete: {selectedWifiSsid}</span>
+          </div>
+        )}
+
+        {/* Password Wi-Fi — tastiera fisica USB, virtuale touch, mostra/nascondi */}
+        <div className="shrink-0 relative">
+          <input
+            type={showWifiPassword ? "text" : "password"}
+            value={wifiPassword}
+            onChange={(e) => setWifiPassword(e.target.value)}
+            onFocus={() => { if (useVirtualKeyboard) setKeyboardTarget({ id: 'wifiPassword', title: 'Password Wi-Fi' }); }}
+            placeholder={selectedWifiSsid ? `Password ${selectedWifiSsid}` : 'Password Wi-Fi'}
+            autoComplete="off"
+            className="w-full h-8 bg-white/5 border border-white/10 pl-2 pr-[4.5rem] rounded-lg text-[10px] text-white outline-none focus:border-blue-500 transition-colors"
+          />
+          <button
+            type="button"
+            onClick={() => setShowWifiPassword(!showWifiPassword)}
+            className="absolute right-9 top-1/2 -translate-y-1/2 w-7 h-6 flex items-center justify-center rounded active:scale-95 text-slate-400 hover:text-white"
+            title={showWifiPassword ? 'Nascondi password' : 'Mostra password'}
+          >
+            {showWifiPassword ? <EyeOff size={13} /> : <Eye size={13} />}
+          </button>
+          <button
+            type="button"
+            onClick={() => setKeyboardTarget({ id: 'wifiPassword', title: 'Password Wi-Fi' })}
+            className={`absolute right-1 top-1/2 -translate-y-1/2 w-7 h-6 flex items-center justify-center rounded active:scale-95 ${
+              keyboardTarget?.id === 'wifiPassword' ? 'bg-blue-600 text-white' : 'bg-white/10 text-slate-400'
+            }`}
+            title="Tastiera virtuale"
+          >
+            <Keyboard size={14} />
+          </button>
+        </div>
+
+        {/* Connetti — visibile sopra la tastiera virtuale */}
+        <button
+          type="button"
+          onClick={connectToWifi}
+          disabled={!selectedWifiSsid || wifiConnecting}
+          className={`shrink-0 w-full h-8 flex items-center justify-center gap-1.5 bg-green-600 border border-green-400 rounded-lg text-white text-[9px] font-black uppercase tracking-widest active:scale-95 disabled:opacity-40 ${
+            isKeyboardOpen ? 'mb-[210px]' : ''
+          }`}
+        >
+          {wifiConnecting ? (
+            <>
+              <div className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+              Connessione...
+            </>
+          ) : (
+            <>
+              <Wifi size={12} />
+              Connetti
+            </>
+          )}
+        </button>
+      </div>
+    );
+  };
+
+  const renderWifiConfigPanel = (compact = false) => (
+    <div className={`space-y-3 ${compact ? '' : 'p-1'}`}>
+      <div className={`flex items-center justify-between gap-2 p-3 rounded-xl border ${networkStatus.online ? 'bg-green-500/10 border-green-500/20' : 'bg-amber-500/10 border-amber-500/20'}`}>
+        <div className="flex items-center gap-2">
+          {networkStatus.online ? <Wifi size={16} className="text-green-400" /> : <WifiOff size={16} className="text-amber-400 animate-pulse" />}
+          <div>
+            <p className={`text-[9px] font-black uppercase tracking-widest ${networkStatus.online ? 'text-green-400' : 'text-amber-400'}`}>
+              {networkStatus.checking ? 'Verifica rete...' : networkStatus.online ? 'Internet Attivo' : 'Connessione Assente'}
+            </p>
+            {networkStatus.currentSsid && (
+              <p className="text-[8px] text-slate-500 font-bold uppercase mt-0.5">Rete: {networkStatus.currentSsid}</p>
+            )}
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={checkNetworkStatus}
+          className="p-2 bg-white/5 border border-white/10 rounded-lg text-slate-400 hover:text-white active:scale-95"
+          title="Ricontrolla connessione"
+        >
+          <RefreshCw size={14} className={networkStatus.checking ? 'animate-spin' : ''} />
+        </button>
+      </div>
+
+      <div className="flex items-center justify-between">
+        <label className="text-[9px] font-black uppercase tracking-widest text-slate-500">Reti Wi-Fi Disponibili</label>
+        <button
+          type="button"
+          onClick={scanWifiNetworks}
+          disabled={wifiScanning}
+          className="text-[8px] text-blue-400 hover:text-blue-300 uppercase font-black tracking-widest flex items-center gap-1 disabled:opacity-50"
+        >
+          <RefreshCw size={10} className={wifiScanning ? 'animate-spin' : ''} />
+          {wifiScanning ? 'Scansione...' : 'Cerca Reti'}
+        </button>
+      </div>
+
+      <div className={`overflow-y-auto custom-scrollbar space-y-1.5 bg-black/30 rounded-xl border border-white/5 p-2 ${compact ? 'max-h-[100px]' : 'max-h-[140px]'}`}>
+        {wifiNetworks.length === 0 ? (
+          <p className="text-center text-[9px] text-slate-500 py-4 font-bold uppercase tracking-widest">
+            {wifiScanning ? 'Ricerca reti in corso...' : 'Premi "Cerca Reti" per iniziare'}
+          </p>
+        ) : (
+          wifiNetworks.map((net) => (
+            <button
+              key={net.ssid}
+              type="button"
+              onClick={() => {
+                setSelectedWifiSsid(net.ssid);
+                setWifiPassword("");
+                setWifiStatusMessage(null);
+              }}
+              className={`w-full flex items-center justify-between p-2.5 rounded-lg border text-left transition-all active:scale-[0.98] ${
+                selectedWifiSsid === net.ssid
+                  ? 'bg-blue-600/20 border-blue-500/40 text-white'
+                  : 'bg-white/5 border-white/5 text-slate-300 hover:bg-white/10'
+              }`}
+            >
+              <div className="flex items-center gap-2 min-w-0">
+                <Wifi size={12} className={selectedWifiSsid === net.ssid ? 'text-blue-400' : 'text-slate-500'} />
+                <span className="text-[10px] font-bold truncate">{net.ssid}</span>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                {net.security && <span className="text-[7px] text-slate-600 uppercase">{net.security}</span>}
+                <span className="text-[8px] text-slate-500 font-mono">{net.signal}%</span>
+              </div>
+            </button>
+          ))
+        )}
+      </div>
+
+      {selectedWifiSsid && (
+        <div className="space-y-1">
+          <div className="flex justify-between items-center">
+            <label className="text-[9px] font-black uppercase tracking-widest text-slate-500 px-1">
+              Password Wi-Fi {selectedWifiSsid && <span className="text-blue-400">({selectedWifiSsid})</span>}
+            </label>
+            {keyboardTarget?.id === 'wifiPassword' && <Keyboard size={12} className="text-blue-400 animate-pulse" />}
+          </div>
+          <div className="relative">
+            <input
+              type={showWifiPassword ? "text" : "password"}
+              value={wifiPassword}
+              onChange={(e) => setWifiPassword(e.target.value)}
+              onFocus={() => { if (useVirtualKeyboard) setKeyboardTarget({ id: 'wifiPassword', title: 'Password Wi-Fi' }); }}
+              placeholder="Inserisci password Wi-Fi"
+              className="w-full bg-white/5 border border-white/10 px-4 py-3 pr-20 rounded-xl text-xs text-white outline-none focus:border-blue-500 transition-colors"
+            />
+            <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => setShowWifiPassword(!showWifiPassword)}
+                className="text-slate-500 hover:text-white transition-colors"
+                title={showWifiPassword ? 'Nascondi password' : 'Mostra password'}
+              >
+                {showWifiPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+              </button>
+              <button
+                type="button"
+                onClick={() => { if (useVirtualKeyboard) setKeyboardTarget({ id: 'wifiPassword', title: 'Password Wi-Fi' }); }}
+                className="text-slate-500 hover:text-white transition-colors"
+                title="Tastiera virtuale"
+              >
+                <Keyboard size={16} />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {wifiStatusMessage && (
+        <div className={`p-3 rounded-xl border text-[9px] font-bold uppercase tracking-wide text-center ${
+          wifiStatusMessage.type === 'success' ? 'bg-green-500/10 border-green-500/20 text-green-400' :
+          wifiStatusMessage.type === 'error' ? 'bg-red-500/10 border-red-500/20 text-red-400' :
+          'bg-blue-500/10 border-blue-500/20 text-blue-400'
+        }`}>
+          {wifiStatusMessage.message}
+        </div>
+      )}
+
+      <button
+        type="button"
+        onClick={connectToWifi}
+        disabled={!selectedWifiSsid || wifiConnecting}
+        className="w-full py-3 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-xl text-[10px] font-black uppercase tracking-widest transition-all shadow-lg flex items-center justify-center gap-2"
+      >
+        {wifiConnecting ? (
+          <>
+            <div className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin" />
+            Connessione...
+          </>
+        ) : (
+          <>
+            <Wifi size={14} />
+            Connetti a Internet
+          </>
+        )}
+      </button>
+    </div>
+  );
 
   if (authLoading) return (
     <div className="min-h-screen bg-[#050810] flex items-center justify-center">
@@ -2312,6 +2741,9 @@ export default function App() {
 
         {/* Content Scrolling Area */}
         {isMobile35 ? (
+          !networkStatus.online && !networkStatus.checking ? (
+            renderWifiScreen35()
+          ) : (
           <div className="w-full h-full flex flex-row bg-black p-1 gap-1 text-slate-300">
             {cameras.length > 0 && activeCameraId ? (
               (() => {
@@ -2657,20 +3089,19 @@ export default function App() {
                 );
               })()
             ) : (
-              <div className="w-full h-full flex flex-col items-center justify-center text-slate-500 text-xs gap-3">
-                <p>Nessuna camera configurata</p>
+              <div className="w-full h-full flex flex-col items-center justify-center text-slate-500 text-xs gap-2">
+                <p className="text-[10px] font-black uppercase tracking-widest">Nessuna camera configurata</p>
                 <button
                   type="button"
-                  onClick={() => {
-                    setShowSettings(true);
-                  }}
-                  className="px-4 py-2 bg-blue-600 text-white text-[10px] font-black uppercase tracking-widest rounded-lg active:scale-95 pointer-events-auto"
+                  onClick={() => setShowSettings(true)}
+                  className="px-4 py-2 bg-blue-600 text-white text-[10px] font-black uppercase tracking-widest rounded-lg active:scale-95"
                 >
                   Configura Sistema
                 </button>
               </div>
             )}
           </div>
+          )
         ) : (
           <div className="flex-1 overflow-y-auto p-1 sm:p-4 lg:p-10 custom-scrollbar relative">
           <div className="max-w-none mx-auto space-y-3 sm:space-y-6 lg:space-y-10">
@@ -3663,14 +4094,18 @@ export default function App() {
           >
             <motion.div 
               initial={{ scale: 0.9, y: 20 }} animate={{ scale: 1, y: 0 }}
-              className="glass bg-slate-900/95 lg:bg-slate-900/60 w-full h-full sm:h-auto sm:max-h-[90vh] max-w-lg rounded-none sm:rounded-[32px] lg:rounded-[40px] p-4 sm:p-6 lg:p-10 space-y-3 sm:space-y-6 lg:space-y-8 overflow-y-auto custom-scrollbar shadow-2xl border-white/5"
+              className={`glass bg-slate-900/95 lg:bg-slate-900/60 w-full h-full sm:h-auto sm:max-h-[90vh] max-w-lg rounded-none sm:rounded-[32px] lg:rounded-[40px] p-4 sm:p-6 lg:p-10 space-y-3 sm:space-y-6 lg:space-y-8 shadow-2xl border-white/5 ${
+                isMobile35 && activeSettingsTab === "network" ? 'overflow-hidden flex flex-col' : 'overflow-y-auto custom-scrollbar'
+              }`}
             >
-              <div className="flex justify-between items-center mb-1">
-                <h2 className="text-lg sm:text-2xl font-black text-white uppercase">Impostazioni Sistema</h2>
+              <div className={`flex justify-between items-center mb-1 ${isMobile35 && activeSettingsTab === "network" ? 'shrink-0' : ''}`}>
+                {!(isMobile35 && activeSettingsTab === "network") && (
+                  <h2 className="text-lg sm:text-2xl font-black text-white uppercase">Impostazioni Sistema</h2>
+                )}
                 <button
                   type="button"
                   onClick={() => setShowSettings(false)}
-                  className="p-2 bg-red-600/20 text-red-400 rounded-lg hover:bg-red-600 hover:text-white transition-all border border-red-500/30"
+                  className={`p-2 bg-red-600/20 text-red-400 rounded-lg hover:bg-red-600 hover:text-white transition-all border border-red-500/30 ${isMobile35 && activeSettingsTab === "network" ? 'ml-auto' : ''}`}
                   title="Chiudi Configurazione"
                 >
                   <X size={18} />
@@ -3678,8 +4113,20 @@ export default function App() {
               </div>
               
               {/* Menu Grid - 2 Colonne */}
-              {isMobile35 ? (
+              {!(isMobile35 && activeSettingsTab === "network") && (isMobile35 ? (
                 <div className="flex justify-between gap-1 mb-1">
+                  <button
+                    type="button"
+                    onClick={() => { setActiveSettingsTab("network"); scanWifiNetworks(); }}
+                    className={`flex-1 flex items-center justify-center p-2 rounded-xl border transition-all active:scale-95 cursor-pointer ${
+                      activeSettingsTab === "network"
+                        ? "bg-amber-600 border-amber-400 text-white shadow-lg shadow-amber-500/25"
+                        : "bg-white/5 border-white/5 text-slate-400 hover:bg-white/10 hover:text-white"
+                    }`}
+                    title="Rete Wi-Fi / Internet"
+                  >
+                    <Wifi size={16} />
+                  </button>
                   <button
                     type="button"
                     onClick={() => setActiveSettingsTab("ai")}
@@ -3731,6 +4178,18 @@ export default function App() {
                 </div>
               ) : (
                 <div className="grid grid-cols-2 gap-2 sm:gap-3 mb-1 sm:mb-2">
+                  <button
+                    type="button"
+                    onClick={() => { setActiveSettingsTab("network"); scanWifiNetworks(); }}
+                    className={`flex items-center justify-center gap-2 sm:gap-3 px-3 py-2 sm:px-6 sm:py-4.5 rounded-xl sm:rounded-2xl border text-[9px] sm:text-[11px] lg:text-xs font-black uppercase tracking-widest transition-all active:scale-95 cursor-pointer col-span-2 ${
+                      activeSettingsTab === "network"
+                        ? "bg-amber-600 border-amber-400 text-white shadow-lg shadow-amber-500/25"
+                        : "bg-white/5 border-white/5 text-slate-400 hover:bg-white/10 hover:text-white"
+                    }`}
+                  >
+                    <Wifi size={14} className="sm:w-[16px] sm:h-[16px]" />
+                    <span>Rete Wi-Fi / Internet</span>
+                  </button>
                   <button
                     type="button"
                     onClick={() => setActiveSettingsTab("ai")}
@@ -3792,11 +4251,30 @@ export default function App() {
                     <span>Test alarm</span>
                   </button>
                 </div>
+              ))}
+
+              {!(isMobile35 && activeSettingsTab === "network") && (
+              <div className="h-px w-full bg-white/5" />
               )}
 
-              <div className="h-px w-full bg-white/5" />
+              <div className={`${isMobile35 && activeSettingsTab === "network" ? 'flex-1 min-h-0 flex flex-col' : 'space-y-6'}`}>
+                {/* Network / WiFi Configuration Tab */}
+                {activeSettingsTab === "network" && (
+                  isMobile35 ? (
+                    <div className="flex-1 min-h-0">{renderWifiScreen35()}</div>
+                  ) : (
+                  <div className="space-y-3">
+                    <div className="space-y-1">
+                      <label className="text-[9px] font-black uppercase tracking-widest text-slate-500">Configurazione Rete Internet</label>
+                      <p className="text-[8px] text-slate-600 uppercase tracking-wide font-bold">
+                        Collega il Raspberry Pi alla rete Wi-Fi per sincronizzare telecamere, allarmi e impostazioni cloud.
+                      </p>
+                    </div>
+                    {renderWifiConfigPanel(true)}
+                  </div>
+                  )
+                )}
 
-              <div className="space-y-6">
                 {/* AI Configuration Tab */}
                 {activeSettingsTab === "ai" && (
                   <div className="space-y-3">

@@ -12,8 +12,12 @@ import { exec, spawn } from "child_process";
 import net from "net";
 import os from "os";
 import dns from "dns";
+import { WebSocket } from "ws";
 
-// Preferisci IPv4 per evitare errori connect ENETUNREACH in assenza di routing IPv6
+// Polyfill WebSocket per ambienti Node.js < 22 (richiesto da Supabase Realtime)
+(global as any).WebSocket = WebSocket;
+
+// FIX DEFINITIVO PER ENETUNREACH SU RASPBERRY PI (Node.js 18+ IPv6 issue)
 dns.setDefaultResultOrder("ipv4first");
 
 dotenv.config();
@@ -523,6 +527,79 @@ async function startServer() {
     });
   });
 
+  const checkInternetConnectivity = (): Promise<boolean> => {
+    return new Promise((resolve) => {
+      if (process.platform === "win32") {
+        resolve(hasNetworkConnection());
+        return;
+      }
+      exec("ping -c 1 -W 3 8.8.8.8", (err) => {
+        resolve(!err);
+      });
+    });
+  };
+
+  const getCurrentWifiSsid = (): Promise<string | null> => {
+    return new Promise((resolve) => {
+      if (process.platform === "win32") {
+        resolve(hasNetworkConnection() ? "Rete_Casa_Simulata" : null);
+        return;
+      }
+      exec("nmcli -t -f ACTIVE,SSID dev wifi", (err, stdout) => {
+        if (err || !stdout) {
+          resolve(null);
+          return;
+        }
+        for (const line of stdout.split("\n")) {
+          if (!line.trim()) continue;
+          const parts = line.split(":");
+          if (parts[0] === "yes" && parts[1]) {
+            resolve(parts.slice(1).join(":").replace(/\\:/g, ":").trim() || null);
+            return;
+          }
+        }
+        resolve(null);
+      });
+    });
+  };
+
+  // API per verificare lo stato della connessione di rete all'avvio e in runtime
+  app.get("/api/network/status", async (req, res) => {
+    try {
+      if (process.platform === "win32" && req.query.simulateOffline === "1") {
+        return res.json({
+          success: true,
+          hasLocalNetwork: false,
+          hasInternet: false,
+          online: false,
+          currentSsid: null,
+          simulated: true
+        });
+      }
+
+      const hasLocalNetwork = hasNetworkConnection();
+      const hasInternet = hasLocalNetwork ? await checkInternetConnectivity() : false;
+      const currentSsid = await getCurrentWifiSsid();
+
+      res.json({
+        success: true,
+        hasLocalNetwork,
+        hasInternet,
+        online: hasLocalNetwork && hasInternet,
+        currentSsid
+      });
+    } catch (err: any) {
+      res.status(500).json({
+        success: false,
+        hasLocalNetwork: false,
+        hasInternet: false,
+        online: false,
+        currentSsid: null,
+        error: err.message || "Errore verifica rete"
+      });
+    }
+  });
+
   // API per connettersi a una rete Wi-Fi
   app.post("/api/wifi/connect", (req, res) => {
     const { ssid, password } = req.body;
@@ -898,6 +975,12 @@ async function startServer() {
         const has8554 = await checkPort(ip, 8554, 400);
         if (has8554) {
           foundIps.push(ip);
+          return;
+        }
+        // Fallback su porta ONVIF 2020 (TP-Link Tapo C220)
+        const has2020 = await checkPort(ip, 2020, 400);
+        if (has2020) {
+          foundIps.push(ip);
         }
       })());
     }
@@ -950,6 +1033,13 @@ async function startServer() {
 
     ff.stderr.on("data", (chunk: Buffer) => {
       errChunks.push(chunk);
+    });
+
+    ff.on("error", (err: any) => {
+      console.error(`[FFmpeg Error in /api/cameras/test-stream] Impossibile avviare ffmpeg:`, err.message);
+      if (err.code === 'ENOENT') {
+        console.error(`CRITICAL: ffmpeg non è installato o non è nel PATH del Raspberry Pi! Installa con: sudo apt install ffmpeg`);
+      }
     });
 
     ff.on("close", (code) => {
@@ -1077,15 +1167,30 @@ async function startServer() {
 
         console.log(`[Notification] SMTP Transporter initialization: host=${host}, port=${port}, secure=${secure}, user=${user}`);
 
+        let resolvedHost = host;
+        try {
+          // Risoluzione DNS forzata in IPv4 per evitare i problemi di routing IPv6 del Raspberry
+          const address = await new Promise<string>((resolve, reject) => {
+            dns.lookup(host, { family: 4 }, (err, addr) => {
+              if (err) reject(err);
+              else resolve(addr);
+            });
+          });
+          resolvedHost = address;
+          console.log(`[Notification] Resolved SMTP host ${host} to IPv4: ${resolvedHost}`);
+        } catch (dnsErr) {
+          console.warn(`[Notification] Failed to resolve IPv4 for ${host}. Using hostname directly.`);
+        }
+
         const transporter = nodemailer.createTransport({
-          host,
+          host: resolvedHost,
           port,
           secure,
           auth: { user, pass },
           tls: {
-            rejectUnauthorized: false
-          },
-          family: 4 // Forza l'uso di IPv4 per evitare errori ENETUNREACH con IPv6
+            rejectUnauthorized: false,
+            servername: host // Obbligatorio per i certificati TLS se passiamo un IP
+          }
         });
 
         const mailOptions = {
@@ -1163,6 +1268,13 @@ async function startServer() {
       });
       if (msg.includes('error') || msg.includes('failed') || msg.includes('Invalid')) {
         console.error(`[FFmpeg Error] ${msg.trim()}`);
+      }
+    });
+
+    ff.on('error', (err: any) => {
+      console.error(`[FFmpeg Spawn Error] Impossibile avviare il processo per la camera:`, err.message);
+      if (err.code === 'ENOENT') {
+        console.error(`CRITICAL: ffmpeg non è installato o non è nel PATH del Raspberry Pi! Installa con: sudo apt install ffmpeg`);
       }
     });
 
