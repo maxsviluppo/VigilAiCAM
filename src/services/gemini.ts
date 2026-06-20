@@ -1,5 +1,6 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { AlertTrigger } from "../types";
+import { getGeminiApiKeyFormat, normalizeGeminiApiKey } from "../utils/geminiApiKey";
 
 export interface DetectionResult {
   threatLevel: "low" | "medium" | "high";
@@ -26,14 +27,14 @@ export const analyzeFrame = async (
        // @ts-ignore
        rawKey = process.env.GEMINI_API_KEY || "";
     }
-    const apiKey = rawKey ? rawKey.trim() : "";
+    const apiKey = normalizeGeminiApiKey(rawKey);
     
     if (!apiKey) {
       throw new Error("API Key mancante.");
     }
 
-    // Diagnostic log: check if the key is actually changing
-    console.log(`[AI Core] Inizializzazione con chiave: ${apiKey.substring(0, 4)}...${apiKey.substring(apiKey.length - 4)}`);
+    const keyFormat = getGeminiApiKeyFormat(apiKey);
+    console.log(`[AI Core] Inizializzazione chiave formato ${keyFormat}: ${apiKey.substring(0, 4)}...${apiKey.substring(apiKey.length - 4)}`);
 
     // Inizializzazione con v1beta per supportare i modelli preview di generazione 3
     const ai = new GoogleGenAI({ apiKey });

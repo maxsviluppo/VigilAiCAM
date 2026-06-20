@@ -13,6 +13,7 @@ import net from "net";
 import os from "os";
 import dns from "dns";
 import { WebSocket } from "ws";
+import { isValidGeminiApiKey, normalizeGeminiApiKey } from "./src/utils/geminiApiKey.ts";
 
 // Polyfill WebSocket per ambienti Node.js < 22 (richiesto da Supabase Realtime)
 (global as any).WebSocket = WebSocket;
@@ -665,8 +666,9 @@ async function startServer() {
       const { geminiKey, emailUser, emailPass, telegramChatId, telegramToken, notificationEmails, supabaseUrl, supabaseAnonKey } = req.body;
 
       if (geminiKey !== undefined && geminiKey.trim() !== "") {
-        process.env.GEMINI_API_KEY = geminiKey;
-        process.env.VITE_GEMINI_API_KEY = geminiKey;
+        const normalizedKey = normalizeGeminiApiKey(geminiKey);
+        process.env.GEMINI_API_KEY = normalizedKey;
+        process.env.VITE_GEMINI_API_KEY = normalizedKey;
       }
       if (emailUser !== undefined && emailUser.trim() !== "") process.env.EMAIL_USER = emailUser;
       if (emailPass !== undefined && emailPass.trim() !== "") process.env.EMAIL_PASS = emailPass;
@@ -734,7 +736,7 @@ async function startServer() {
           }
 
           // Salva anche API Key Gemini separata in due parti per sicurezza se presente
-          if (process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY.length > 20) {
+          if (process.env.GEMINI_API_KEY && isValidGeminiApiKey(process.env.GEMINI_API_KEY)) {
             const keyLen = process.env.GEMINI_API_KEY.length;
             const half = Math.floor(keyLen / 2);
             const part1 = process.env.GEMINI_API_KEY.substring(0, half);

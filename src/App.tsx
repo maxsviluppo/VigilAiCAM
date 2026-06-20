@@ -51,6 +51,7 @@ import { analyzeFrame, DetectionResult } from "./services/gemini";
 import { Camera, Incident, AlertTrigger, AlertTriggerItem, Zone, ZoneType, Point } from "./types";
 import { supabase } from "./supabase";
 import { User } from "@supabase/supabase-js";
+import { GEMINI_API_KEY_MODAL_PLACEHOLDER, GEMINI_API_KEY_PLACEHOLDER, normalizeGeminiApiKey } from "./utils/geminiApiKey";
 
 const RaspberryIcon = ({ size = 16, className = "" }: { size?: number; className?: string }) => (
   <svg 
@@ -874,6 +875,7 @@ export default function App() {
 
   // Esegue il backup diviso della chiave API su Supabase
   const backupApiKeyToSupabase = async (key: string) => {
+    key = normalizeGeminiApiKey(key);
     // 1. Salva sempre anche nei metadati dell'utente per un ripristino sicuro ed immediato senza tabelle
     try {
       await supabase.auth.updateUser({
@@ -4347,7 +4349,7 @@ export default function App() {
                         onChange={(e) => setAppSettings({...appSettings, geminiKey: e.target.value})}
                         onFocus={() => { if (useVirtualKeyboard) setKeyboardTarget({ id: 'settingsGeminiKey', title: 'Chiave API Gemini' }); }}
                         onBlur={() => backupApiKeyToSupabase(appSettings.geminiKey)}
-                        placeholder="Chiave API (AIzaSy...)"
+                        placeholder={GEMINI_API_KEY_PLACEHOLDER}
                         autoComplete="new-password"
                         className="w-full bg-black/20 border border-white/5 px-4 py-3 rounded-xl text-xs text-white outline-none focus:border-blue-500/50 transition-all font-mono"
                       />
@@ -4677,7 +4679,8 @@ export default function App() {
                 <button
                   type="button"
                   onClick={() => {
-                    localStorage.setItem("vigilai_gemini_key", appSettings.geminiKey);
+                    const normalizedGeminiKey = normalizeGeminiApiKey(appSettings.geminiKey);
+                    localStorage.setItem("vigilai_gemini_key", normalizedGeminiKey);
                     localStorage.setItem("vigilai_gemini_key_updated_at", new Date().toISOString());
                     localStorage.setItem("vigilai_email_user", appSettings.emailUser);
                     localStorage.setItem("vigilai_email_pass", appSettings.emailPass);
@@ -4690,7 +4693,7 @@ export default function App() {
                       method: "POST",
                       headers: { "Content-Type": "application/json" },
                       body: JSON.stringify({
-                        geminiKey: appSettings.geminiKey,
+                        geminiKey: normalizedGeminiKey,
                         emailUser: appSettings.emailUser,
                         emailPass: appSettings.emailPass,
                         telegramChatId: appSettings.telegramChatId,
@@ -4708,11 +4711,11 @@ export default function App() {
                       }
                     }).catch(err => console.error("[Settings] Errore salvataggio:", err));
 
-                    backupApiKeyToSupabase(appSettings.geminiKey);
+                    backupApiKeyToSupabase(normalizedGeminiKey);
                     if (user) {
                       supabase.auth.updateUser({
                         data: {
-                          gemini_key: appSettings.geminiKey,
+                          gemini_key: normalizedGeminiKey,
                           email_user: appSettings.emailUser,
                           email_pass: appSettings.emailPass,
                           telegram_chat_id: appSettings.telegramChatId,
@@ -5425,7 +5428,7 @@ export default function App() {
                         setKeyboardTarget({ id: 'modalGeminiKey', title: 'Nuova API Key Gemini' });
                       }
                     }}
-                    placeholder="Incolla o digita qui la chiave (AIzaSy...)"
+                    placeholder={GEMINI_API_KEY_MODAL_PLACEHOLDER}
                     className="w-full bg-black/40 border border-white/10 px-4 py-3 rounded-xl text-xs text-white outline-none focus:border-blue-500 transition-colors font-mono"
                   />
                 </div>
