@@ -1,4 +1,8 @@
-@if (!state.isLoggedIn()) {
+@if (state.showHome()) {
+  <app-home-view />
+} @else if (state.publicInfoId()) {
+  <app-public-product-info [lotto]="state.publicInfoId()!" />
+} @else if (!state.isLoggedIn()) {
 <!-- Login / Demo Selection Screen -->
 <div class="min-h-screen bg-slate-50 relative flex flex-col justify-center items-center p-4 md:p-12">
   <!-- Background Decor -->
@@ -21,9 +25,18 @@
       </div>
 
       <div class="relative z-10 flex flex-col items-center">
-        <img src="assets/logo.png?v=2" class="w-32 h-32 mb-6 drop-shadow-2xl animate-fade-in">
-        <h1 class="text-3xl font-bold tracking-tight mb-2">HACCP Pro</h1>
+        <img src="Logo_canva_SAI.png" class="w-32 h-32 mb-6 drop-shadow-2xl animate-fade-in">
+        <h1 class="text-3xl font-bold tracking-tight mb-2">SAI FAST HACCP</h1>
         <p class="text-slate-400 text-sm font-medium tracking-widest uppercase">Enterprise Solution</p>
+        
+        <!-- Info Web Icon -->
+        <button (click)="state.toggleHome(true)" 
+          class="mt-8 flex items-center gap-4 px-6 py-3 bg-teal-500/10 border border-teal-500/40 rounded-2xl text-teal-400 hover:bg-teal-500 hover:text-white transition-all shadow-2xl group animate-pulse hover:animate-none">
+          <div class="w-8 h-8 rounded-full bg-teal-500/20 flex items-center justify-center group-hover:bg-white/20 transition-colors">
+            <i class="fa-solid fa-earth-europe text-base group-hover:rotate-45 transition-transform duration-500"></i>
+          </div>
+          <span class="text-[10px] font-black uppercase tracking-[0.2em]">Scopri i Vantaggi</span>
+        </button>
       </div>
 
       <div class="relative z-10 mt-8">
@@ -154,7 +167,7 @@
         <img [src]="state.currentLogo()" class="w-full h-full object-contain p-2">
       </div>
       <div class="overflow-hidden relative z-10">
-        <h1 class="text-white font-black tracking-tighter text-2xl leading-none">HACCP <span class="text-blue-500">Pro</span></h1>
+        <h1 class="text-white font-black tracking-tighter text-2xl leading-none">SAI <span class="text-blue-500">FAST HACCP</span></h1>
         <p class="text-slate-500 text-[9px] uppercase font-black tracking-[0.2em] mt-1.5 opacity-80">Enterprise Logic</p>
       </div>
     </div>
@@ -171,10 +184,13 @@
       </div>
       }
 
-      <button (click)="state.setModule(item.id); isMobileMenuOpen.set(false)" [class]="'w-full flex items-center gap-4 px-5 py-4 rounded-2xl transition-all duration-300 group relative overflow-hidden justify-start text-left ' + 
+      <button (click)="handleMenuClick(item)" 
+        [disabled]="item.id === 'abbattimento-log' && !state.hasAbbattitore()"
+        [class]="'w-full flex items-center gap-4 px-5 py-4 rounded-2xl transition-all duration-300 group relative overflow-hidden justify-start text-left ' + 
         (state.currentModuleId() === item.id 
           ? 'bg-gradient-to-br from-blue-600 to-indigo-700 text-white shadow-2xl shadow-blue-500/20 ring-1 ring-white/10' 
-          : 'text-slate-500 hover:bg-white/5 hover:text-white')">
+          : 'text-slate-500 hover:bg-white/5 hover:text-white') +
+        (item.id === 'abbattimento-log' && !state.hasAbbattitore() ? ' opacity-40 cursor-not-allowed filter grayscale' : '')">
 
         <div [class]="'w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-300 ' + (state.currentModuleId() === item.id ? 'bg-white/20 shadow-inner' : 'bg-white/5 group-hover:bg-white/10')">
             <i [class]="'fa-solid text-base ' + item.icon + ' ' + (state.currentModuleId() === item.id ? 'text-white' : 'text-slate-500 group-hover:text-blue-400')"></i>
@@ -216,12 +232,47 @@
       class="print:hidden h-16 bg-white border-b border-slate-200 flex md:hidden items-center justify-between px-4 z-40 flex-shrink-0">
       <div class="flex items-center gap-3">
         <img [src]="state.currentLogo()" class="w-8 h-8 object-contain">
-        <span class="font-bold text-slate-900 tracking-tight">HACCP Pro</span>
+        <span class="font-bold text-slate-900 tracking-tight">SAI FAST HACCP</span>
       </div>
       <button (click)="toggleMobileMenu()" class="text-slate-500 p-2 hover:bg-slate-100 rounded-lg transition-colors">
         <i class="fa-solid fa-bars-staggered text-xl"></i>
       </button>
     </header>
+
+    <!-- Mobile Admin Context Switcher -->
+    @if (state.isAdmin()) {
+    <div class="print:hidden md:hidden bg-slate-50 border-b border-slate-200 px-4 py-3 flex gap-3 overflow-x-auto custom-scrollbar scrollbar-hide z-30">
+        <!-- Company Selector -->
+        <div class="flex items-center bg-white rounded-xl border border-slate-200 px-3 py-1.5 shrink-0 shadow-sm min-w-[160px]">
+            <i class="fa-solid fa-hotel text-slate-400 text-[10px] mr-2"></i>
+            <select [value]="state.filterClientId() || ''"
+                (change)="state.setClientIdFilter($any($event.target).value)"
+                class="bg-transparent text-xs text-slate-700 font-bold focus:outline-none border-none p-0 pr-4 w-full">
+                <option value="">Azienda...</option>
+                @for (client of state.groupedViewClients(); track client.id) {
+                <option [value]="client.id">
+                    {{ client.name }}
+                </option>
+                }
+            </select>
+        </div>
+
+        <!-- Collaborator Selector -->
+        @if (state.filterClientId()) {
+        <div class="flex items-center bg-white rounded-xl border border-slate-200 px-3 py-1.5 shrink-0 shadow-sm min-w-[160px]">
+            <i class="fa-solid fa-users-gear text-slate-400 text-[10px] mr-2"></i>
+            <select [value]="state.filterCollaboratorId()"
+                (change)="state.setCollaboratorFilter($any($event.target).value)"
+                class="bg-transparent text-xs text-slate-700 font-bold focus:outline-none border-none p-0 pr-4 w-full">
+                <option value="">Tutte le Unità</option>
+                @for (user of state.filteredSystemUsers(); track user.id) {
+                <option [value]="user.id">{{ user.name }}</option>
+                }
+            </select>
+        </div>
+        }
+    </div>
+    }
 
     <!-- Top Header (Desktop) -->
     <header
@@ -267,7 +318,7 @@
             <option value="">-- Seleziona Azienda --</option>
             @for (client of state.groupedViewClients(); track client.id) {
             <option [value]="client.id">
-              {{ client.piva ? client.name.split(' ')[0] : client.name }}
+              {{ client.name }}
             </option>
             }
           </select>
@@ -337,6 +388,9 @@
         @case ('operator-dashboard') { <app-operator-dashboard-view /> }
         @case ('documentation') { <app-documentation-view /> }
         @case ('production-log') { <app-production-log-view /> }
+        @case ('abbattimento-log') { <app-abbattimento-log-view /> }
+        @case ('ddt-carico') { <app-ddt-view /> }
+        @case ('preparations') { <app-preparations-view /> }
         @case ('ingredients-book') { <app-ingredients-book-view /> }
         @case ('reports') { <app-reports-view /> }
         @case ('general-checks') { <app-general-checks-view /> }

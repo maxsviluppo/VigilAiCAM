@@ -76,58 +76,64 @@ interface CheckItem {
             <div class="divide-y divide-slate-100">
                 @for (check of checks(); track check.id; let i = $index) {
                     <div class="flex flex-col hover:bg-slate-50 transition-colors group">
-                        <div class="p-3 md:p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 md:gap-4 relative overflow-hidden"
+                        <div class="p-5 flex flex-col gap-4 relative overflow-hidden"
                              [class.bg-emerald-50/40]="check.status === 'ok'"
                              [class.bg-rose-50/40]="check.status === 'issue'">
                              
-                             <!-- Subtle side border color based on status -->
-                             <div class="absolute left-0 top-0 bottom-0 w-1 transition-colors"
-                                  [class.bg-emerald-400]="check.status === 'ok'"
-                                  [class.bg-rose-400]="check.status === 'issue'"
-                                  [class.bg-transparent]="check.status === 'pending'"></div>
-                             
-                            <div class="flex items-center gap-3 md:gap-4 flex-1 pl-1">
-                                <span class="text-[10px] md:text-[11px] font-black text-slate-400 w-5 h-5 rounded bg-white flex items-center justify-center border border-slate-200 shrink-0 leading-none">
-                                    {{ i + 1 }}
-                                </span>
-                                
-                                <div class="h-10 w-10 rounded shrink-0 flex items-center justify-center transition-colors border bg-white"
-                                     [class.border-emerald-200]="check.status === 'ok'" [class.text-emerald-500]="check.status === 'ok'"
-                                     [class.border-rose-200]="check.status === 'issue'" [class.text-rose-500]="check.status === 'issue'"
-                                     [class.border-slate-200]="check.status === 'pending'" [class.text-slate-400]="check.status === 'pending'">
-                                    <i [class]="'fa-solid ' + (check.status === 'ok' ? 'fa-check' : (check.status === 'issue' ? 'fa-triangle-exclamation' : check.icon))"></i>
-                                </div>
-                                
-                                <div class="min-w-0 flex-1">
-                                    <h3 class="font-bold text-slate-700 text-sm md:text-base leading-tight tracking-tight break-words">{{ check.label }}</h3>
-                                    <div class="flex items-center gap-2 mt-1">
-                                        <span class="text-[9px] md:text-[10px] font-black uppercase tracking-widest rounded leading-none"
-                                              [class.text-emerald-600]="check.status === 'ok'"
-                                              [class.text-red-600]="check.status === 'issue'"
-                                              [class.text-slate-400]="check.status === 'pending'">
-                                            {{ check.status === 'ok' ? 'Conforme' : (check.status === 'issue' ? 'Anomalia' : 'In attesa') }}
-                                        </span>
+                            <!-- Row 1: Info & Label -->
+                            <div class="flex items-center justify-between">
+                                <div class="flex items-center gap-3 min-w-0">
+                                    <span class="text-[10px] font-black w-6 h-6 rounded-lg bg-white flex items-center justify-center border border-slate-200 shrink-0 text-slate-400 shadow-sm">
+                                        {{ i + 1 }}
+                                    </span>
+                                    
+                                    <div class="h-10 w-10 rounded-xl shrink-0 flex items-center justify-center transition-all border shadow-sm"
+                                         [class.bg-emerald-500]="check.status === 'ok'" [class.border-emerald-600]="check.status === 'ok'" [class.text-white]="check.status === 'ok'"
+                                         [class.bg-rose-500]="check.status === 'issue'" [class.border-rose-600]="check.status === 'issue'" [class.text-white]="check.status === 'issue'"
+                                         [class.bg-white]="check.status === 'pending'" [class.border-slate-200]="check.status === 'pending'" [class.text-slate-400]="check.status === 'pending'">
+                                        <i [class]="'fa-solid text-lg ' + (check.status === 'ok' ? 'fa-check' : (check.status === 'issue' ? 'fa-triangle-exclamation' : check.icon))"></i>
+                                    </div>
+                                    
+                                    <div class="min-w-0 flex-1">
+                                        <h3 class="font-black text-slate-800 text-base leading-tight uppercase tracking-tight">{{ check.label }}</h3>
+                                        <div class="flex items-center gap-2 mt-1">
+                                            <span class="text-[9px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded"
+                                                  [class.bg-emerald-100]="check.status === 'ok'" [class.text-emerald-700]="check.status === 'ok'"
+                                                  [class.bg-red-100]="check.status === 'issue'" [class.text-red-700]="check.status === 'issue'"
+                                                  [class.bg-slate-100]="check.status === 'pending'" [class.text-slate-500]="check.status === 'pending'">
+                                                {{ check.status === 'ok' ? 'CONFORME' : (check.status === 'issue' ? 'ANOMALIA' : 'IN ATTESA') }}
+                                            </span>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
 
-                            <div class="flex items-center gap-2 shrink-0 pl-11 sm:pl-0">
+                            <!-- Row 2: Large Touch Buttons -->
+                            <div class="flex items-center gap-3 w-full">
                                 @if (check.status === 'pending') {
                                     <button (click)="setStatus(check.id, 'ok')" 
                                             [disabled]="!canEdit()"
-                                            class="w-8 h-8 md:w-10 md:h-10 rounded border border-emerald-200 text-emerald-500 hover:bg-emerald-50 hover:text-emerald-600 transition-all shadow-sm flex items-center justify-center bg-white disabled:opacity-50 disabled:cursor-not-allowed text-sm">
-                                        <i class="fa-solid fa-check"></i>
+                                            class="flex-1 h-14 rounded-2xl border-2 border-emerald-500 bg-white text-emerald-600 flex items-center justify-center gap-2 shadow-md active:scale-95 disabled:opacity-50">
+                                        <i class="fa-solid fa-circle-check text-xl"></i>
+                                        <span class="text-xs font-black uppercase tracking-widest">OK</span>
                                     </button>
                                     <button (click)="setStatus(check.id, 'issue')" 
                                             [disabled]="!canEdit()"
-                                            class="w-8 h-8 md:w-10 md:h-10 rounded border border-rose-200 text-rose-500 hover:bg-rose-50 hover:text-rose-600 transition-all shadow-sm flex items-center justify-center bg-white disabled:opacity-50 disabled:cursor-not-allowed text-sm">
-                                        <i class="fa-solid fa-triangle-exclamation"></i>
+                                            class="flex-1 h-14 rounded-2xl border-2 border-rose-500 bg-white text-rose-600 flex items-center justify-center gap-2 shadow-md active:scale-95 disabled:opacity-50">
+                                        <i class="fa-solid fa-circle-exclamation text-xl"></i>
+                                        <span class="text-xs font-black uppercase tracking-widest">NO</span>
                                     </button>
                                 } @else {
-                                    <div class="flex items-center gap-2">
+                                    <div class="flex-1 flex gap-3">
+                                        <div class="flex-1 h-14 rounded-2xl flex items-center justify-center gap-3 font-black text-xs uppercase tracking-widest"
+                                             [class.bg-emerald-500]="check.status === 'ok'" [class.text-white]="check.status === 'ok'"
+                                             [class.bg-rose-500]="check.status === 'issue'" [class.text-white]="check.status === 'issue'">
+                                            <i class="fa-solid" [class.fa-check-circle]="check.status === 'ok'" [class.fa-triangle-exclamation]="check.status === 'issue'"></i>
+                                            {{ check.status === 'ok' ? 'CONFORME' : 'ANOMALIA' }}
+                                        </div>
                                         <button (click)="setStatus(check.id, 'pending')" 
                                                 [disabled]="!canEdit()"
-                                                class="w-8 h-8 md:w-10 md:h-10 rounded bg-white border border-slate-200 text-slate-400 hover:bg-slate-50 hover:text-slate-600 transition-all shadow-sm flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed text-xs md:text-sm tooltip" title="Resetta Selettore">
+                                                class="h-14 w-14 rounded-2xl bg-white border-2 border-slate-200 text-slate-400 flex items-center justify-center shadow-md active:scale-95">
                                             <i class="fa-solid fa-rotate-left"></i>
                                         </button>
                                     </div>

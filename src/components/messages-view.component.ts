@@ -3,29 +3,30 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
 import { AppStateService, Message } from '../services/app-state.service';
+import { ToastService } from '../services/toast.service';
 
 @Component({
     selector: 'app-messages-view',
     standalone: true,
     imports: [CommonModule, FormsModule],
     template: `
-    <div class="space-y-6 max-w-7xl mx-auto p-4 pb-12 overflow-x-hidden">
+    <div class="space-y-4 sm:space-y-6 max-w-7xl mx-auto p-3 sm:p-4 pb-12 overflow-x-hidden">
         <!-- Sleek Professional Header -->
-        <div class="bg-white rounded-2xl p-6 shadow-sm border border-slate-200 flex flex-col md:flex-row items-start md:items-center justify-between gap-6 relative overflow-hidden mb-6">
+        <div class="bg-white rounded-2xl p-4 sm:p-6 shadow-sm border border-slate-200 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 sm:gap-6 relative overflow-hidden mb-4 sm:mb-6">
           <div class="absolute right-0 top-0 h-full w-1/3 bg-gradient-to-l from-slate-50 to-transparent pointer-events-none"></div>
           
-          <div class="relative z-10 flex items-center gap-5">
-             <div class="h-14 w-14 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-center shadow-sm text-blue-600 shrink-0 relative">
-                <i class="fa-solid fa-comments text-2xl"></i>
+          <div class="relative z-10 flex items-center gap-3 sm:gap-5">
+             <div class="h-10 w-10 sm:h-14 sm:w-14 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-center shadow-sm text-blue-600 shrink-0 relative">
+                <i class="fa-solid fa-comments text-xl sm:text-2xl"></i>
                 @if (state.unreadMessagesCount() > 0) {
-                    <div class="absolute -top-1.5 -right-1.5 w-4 h-4 bg-red-500 rounded-full border-2 border-white flex items-center justify-center shadow-sm">
-                        <div class="w-1.5 h-1.5 bg-white rounded-full animate-ping"></div>
+                    <div class="absolute -top-1 -right-1 w-3.5 h-3.5 sm:w-4 sm:h-4 bg-red-500 rounded-full border-2 border-white flex items-center justify-center shadow-sm">
+                        <div class="w-1 h-1 sm:w-1.5 sm:h-1.5 bg-white rounded-full animate-ping"></div>
                     </div>
                 }
              </div>
              <div>
-                <h2 class="text-2xl font-bold text-slate-800 tracking-tight">Messaggistica</h2>
-                <p class="text-xs font-semibold text-slate-500 mt-1">Centro comunicazioni e notifiche</p>
+                <h2 class="text-xl sm:text-2xl font-bold text-slate-800 tracking-tight">Messaggistica</h2>
+                <p class="text-[10px] sm:text-xs font-semibold text-slate-500 mt-0.5 sm:mt-1">Centro comunicazioni</p>
              </div>
           </div>
 
@@ -47,17 +48,17 @@ import { AppStateService, Message } from '../services/app-state.service';
         </div>
 
         <!-- Filter Tabs -->
-        <div class="flex items-center gap-2 mb-6 bg-slate-100 p-1 rounded-xl w-fit border border-slate-200">
+        <div class="flex items-center gap-1 mb-4 sm:mb-6 bg-slate-100 p-1 rounded-xl w-full sm:w-fit border border-slate-200">
             <button (click)="activeFilter.set('RECEIVED')" 
-                    [class]="'px-6 py-2 rounded-lg font-bold text-sm transition-all ' + (activeFilter() === 'RECEIVED' ? 'bg-white text-blue-600 shadow-sm border border-slate-200' : 'text-slate-500 hover:text-slate-800')">
-                <i class="fa-solid fa-inbox mr-2"></i> Ricevuti
+                    [class]="'flex-1 sm:flex-none px-3 sm:px-6 py-1.5 sm:py-2 rounded-lg font-bold text-[11px] sm:text-sm transition-all ' + (activeFilter() === 'RECEIVED' ? 'bg-white text-blue-600 shadow-sm border border-slate-200' : 'text-slate-500 hover:text-slate-800')">
+                <i class="fa-solid fa-inbox mr-1 sm:mr-2"></i> Ricevuti
                 @if (activeFilter() === 'RECEIVED' && state.unreadMessagesCount() > 0) {
-                    <span class="ml-2 px-1.5 py-0.5 bg-red-500 text-white text-[10px] rounded-full">{{ state.unreadMessagesCount() }}</span>
+                    <span class="ml-1 sm:ml-2 px-1.5 py-0.5 bg-red-500 text-white text-[8px] sm:text-[9px] rounded-full">{{ state.unreadMessagesCount() }}</span>
                 }
             </button>
             <button (click)="activeFilter.set('SENT')" 
-                    [class]="'px-6 py-2 rounded-lg font-bold text-sm transition-all ' + (activeFilter() === 'SENT' ? 'bg-white text-blue-600 shadow-sm border border-slate-200' : 'text-slate-500 hover:text-slate-800')">
-                <i class="fa-solid fa-paper-plane-share mr-2"></i> Inviati
+                    [class]="'flex-1 sm:flex-none px-3 sm:px-6 py-1.5 sm:py-2 rounded-lg font-bold text-[11px] sm:text-sm transition-all ' + (activeFilter() === 'SENT' ? 'bg-white text-blue-600 shadow-sm border border-slate-200' : 'text-slate-500 hover:text-slate-800')">
+                <i class="fa-solid fa-paper-plane mr-1 sm:mr-2"></i> Inviati
             </button>
         </div>
 
@@ -165,42 +166,63 @@ import { AppStateService, Message } from '../services/app-state.service';
 
             @for (message of messages(); track message.id) {
                 <div class="bg-white rounded-xl shadow-sm border transition-all duration-300" [class.border-blue-300]="!message.read" [class.border-slate-200]="message.read">
-                    <div class="p-4 md:p-5 flex justify-between items-start gap-4 cursor-pointer hover:bg-slate-50 transition-colors" [class.bg-blue-50/30]="!message.read" (click)="toggleMessageExpanded(message.id)">
-                        <div class="flex items-start gap-4 flex-1">
-                            <div class="w-10 h-10 rounded-full bg-slate-100 border border-slate-200 text-slate-500 flex items-center justify-center shrink-0"><i class="fa-solid fa-user text-sm"></i></div>
+                    <div class="p-3.5 md:p-5 flex justify-between items-start gap-3 sm:gap-4 cursor-pointer hover:bg-slate-50 transition-colors" [class.bg-blue-50/30]="!message.read" (click)="toggleMessageExpanded(message.id)">
+                        <div class="flex items-start gap-3 sm:gap-4 flex-1">
+
                             <div class="flex-1 min-w-0">
-                                <div class="flex items-center gap-2 mb-1">
-                                    <h3 class="text-lg font-bold text-slate-800 truncate">{{ message.subject }}</h3>
-                                    @if (!message.read) { <span class="px-2 py-0.5 bg-blue-500 text-white text-[9px] font-black rounded uppercase">NUOVO</span> }
+                                <div class="flex flex-col gap-1 mb-2">
+                                    <div class="flex items-center gap-2">
+                                        @if (!message.read) { <span class="px-1.5 py-0.5 bg-blue-600 text-white text-[7px] sm:text-[8px] font-black rounded-md uppercase shrink-0 shadow-sm border border-blue-400">NUOVO</span> }
+                                        <h3 class="text-sm sm:text-lg font-black text-slate-800 leading-tight break-words flex-1">{{ message.subject }}</h3>
+                                    </div>
                                 </div>
-                                <div class="flex flex-wrap items-center gap-x-3 text-[11px] font-bold text-slate-500 uppercase">
-                                    <span class="text-slate-700">{{ message.senderName }}</span>
-                                    <span>{{ message.timestamp | date:'dd/MM HH:mm' }}</span>
-                                    <span class="ml-auto inline-flex items-center gap-1 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">{{ getClientName(message.recipientId) }}</span>
+                                <div class="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-x-3 text-[10px] sm:text-[11px] font-bold text-slate-500 uppercase">
+                                    <div class="flex items-center gap-1.5 sm:gap-2">
+                                        <i class="fa-solid text-[10px]" 
+                                           [class.fa-arrow-down-left]="activeFilter() === 'RECEIVED'" 
+                                           [class.fa-arrow-up-right]="activeFilter() === 'SENT'" 
+                                           [class.text-emerald-500]="activeFilter() === 'RECEIVED'" 
+                                           [class.text-blue-500]="activeFilter() === 'SENT'"></i>
+                                        <span class="text-slate-700 truncate max-w-[120px] sm:max-w-[150px]">
+                                            {{ activeFilter() === 'RECEIVED' ? message.senderName : (getClientName(message.recipientId) || 'Tutti') }}
+                                        </span>
+                                    </div>
+                                    <div class="flex items-center gap-1.5 sm:gap-2">
+                                        <i class="fa-regular fa-clock text-[9px] sm:text-[10px]"></i>
+                                        <span>{{ message.timestamp | date:'dd/MM HH:mm' }}</span>
+                                    </div>
+                                    @if (activeFilter() === 'RECEIVED') {
+                                        <span class="sm:ml-auto inline-flex items-center gap-1 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200 w-fit text-[9px]">{{ getClientName(message.recipientId) }}</span>
+                                    }
                                 </div>
                             </div>
                         </div>
                         <div class="flex items-center gap-1">
-                            <button (click)="confirmDeleteModal($event, message.id)" class="w-10 h-10 flex items-center justify-center text-slate-400 hover:text-red-600 rounded-xl transition-all"><i class="fa-solid fa-trash-can text-sm"></i></button>
-                            <div class="w-10 h-10 flex items-center justify-center text-slate-400 rounded-xl" [class.bg-slate-100]="isMessageExpanded(message.id)"><i class="fa-solid text-sm transition-transform" [class.fa-chevron-down]="!isMessageExpanded(message.id)" [class.fa-chevron-up]="isMessageExpanded(message.id)"></i></div>
+                            <button (click)="confirmDeleteModal($event, message.id)" 
+                                    class="w-9 h-9 sm:w-10 sm:h-10 flex items-center justify-center text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-all active:scale-90">
+                                <i class="fa-solid fa-trash-can text-sm sm:text-base"></i>
+                            </button>
+                            <div class="w-9 h-9 sm:w-10 sm:h-10 flex items-center justify-center text-slate-400 rounded-xl" [class.bg-slate-100]="isMessageExpanded(message.id)">
+                                <i class="fa-solid text-xs sm:text-sm transition-transform" [class.fa-chevron-down]="!isMessageExpanded(message.id)" [class.fa-chevron-up]="isMessageExpanded(message.id)"></i>
+                            </div>
                         </div>
                     </div>
 
                     @if (isMessageExpanded(message.id)) {
-                        <div class="border-t border-slate-100 bg-white rounded-b-xl p-6">
-                            <div class="text-slate-700 whitespace-pre-wrap font-medium mb-6">{{ message.content }}</div>
+                        <div class="border-t border-slate-100 bg-white rounded-b-xl p-4 sm:p-6">
+                            <div class="text-slate-700 whitespace-pre-wrap break-words font-medium text-sm sm:text-base mb-6">{{ message.content }}</div>
                             @if (message.attachmentName) {
                                 <div class="p-4 bg-slate-50 border border-slate-200 rounded-2xl flex items-center justify-between gap-4">
                                     <div class="flex items-center gap-4">
-                                        <div class="w-12 h-12 bg-white rounded-xl flex items-center justify-center text-blue-600 border border-slate-100 shadow-sm"><i class="fa-solid fa-file-arrow-down text-xl"></i></div>
-                                        <div>
-                                            <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Allegato</p>
-                                            <p class="text-sm font-bold text-slate-700 truncate max-w-[200px]">{{ message.attachmentName }}</p>
+                                        <div class="w-10 h-10 sm:w-12 sm:h-12 bg-white rounded-xl flex items-center justify-center text-blue-600 border border-slate-100 shadow-sm shrink-0"><i class="fa-solid fa-file-arrow-down text-lg sm:text-xl"></i></div>
+                                        <div class="min-w-0">
+                                            <p class="text-[9px] sm:text-[10px] font-black text-slate-400 uppercase tracking-widest mb-0.5 sm:mb-1">Allegato</p>
+                                            <p class="text-xs sm:text-sm font-bold text-slate-700 truncate max-w-[150px] sm:max-w-[200px]">{{ message.attachmentName }}</p>
                                         </div>
                                     </div>
-                                    <div class="flex items-center gap-2">
-                                        <button (click)="previewAttachment(message)" class="px-5 py-3 bg-slate-900 text-white font-black text-[11px] uppercase rounded-xl hover:bg-black transition-all shadow-md"><i class="fa-solid fa-eye mr-2"></i> Anteprima</button>
-                                        <button (click)="downloadDoc({url: getDownloadUrl(message), name: message.attachmentName!})" class="px-5 py-3 bg-blue-600 text-white font-black text-[11px] uppercase rounded-xl hover:bg-blue-700 transition-all shadow-md"><i class="fa-solid fa-download mr-2"></i> Scarica</button>
+                                    <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                                        <button (click)="previewAttachment(message)" class="px-4 py-2.5 bg-slate-900 text-white font-black text-[10px] uppercase rounded-xl hover:bg-black transition-all shadow-md flex items-center justify-center gap-2"><i class="fa-solid fa-eye"></i> Anteprima</button>
+                                        <button (click)="downloadMessageAttachment(message)" class="px-4 py-2.5 bg-blue-600 text-white font-black text-[10px] uppercase rounded-xl hover:bg-blue-700 transition-all shadow-md flex items-center justify-center gap-2"><i class="fa-solid fa-download"></i> Scarica</button>
                                     </div>
                                 </div>
                             }
@@ -208,9 +230,9 @@ import { AppStateService, Message } from '../services/app-state.service';
                             @if (message.replies.length > 0) {
                                 <div class="space-y-3 mb-6">
                                     @for (reply of message.replies; track reply.id) {
-                                        <div class="bg-slate-50 p-4 rounded-xl border border-slate-100 ml-8 relative">
-                                            <div class="text-[10px] font-bold text-slate-500 uppercase mb-2"><span>{{ reply.senderName }}</span> • {{ reply.timestamp | date:'dd/MM HH:mm' }}</div>
-                                            <p class="text-sm font-medium text-slate-700">{{ reply.content }}</p>
+                                        <div class="bg-slate-50 p-3 sm:p-4 rounded-xl border border-slate-100 ml-4 sm:ml-8 relative">
+                                            <div class="text-[9px] sm:text-[10px] font-bold text-slate-500 uppercase mb-1.5 sm:mb-2"><span>{{ reply.senderName }}</span> • {{ reply.timestamp | date:'dd/MM HH:mm' }}</div>
+                                            <p class="text-xs sm:text-sm font-medium text-slate-700 break-words">{{ reply.content }}</p>
                                         </div>
                                     }
                                 </div>
@@ -292,6 +314,7 @@ import { AppStateService, Message } from '../services/app-state.service';
 export class MessagesViewComponent {
     state = inject(AppStateService);
     sanitizer = inject(DomSanitizer);
+    toast = inject(ToastService);
 
     previewDoc = signal<{url: string, name: string} | null>(null);
     messageToDelete = signal<string | null>(null);
@@ -322,8 +345,15 @@ export class MessagesViewComponent {
 
     openNewMessageForm() {
         this.showNewMessageForm = true;
-        this.newMessage.recipientType = this.state.isAdmin() ? 'ALL' : 'SINGLE';
-        this.newMessage.recipientId = this.state.isAdmin() ? '' : 'ADMIN_OFFICE';
+        const targetClientId = this.state.activeTargetClientId();
+        
+        if (this.state.isAdmin() && targetClientId && targetClientId !== 'demo') {
+            this.newMessage.recipientType = 'SINGLE';
+            this.newMessage.recipientId = targetClientId;
+        } else {
+            this.newMessage.recipientType = this.state.isAdmin() ? 'ALL' : 'SINGLE';
+            this.newMessage.recipientId = this.state.isAdmin() ? '' : 'ADMIN_OFFICE';
+        }
     }
 
     canSendMessage(): boolean {
@@ -353,7 +383,7 @@ export class MessagesViewComponent {
         if (file) {
             const maxSize = 10 * 1024 * 1024;
             if (file.size > maxSize) {
-                this.state.toastService.error('Allegato troppo grande', 'Il file supera il limite di 10MB.');
+                this.toast.error('Allegato troppo grande', 'Il file supera il limite di 10MB.');
                 return;
             }
 
@@ -375,7 +405,18 @@ export class MessagesViewComponent {
         return this.sanitizer.bypassSecurityTrustResourceUrl(url);
     }
 
-    previewAttachment(message: Message) {
+    async previewAttachment(message: Message) {
+        if (!message.fileData && message.attachmentName) {
+            this.toast.info('Caricamento...', 'Download allegato in corso.');
+            const data = await this.state.fetchMessageAttachment(message.id);
+            if (data) {
+                message.fileData = data;
+            } else {
+                this.toast.error('Errore', 'Impossibile scaricare l\'allegato.');
+                return;
+            }
+        }
+        
         const url = message.fileData || message.attachmentUrl;
         if (url) {
             this.previewDoc.set({ url, name: message.attachmentName || 'allegato' });
@@ -390,6 +431,22 @@ export class MessagesViewComponent {
     isPDF(url?: string): boolean {
         if (!url) return false;
         return url.startsWith('data:application/pdf') || (url || '').toLowerCase().includes('.pdf');
+    }
+
+    async downloadMessageAttachment(message: Message) {
+        if (!message.fileData && message.attachmentName) {
+            this.toast.info('Download...', 'Recupero allegato dal cloud.');
+            const data = await this.state.fetchMessageAttachment(message.id);
+            if (data) {
+                message.fileData = data;
+            } else {
+                this.toast.error('Errore', 'Download fallito.');
+                return;
+            }
+        }
+
+        const doc = { url: message.fileData || '', name: message.attachmentName || 'allegato' };
+        this.downloadDoc(doc);
     }
 
     downloadDoc(doc: {url: string, name: string}) {

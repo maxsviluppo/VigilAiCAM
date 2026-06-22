@@ -271,190 +271,144 @@ interface ChecklistItem {
                 <div class="px-4 py-3 flex flex-col transition-colors hover:bg-slate-50 relative group/row"
                      [class.bg-emerald-50/40]="item.status === 'ok'"
                      [class.bg-red-50/40]="item.status === 'issue'">
-                    
-                    <div class="flex flex-col md:flex-row md:items-center justify-between gap-3">
-                        <!-- Label & Icon -->
-                        <div class="flex items-center gap-3 flex-[2] min-w-0">
-                            <span class="text-[11px] font-black w-5 h-5 rounded bg-slate-50 flex items-center justify-center border border-slate-200 shrink-0 text-slate-400">
-                                {{ $any(item).index + 1 }}
-                            </span>
-                            
-                            <div class="w-8 h-8 rounded shrink-0 flex items-center justify-center transition-colors border"
-                                 [class.bg-slate-50]="item.status === 'pending'" [class.border-slate-200]="item.status === 'pending'" [class.text-slate-400]="item.status === 'pending'"
-                                 [class.bg-emerald-50]="item.status === 'ok'" [class.border-emerald-200]="item.status === 'ok'" [class.text-emerald-500]="item.status === 'ok'"
-                                 [class.bg-red-50]="item.status === 'issue'" [class.border-red-200]="item.status === 'issue'" [class.text-red-500]="item.status === 'issue'">
-                                <i [class]="'fa-solid text-base ' + item.icon"></i>
-                            </div>
+                        <div class="flex flex-col gap-4">
+                        <!-- Row 1: Label & Icon -->
+                        <div class="flex items-center justify-between">
+                            <div class="flex items-center gap-3 min-w-0">
+                                <span class="text-[10px] font-black w-6 h-6 rounded-lg bg-slate-50 flex items-center justify-center border border-slate-200 shrink-0 text-slate-400 shadow-sm">
+                                    {{ $any(item).index + 1 }}
+                                </span>
+                                
+                                <div class="w-10 h-10 rounded-xl shrink-0 flex items-center justify-center transition-all border shadow-sm"
+                                     [class.bg-slate-50]="item.status === 'pending'" [class.border-slate-200]="item.status === 'pending'" [class.text-slate-400]="item.status === 'pending'"
+                                     [class.bg-emerald-500]="item.status === 'ok'" [class.border-emerald-600]="item.status === 'ok'" [class.text-white]="item.status === 'ok'"
+                                     [class.bg-red-500]="item.status === 'issue'" [class.border-red-600]="item.status === 'issue'" [class.text-white]="item.status === 'issue'">
+                                    <i [class]="'fa-solid text-xl ' + item.icon"></i>
+                                </div>
 
-                            <div class="flex-1 min-w-0">
-                                <h4 class="font-bold text-slate-700 text-sm leading-tight group-hover/row:text-indigo-600 transition-colors">{{ item.label }}</h4>
-                                @if (item.status !== 'pending') {
-                                    <span class="text-[10px] font-black uppercase tracking-widest mt-0.5 block"
-                                          [class.text-emerald-500]="item.status === 'ok'"
-                                          [class.text-red-500]="item.status === 'issue'">
-                                        {{ item.status === 'ok' ? 'CONFORME' : 'NON CONFORME' }}
-                                    </span>
-                                }
+                                <div class="flex-1 min-w-0 cursor-pointer" (click)="item.status === 'issue' ? openProcedureModal(item) : setStatus(item.id, 'ok')">
+                                    <h4 class="font-black text-slate-800 text-lg leading-tight uppercase tracking-tight group-hover/row:text-indigo-600 transition-colors">{{ item.label }}</h4>
+                                    <div class="flex items-center gap-2 mt-1">
+                                        <span class="text-[9px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded"
+                                              [class.bg-emerald-100]="item.status === 'ok'" [class.text-emerald-700]="item.status === 'ok'"
+                                              [class.bg-red-100]="item.status === 'issue'" [class.text-red-700]="item.status === 'issue'"
+                                              [class.bg-slate-100]="item.status === 'pending'" [class.text-slate-500]="item.status === 'pending'">
+                                            {{ item.status === 'ok' ? 'CONFORME' : (item.status === 'issue' ? 'NON CONFORME' : 'IN ATTESA') }}
+                                        </span>
+                                        @if (item.status === 'issue') {
+                                            <span class="text-[9px] font-bold text-red-500 animate-pulse uppercase tracking-tighter">
+                                                <i class="fa-solid fa-hand-pointer"></i> Procedura
+                                            </span>
+                                        }
+                                    </div>
+                                </div>
                             </div>
                         </div>
 
-                        <!-- Actions & Basic Temp -->
-                        <div class="flex items-center gap-3 flex-1 justify-end shrink-0">
-                            @if (item.hasTemperature && !item.isAbbattitore) {
-                                <div class="flex flex-col items-end gap-1">
-                                    <div class="w-24 bg-white rounded border border-slate-200 px-2 flex items-center gap-1.5 focus-within:border-indigo-400 focus-within:ring-1 focus-within:ring-indigo-400 transition-shadow h-7 shadow-sm">
-                                        <i class="fa-solid fa-temperature-half text-[11px] text-slate-400"></i>
-                                        <input type="number" 
-                                               [ngModel]="statusMap()[item.id]?.temperature"
-                                               (ngModelChange)="updateTemperature(item.id, $event, item.label)"
-                                               placeholder="°C"
-                                               [disabled]="isSubmitted() || !state.isContextEditable()"
-                                               class="w-full font-bold text-slate-700 bg-transparent h-full focus:outline-none text-sm disabled:opacity-50">
-                                    </div>
-                                    @if (statusMap()[item.id]?.isAutomaticIssue) {
-                                        <span class="text-[9px] font-black text-red-600 bg-red-50 px-1.5 py-0.5 rounded border border-red-100 uppercase tracking-tight animate-pulse">
-                                            HACCP Fuori Norma
-                                        </span>
-                                    }
-                                </div>
-                            }
+                        <!-- Row 2: Temperature & Verification Actions -->
+                        @if (item.hasTemperature || (statusMap()[item.id]?.status && statusMap()[item.id]?.status !== 'pending')) {
+                            <div class="flex flex-wrap items-center gap-2">
+                                @if (item.hasTemperature) {
+                                    <div class="flex-1 flex items-center gap-1.5 min-w-[200px]">
+                                        <div class="relative flex-1">
+                                            <div class="absolute inset-y-0 left-3 flex items-center pointer-events-none">
+                                                <i class="fa-solid fa-temperature-half text-slate-400 text-[10px]"></i>
+                                            </div>
+                                            <input type="number" 
+                                                   [ngModel]="statusMap()[item.id]?.temperature"
+                                                   (ngModelChange)="handleTemperatureInput(item.id, $event)"
+                                                   (keyup.enter)="validateTemperature(item.id, item.label)"
+                                                   placeholder="Valore °C"
+                                                   step="0.1"
+                                                   [disabled]="isSubmitted() || !state.isContextEditable()"
+                                                   class="w-full h-12 pl-9 pr-2 rounded-xl border-2 border-slate-200 bg-white font-bold text-slate-800 text-base focus:border-indigo-500 outline-none transition-all shadow-sm">
+                                        </div>
+                                        
+                                        <!-- ACTION BUTTONS NEXT TO INPUT -->
+                                        <button (click)="validateTemperature(item.id, item.label)"
+                                                [disabled]="isSubmitted() || !state.isContextEditable() || statusMap()[item.id]?.temperature === undefined || statusMap()[item.id]?.temperature === null || statusMap()[item.id]?.temperature === ''"
+                                                class="h-12 w-12 rounded-xl bg-emerald-600 text-white flex items-center justify-center shadow-md active:scale-90 disabled:opacity-30 disabled:scale-100 transition-all"
+                                                title="Conferma ed Elabora Esito">
+                                            <i class="fa-solid fa-check text-lg"></i>
+                                        </button>
 
-                            <div class="flex items-center gap-1.5">
-                                @if (item.status === 'pending') {
-                                    <button (click)="setStatus(item.id, 'ok')" 
-                                            [disabled]="isSubmitted() || !state.isContextEditable()"
-                                            class="h-7 px-2.5 rounded bg-white hover:bg-emerald-50 border border-slate-200 hover:border-emerald-200 text-slate-400 hover:text-emerald-500 transition-colors shadow-sm flex items-center justify-center disabled:opacity-30">
-                                        <i class="fa-solid fa-check text-xs"></i>
-                                    </button>
-                                    <button (click)="openIssueModal(item)" 
-                                            [disabled]="isSubmitted() || !state.isContextEditable()"
-                                            class="h-7 px-2.5 rounded bg-white hover:bg-red-50 border border-slate-200 hover:border-red-200 text-slate-400 hover:text-red-500 transition-colors shadow-sm flex items-center justify-center disabled:opacity-30">
-                                        <i class="fa-solid fa-triangle-exclamation text-xs"></i>
-                                    </button>
-                                } @else {
+                                        <button (click)="handleTemperatureInput(item.id, '')"
+                                                [disabled]="isSubmitted() || !state.isContextEditable() || statusMap()[item.id]?.temperature === undefined || statusMap()[item.id]?.temperature === null || statusMap()[item.id]?.temperature === ''"
+                                                class="h-12 w-12 rounded-xl bg-slate-100 text-slate-400 border border-slate-200 flex items-center justify-center active:scale-90 disabled:opacity-30 disabled:scale-100 transition-all"
+                                                title="Cancella Valore">
+                                            <i class="fa-solid fa-eraser text-lg"></i>
+                                        </button>
+                                    </div>
+                                }
+
+                                @if (statusMap()[item.id]?.status && statusMap()[item.id]?.status !== 'pending') {
                                     <button (click)="setStatus(item.id, 'pending')" 
                                             [disabled]="isSubmitted() || !state.isContextEditable()"
-                                            class="h-7 px-2.5 rounded bg-slate-50 hover:bg-slate-100 text-slate-500 font-bold text-[11px] uppercase tracking-widest transition-colors border border-slate-200 disabled:opacity-30">
+                                            class="h-12 px-4 rounded-xl border-2 border-slate-100 bg-slate-50 text-slate-400 flex items-center gap-2 shadow-inner active:scale-95 transition-all ml-auto">
                                         <i class="fa-solid fa-rotate-left"></i>
+                                        <span class="text-[10px] font-black uppercase tracking-widest">Azzera Esito</span>
                                     </button>
                                 }
                             </div>
+                        }
+
+                        <!-- Row 3: Main Actions (Large) -->
+                        <div class="flex items-center gap-3 w-full">
+                            <!-- OK BUTTON -->
+                            <button (click)="setStatus(item.id, 'ok')" 
+                                    [disabled]="isSubmitted() || !state.isContextEditable()"
+                                    class="flex-1 h-16 rounded-2xl border-2 transition-all flex items-center justify-center gap-3 shadow-md active:scale-95 disabled:opacity-30"
+                                    [class.border-emerald-500]="statusMap()[item.id]?.status === 'ok'"
+                                    [class.bg-emerald-500]="statusMap()[item.id]?.status === 'ok'"
+                                    [class.text-white]="statusMap()[item.id]?.status === 'ok'"
+                                    [class.border-slate-200]="statusMap()[item.id]?.status !== 'ok'"
+                                    [class.bg-white]="statusMap()[item.id]?.status !== 'ok'"
+                                    [class.text-slate-400]="statusMap()[item.id]?.status !== 'ok'">
+                                <i class="fa-solid fa-circle-check text-2xl"></i>
+                                <span class="text-xs font-black uppercase tracking-widest">CONFORME</span>
+                            </button>
+
+                            <!-- NO BUTTON -->
+                            <button (click)="openIssueModal(item)" 
+                                    [disabled]="isSubmitted() || !state.isContextEditable()"
+                                    class="flex-1 h-16 rounded-2xl border-2 transition-all flex items-center justify-center gap-3 shadow-md active:scale-95 disabled:opacity-30"
+                                    [class.border-red-500]="statusMap()[item.id]?.status === 'issue'"
+                                    [class.bg-red-500]="statusMap()[item.id]?.status === 'issue'"
+                                    [class.text-white]="statusMap()[item.id]?.status === 'issue'"
+                                    [class.border-slate-200]="statusMap()[item.id]?.status !== 'issue'"
+                                    [class.bg-white]="statusMap()[item.id]?.status !== 'issue'"
+                                    [class.text-slate-400]="statusMap()[item.id]?.status !== 'issue'">
+                                <i class="fa-solid fa-circle-exclamation text-2xl"></i>
+                                <span class="text-xs font-black uppercase tracking-widest">ANOMALIA</span>
+                            </button>
                         </div>
                     </div>
-
-                    <!-- Full Width Abbattitore Form -->
-                    @if (item.isAbbattitore && state.isActivityEnabled('operative-checklist', 'abbattimento')) {
-                        <div class="w-full mt-4 p-5 bg-white rounded-2xl border border-slate-200 shadow-sm space-y-6 animate-fade-in mb-2">
-                            <div class="flex items-center justify-between border-b border-slate-100 pb-3 mb-2">
-                                <div class="flex items-center gap-3">
-                                    <div class="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center border border-indigo-100">
-                                        <i class="fa-solid fa-clock-rotate-left text-lg"></i>
-                                    </div>
-                                    <div>
-                                        <span class="text-sm font-black text-slate-800 uppercase tracking-tight">Registro Ciclo Abbattimento</span>
-                                        <p class="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-0.5">Parametri Operativi HACCP</p>
-                                    </div>
-                                </div>
-                            </div>
-                            
-                            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-                                <div class="space-y-2">
-                                    <label class="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Prodotto</label>
-                                    <input type="text" [ngModel]="statusMap()[item.id]?.abbattitore?.prodotto" 
-                                           (ngModelChange)="updateAbbattitoreData(item.id, 'prodotto', $event)"
-                                           placeholder="Nome alimento..."
-                                           [disabled]="isSubmitted() || !state.isContextEditable()"
-                                           class="w-full h-11 px-4 rounded-xl border border-slate-200 text-sm font-bold bg-slate-50 focus:bg-white focus:ring-2 focus:ring-indigo-400 focus:border-transparent outline-none shadow-sm transition-all disabled:opacity-50">
-                                </div>
-                                <div class="space-y-2">
-                                    <label class="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Temp. Abbattimento</label>
-                                    <div class="relative">
-                                        <input type="number" [ngModel]="statusMap()[item.id]?.abbattitore?.tempAbbattimento" 
-                                               (ngModelChange)="updateAbbattitoreData(item.id, 'tempAbbattimento', $event)"
-                                               [disabled]="isSubmitted() || !state.isContextEditable()"
-                                               class="w-full h-11 px-4 rounded-xl border border-slate-200 text-sm font-bold bg-slate-50 focus:bg-white focus:ring-2 focus:ring-indigo-400 focus:border-transparent outline-none shadow-sm transition-all disabled:opacity-50" placeholder="0">
-                                        <span class="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-xs">°C</span>
-                                    </div>
-                                </div>
-                                <div class="space-y-2">
-                                    <label class="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Lotto</label>
-                                    <input type="text" [ngModel]="statusMap()[item.id]?.abbattitore?.lotto" 
-                                           (ngModelChange)="updateAbbattitoreData(item.id, 'lotto', $event)"
-                                           placeholder="Codice lotto..."
-                                           [disabled]="isSubmitted() || !state.isContextEditable()"
-                                           class="w-full h-11 px-4 rounded-xl border border-slate-200 text-sm font-bold bg-slate-50 focus:bg-white focus:ring-2 focus:ring-indigo-400 focus:border-transparent outline-none shadow-sm transition-all disabled:opacity-50">
-                                </div>
-                            </div>
-
-                            <div class="grid grid-cols-2 md:grid-cols-4 gap-6">
-                                <div class="space-y-2">
-                                    <label class="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Inizio</label>
-                                    <input type="text" [ngModel]="statusMap()[item.id]?.abbattitore?.oraInizio" 
-                                           (ngModelChange)="updateAbbattitoreData(item.id, 'oraInizio', $event)"
-                                           [disabled]="isSubmitted() || !state.isContextEditable()"
-                                           class="w-full h-11 px-4 rounded-xl border border-slate-200 text-sm font-bold bg-slate-50 focus:bg-white focus:ring-2 focus:ring-indigo-400 focus:border-transparent outline-none shadow-sm transition-all disabled:opacity-50" placeholder="12:00">
-                                </div>
-                                <div class="space-y-2">
-                                    <label class="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Fine</label>
-                                    <input type="text" [ngModel]="statusMap()[item.id]?.abbattitore?.oraFine" 
-                                           (ngModelChange)="updateAbbattitoreData(item.id, 'oraFine', $event)"
-                                           [disabled]="isSubmitted() || !state.isContextEditable()"
-                                           class="w-full h-11 px-4 rounded-xl border border-slate-200 text-sm font-bold bg-slate-50 focus:bg-white focus:ring-2 focus:ring-indigo-400 focus:border-transparent outline-none shadow-sm transition-all disabled:opacity-50" placeholder="13:30">
-                                </div>
-                                <div class="space-y-2">
-                                    <label class="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Scadenza</label>
-                                    <input type="date" [ngModel]="statusMap()[item.id]?.abbattitore?.scadenza" 
-                                           (ngModelChange)="updateAbbattitoreData(item.id, 'scadenza', $event)"
-                                           [disabled]="isSubmitted() || !state.isContextEditable()"
-                                           class="w-full h-11 px-4 rounded-xl border border-slate-200 text-sm font-bold bg-slate-50 focus:bg-white focus:ring-2 focus:ring-indigo-400 focus:border-transparent outline-none shadow-sm transition-all disabled:opacity-50">
-                                </div>
-                                <div class="space-y-2">
-                                    <label class="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Temp. Cons.</label>
-                                    <div class="relative">
-                                        <input type="number" [ngModel]="statusMap()[item.id]?.abbattitore?.tempConservazione" 
-                                               (ngModelChange)="updateAbbattitoreData(item.id, 'tempConservazione', $event)"
-                                               [disabled]="isSubmitted() || !state.isContextEditable()"
-                                               class="w-full h-11 px-4 rounded-xl border border-slate-200 text-sm font-bold bg-slate-50 focus:bg-white focus:ring-2 focus:ring-indigo-400 focus:border-transparent outline-none shadow-sm transition-all disabled:opacity-50" placeholder="0">
-                                        <span class="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-xs">°C</span>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    }
-
-                    @if (item.status === 'issue' && item.note) {
-                        <div class="w-full mt-2 text-xs text-red-600 font-medium italic bg-red-50 px-3 py-1.5 rounded border border-red-100">
-                             Nota: {{ item.note }}
-                        </div>
-                    }
                 </div>
-            </ng-template>
-
-            <!-- Fixed Footer Actions -->
-            <div class="fixed bottom-6 right-6 z-50">
-                @if (!isSubmitted()) {
-                    <button (click)="submitChecklist()" [disabled]="!isAllCompleted() || !state.isContextEditable()"
-                            class="h-12 px-6 bg-slate-900 border border-slate-800 text-white rounded-lg font-bold text-xs uppercase tracking-widest transition-all shadow-lg flex items-center gap-3 disabled:opacity-50 hover:bg-slate-800 hover:shadow-xl group">
-                        <span>REGISTRA OPERAZIONI</span>
-                        <div class="w-px h-4 bg-white/20"></div>
-                        <i class="fa-solid fa-cloud-arrow-up group-hover:-translate-y-0.5 transition-transform"></i>
-                    </button>
-                } @else {
-                    <div class="bg-white p-2 rounded-xl shadow-xl flex items-center gap-2 border border-slate-200 animate-slide-up">
-                        <div class="px-4 py-2 bg-emerald-50 border border-emerald-100 text-emerald-600 rounded-lg flex items-center gap-2">
-                            <i class="fa-solid" [class.fa-check]="!hasIssues()" [class.fa-triangle-exclamation]="hasIssues()"></i>
-                            <span class="font-bold text-xs uppercase tracking-widest">{{ hasIssues() ? 'NON CONFORME' : 'REGISTRATO' }}</span>
-                        </div>
-                        <div class="flex items-center gap-1.5 px-2">
-                            <button (click)="printReport()" class="h-8 w-8 rounded text-slate-500 bg-slate-50 hover:bg-slate-100 border border-slate-200 hover:text-indigo-600 flex items-center justify-center transition-colors" title="Stampa"><i class="fa-solid fa-print text-base"></i></button>
-                            <button *ngIf="state.isContextEditable()" (click)="isSubmitted.set(false)" class="h-8 w-8 rounded text-slate-500 bg-slate-50 hover:bg-slate-100 border border-slate-200 hover:text-amber-600 flex items-center justify-center transition-colors" title="Modifica"><i class="fa-solid fa-pen-to-square text-base"></i></button>
-                        </div>
-                        <div class="w-px h-6 bg-slate-200"></div>
-                        <button (click)="startNewChecklist()" class="h-8 px-4 rounded bg-indigo-50 border border-indigo-100 text-indigo-600 hover:bg-indigo-600 hover:text-white flex items-center gap-2 font-bold text-xs uppercase tracking-widest transition-colors">
-                            <i class="fa-solid fa-plus text-base"></i> NUOVA
-                        </button>
+                @if (item.status === 'issue' && item.note) {
+                    <div class="w-full mt-2 text-xs text-red-600 font-medium italic bg-red-50 px-3 py-1.5 rounded border border-red-100">
+                         Nota: {{ item.note }}
                     </div>
                 }
+            </ng-template>
+
+            <!-- Bottom Utility Actions (Discrete) -->
+            <div class="mt-8 mb-20 px-6 flex flex-col items-center gap-6">
+                <div class="h-px w-24 bg-slate-200"></div>
+                
+                <div class="flex items-center gap-4 w-full max-w-xs">
+                    <button (click)="printReport()" 
+                            class="flex-1 h-12 rounded-2xl text-slate-500 bg-white border border-slate-200 hover:bg-slate-50 flex items-center justify-center gap-2 transition-all font-black text-[10px] uppercase tracking-widest shadow-sm">
+                        <i class="fa-solid fa-print text-sm"></i> Stampa
+                    </button>
+                    <button (click)="isResetModalOpen.set(true)" 
+                            class="flex-1 h-12 rounded-2xl text-rose-500 bg-white border border-rose-100 hover:bg-rose-50 flex items-center justify-center gap-2 transition-all font-black text-[10px] uppercase tracking-widest shadow-sm">
+                        <i class="fa-solid fa-rotate-left text-sm"></i> Reset
+                    </button>
+                </div>
+                
+                <p class="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] animate-pulse">
+                    <i class="fa-solid fa-cloud-check text-emerald-400 mr-1"></i> Salvataggio Automatico Attivo
+                </p>
             </div>
 
             <!-- Issue Modal -->
@@ -472,11 +426,109 @@ interface ChecklistItem {
                      </div>
                      <!-- Body -->
                      <div class="p-6 space-y-4">
-                        <textarea #issueInput class="w-full bg-slate-50 border border-slate-200 rounded-lg p-3 text-slate-700 placeholder:text-slate-400 focus:ring-1 focus:ring-red-400 focus:border-red-400 focus:outline-none h-32 transition-colors text-lg resize-none custom-scrollbar" placeholder="Descrivi brevemente l'anomalia..."></textarea>
+                        <textarea #issueInput [value]="anomalySubject" class="w-full bg-slate-50 border border-slate-200 rounded-lg p-3 text-slate-700 placeholder:text-slate-400 focus:ring-1 focus:ring-red-400 focus:border-red-400 focus:outline-none h-32 transition-colors text-lg resize-none custom-scrollbar" placeholder="Descrivi brevemente l'anomalia..."></textarea>
                         
                         <div class="flex gap-3">
                            <button class="flex-1 py-2 bg-slate-50 border border-slate-200 text-slate-600 font-bold uppercase tracking-widest rounded-lg text-xs hover:bg-slate-100 transition-colors" (click)="closeModal()">Annulla</button>
                            <button class="flex-1 py-2 bg-red-600 border border-red-700 text-white font-bold uppercase tracking-widest rounded-lg text-xs shadow-sm hover:bg-red-700 transition-colors" (click)="confirmIssue(issueInput.value)">Salva Anomalia</button>
+                        </div>
+                     </div>
+                  </div>
+               </div>
+            }
+
+            <!-- PROCEDURE MODAL (Procedimento Correttivo) -->
+            @if (isProcedureModalOpen()) {
+                <div class="fixed inset-0 z-[130] flex items-center justify-center p-4">
+                    <div class="absolute inset-0 bg-slate-900/60 backdrop-blur-md animate-fade-in" (click)="closeProcedureModal()"></div>
+                    <div class="relative bg-white w-full max-w-lg rounded-[40px] shadow-2xl overflow-hidden animate-slide-up border border-slate-200 flex flex-col">
+                        
+                        <!-- Header -->
+                        <div class="p-8 bg-gradient-to-br from-indigo-600 to-blue-700 text-white flex-shrink-0">
+                            <div class="flex items-center gap-5">
+                                <div class="h-14 w-14 rounded-2xl bg-white/20 backdrop-blur-md flex items-center justify-center text-2xl shadow-lg border border-white/30">
+                                    <i class="fa-solid fa-screwdriver-wrench"></i>
+                                </div>
+                                <div>
+                                    <h3 class="text-2xl font-black tracking-tight">Protocollo Tecnico</h3>
+                                    <p class="text-indigo-100 text-[10px] font-black uppercase tracking-widest opacity-80">Risoluzione Non Conformità Operativa</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="p-8 space-y-6 overflow-y-auto max-h-[60vh] custom-scrollbar">
+                            <div class="p-5 bg-indigo-50 rounded-3xl border border-indigo-100">
+                                <h4 class="text-[10px] font-black text-indigo-500 uppercase tracking-widest mb-2 flex items-center gap-2">
+                                    <i class="fa-solid fa-cube"></i> Attrezzatura / Elemento
+                                </h4>
+                                <p class="text-xl font-bold text-slate-800 leading-tight">
+                                    {{ selectedProcedureItem()?.label }}
+                                </p>
+                            </div>
+
+                            <div class="space-y-4">
+                                <h4 class="text-xs font-black text-slate-400 uppercase tracking-widest px-1">Azioni Correttive Suggerite</h4>
+                                
+                                <div class="space-y-3">
+                                    @for (step of getItemProcedures(selectedProcedureItem()); track $index) {
+                                        <div class="flex gap-4 p-4 bg-slate-50 rounded-2xl border border-slate-100 transition-all hover:bg-white hover:border-indigo-200 group">
+                                            <div class="h-8 w-8 rounded-xl bg-white border border-slate-200 text-slate-400 flex items-center justify-center shrink-0 font-black text-xs shadow-sm group-hover:bg-indigo-600 group-hover:text-white group-hover:border-indigo-600 transition-all">
+                                                {{ $index + 1 }}
+                                            </div>
+                                            <p class="text-sm font-bold text-slate-600 leading-relaxed group-hover:text-slate-800 transition-colors">
+                                                {{ step }}
+                                            </p>
+                                        </div>
+                                    }
+                                </div>
+                            </div>
+
+                            <div class="p-5 bg-amber-50 rounded-3xl border border-amber-100">
+                                <div class="flex gap-3">
+                                    <i class="fa-solid fa-triangle-exclamation text-amber-500 mt-0.5"></i>
+                                    <p class="text-xs text-amber-800 leading-relaxed">
+                                        <b>Importante:</b> Se la temperatura non rientra nei parametri dopo l'azione correttiva, isolare i prodotti e informare il responsabile qualità.
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="p-8 pt-0 flex gap-4">
+                            <button (click)="closeProcedureModal()"
+                                    class="flex-1 py-4 bg-slate-50 text-slate-500 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-slate-100 transition-all border border-slate-200">
+                                Chiudi
+                            </button>
+                            <button (click)="resolveItemIssue(selectedProcedureItem()?.id || '')"
+                                    class="flex-[1.5] py-4 bg-emerald-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-emerald-700 transition-all shadow-xl shadow-emerald-200 active:scale-95">
+                                Problema Risolto
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            }
+            <!-- RESET CONFIRMATION MODAL -->
+            @if (isResetModalOpen()) {
+               <div class="fixed inset-0 z-[150] flex items-center justify-center p-4">
+                  <div class="absolute inset-0 bg-slate-900/60 backdrop-blur-sm animate-fade-in" (click)="isResetModalOpen.set(false)"></div>
+                  <div class="relative w-full max-w-sm bg-white rounded-[32px] shadow-2xl overflow-hidden animate-slide-up border border-slate-200">
+                     <div class="p-8 text-center">
+                        <div class="w-16 h-16 rounded-2xl bg-rose-50 text-rose-500 flex items-center justify-center mx-auto mb-4 border border-rose-100 shadow-sm">
+                           <i class="fa-solid fa-triangle-exclamation text-3xl"></i>
+                        </div>
+                        <h3 class="text-xl font-black text-slate-800 mb-2">Reset Completo?</h3>
+                        <p class="text-xs font-bold text-slate-500 leading-relaxed mb-8">
+                           Questa azione cancellerà tutti i dati inseriti nella scheda attuale. L'operazione non è reversibile.
+                        </p>
+                        
+                        <div class="flex flex-col gap-3">
+                           <button (click)="confirmReset()" 
+                                   class="w-full py-4 bg-rose-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-lg shadow-rose-200 active:scale-95 transition-all">
+                              SÌ, RESETTA TUTTO
+                           </button>
+                           <button (click)="isResetModalOpen.set(false)" 
+                                   class="w-full py-4 bg-slate-50 text-slate-500 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-slate-100 transition-all">
+                              ANNULLA
+                           </button>
                         </div>
                      </div>
                   </div>
@@ -496,6 +548,14 @@ interface ChecklistItem {
       -webkit-backdrop-filter: blur(20px);
       border: 1px solid rgba(255, 255, 255, 0.5);
     }
+    input::-webkit-outer-spin-button,
+    input::-webkit-inner-spin-button {
+      -webkit-appearance: none;
+      margin: 0;
+    }
+    input[type=number] {
+      -moz-appearance: textfield;
+    }
   `]
 })
 export class OperativeChecklistComponent {
@@ -503,10 +563,16 @@ export class OperativeChecklistComponent {
    toast = inject(ToastService);
 
    isModalOpen = signal(false);
+   isResetModalOpen = signal(false);
    currentItem = signal<ChecklistItem | null>(null);
+   anomalySubject = '';
    selectedDate = signal(this.state.filterDate());
    isSubmitted = signal(false);
    currentRecordId = signal<string | undefined>(undefined);
+
+   // Procedure Modal State
+   isProcedureModalOpen = signal(false);
+   selectedProcedureItem = signal<ChecklistItem | null>(null);
 
    statusMap = signal<Record<string, { 
       status: ChecklistItem['status'], 
@@ -538,6 +604,8 @@ export class OperativeChecklistComponent {
 
       effect(() => {
          this.state.filterDate();
+         this.state.filterCollaboratorId(); // Reload when selected collaborator changes
+         this.state.initialSyncDone(); // Depend on initial sync done status
          untracked(() => this.loadByDate());
       }, { allowSignalWrites: true });
    }
@@ -560,6 +628,7 @@ export class OperativeChecklistComponent {
                         nameLower.includes('fredd') || 
                         nameLower.includes('congelatore') || 
                         nameLower.includes('cella') ||
+                        nameLower.includes('abbattitore') ||
                         nameLower.includes('ghiaccio') ||
                         nameLower.includes('vetrina');
          const isHot = type === 'Caldo' || 
@@ -591,7 +660,7 @@ export class OperativeChecklistComponent {
 
    items = computed(() => [...this.group1Items(), ...this.group2Items()]);
 
-   completedCount = computed(() => this.items().filter(i => i.status !== 'pending').length);
+completedCount = computed(() => this.items().filter(i => i.status !== 'pending').length);
    progressPercentage = computed(() => {
       const total = this.items().length;
       return total > 0 ? (this.completedCount() / total) * 100 : 0;
@@ -600,6 +669,12 @@ export class OperativeChecklistComponent {
 
 
    setStatus(id: string, status: ChecklistItem['status']) {
+        const item = this.items().find(i => i.id === id);
+        const current = this.statusMap()[id];
+        if (status === 'ok' && item?.hasTemperature && (current?.temperature === undefined || current.temperature === null || String(current.temperature).trim() === '')) {
+            this.toast.warning('Dato Mancante', `Inserisci prima la temperatura per: ${item.label}`);
+            return;
+        }
       this.statusMap.update(map => ({
          ...map,
          [id]: { ...map[id], status, note: status === 'ok' ? undefined : map[id]?.note }
@@ -607,78 +682,107 @@ export class OperativeChecklistComponent {
       this.autoSave();
    }
 
-   updateTemperature(id: string, temperature: string, label: string) {
-      if (!temperature) {
-          this.statusMap.update(map => ({
-              ...map,
-              [id]: { ...map[id], temperature: '', status: 'pending', isAutomaticIssue: false, note: undefined }
-          }));
-          return;
-      }
-
-      const tempValue = parseFloat(temperature);
-      const nameLower = label.toLowerCase();
-      
-      let isIssue = false;
-      let alertMsg = '';
-
-      if (nameLower.includes('ghiaccio') || nameLower.includes('macchina del freddo')) {
-          if (tempValue !== -20) {
-              isIssue = true;
-              alertMsg = 'Macchina del Freddo/Ghiaccio fuori parametro (deve essere esattamente -20°C)';
-          }
-      } else if (nameLower.includes('congelatore')) {
-          if (tempValue > -18) {
-              isIssue = true;
-              alertMsg = 'Prodotto Congelato fuori parametro (deve essere ≤ -18°C)';
-          }
-      } else if (nameLower.includes('cald') || nameLower.includes('cottura') || nameLower.includes('forno')) {
-          if (tempValue < 65) {
-              isIssue = true;
-              alertMsg = 'Catena del Caldo fuori parametro (deve essere ≥ 65°C)';
-          }
-      } else if (nameLower.includes('frigo') || nameLower.includes('frigorifero') || nameLower.includes('cella') || nameLower.includes('fredd') || nameLower.includes('vetrina')) {
-          if (tempValue < 4 || tempValue > 8) {
-              isIssue = true;
-              alertMsg = 'Prodotto Refrigerato fuori parametro (deve essere tra +4° e +8°C)';
-          }
-      }
-
-      this.statusMap.update(map => ({
-         ...map,
-         [id]: { 
-             ...map[id], 
-             temperature, 
-             status: isIssue ? 'issue' : 'ok',
-             isAutomaticIssue: isIssue,
-             note: isIssue ? alertMsg : undefined
-         }
-      }));
-
-      if (isIssue) {
-          this.toast.error('HACCP Warning', alertMsg);
-      }
-      
-      this.autoSave();
+   handleTemperatureInput(id: string, temperature: string) {
+       this.statusMap.update(map => ({
+           ...map,
+           [id]: { 
+               ...map[id], 
+               temperature, 
+               status: 'pending',
+               isAutomaticIssue: false,
+               note: undefined
+           }
+       }));
+       this.autoSave();
    }
 
-   updateAbbattitoreData(id: string, field: string, value: any) {
-       this.statusMap.update(map => {
-           const current = map[id] || { status: 'pending' };
-           const abbattitore = current.abbattitore || {};
-           
-           return {
-               ...map,
-               [id]: {
-                   ...current,
-                   status: 'ok', 
-                   abbattitore: {
-                       ...abbattitore,
-                       [field]: value
-                   }
-               }
-           };
-       });
+   validateTemperature(id: string, label: string) {
+        const item = this.statusMap()[id];
+        if (!item || item.temperature === undefined || item.temperature === null || String(item.temperature).trim() === '') return;
+
+        const cleanTemp = String(item.temperature).replace(',', '.');
+        const tempValue = parseFloat(cleanTemp);
+        const nameLower = label.toLowerCase();
+        
+        if (isNaN(tempValue)) {
+            this.statusMap.update(map => ({
+                ...map,
+                [id]: { ...map[id], status: 'pending', isAutomaticIssue: false, note: undefined }
+            }));
+            return;
+        }
+        
+        let isIssue = false;
+        let alertMsg = '';
+
+        if (nameLower.includes('abbattitore')) {
+            const equipment = this.state.groupedEquipment();
+            const abbEquip = equipment.find((e: any) =>
+                e.name?.toLowerCase().includes('abbattitore') ||
+                e.type?.toLowerCase().includes('abbattitore')
+            );
+            let minTemp = (abbEquip as any)?.minTemp ?? -40;
+            let maxTemp = (abbEquip as any)?.maxTemp ?? 3; // +3°C limit to accommodate positive blast chilling
+            const conforme = tempValue >= minTemp && tempValue <= maxTemp;
+            
+            isIssue = !conforme;
+            alertMsg = `Abbattitore fuori parametro (deve essere tra ${minTemp}° e +${maxTemp}°C)`;
+            
+            this.statusMap.update(map => ({
+                ...map,
+                [id]: {
+                    ...map[id],
+                    status: isIssue ? 'issue' : 'ok',
+                    isAutomaticIssue: isIssue,
+                    note: isIssue ? alertMsg : undefined,
+                    abbattitoreConforme: conforme
+                }
+            }));
+
+            if (isIssue) {
+                this.toast.error('HACCP Warning', alertMsg);
+            }
+            
+            this.autoSave();
+            return;
+        }
+
+       if (nameLower.includes('ghiaccio')) {
+           if (tempValue !== -20) {
+               isIssue = true;
+               alertMsg = 'Macchina del Ghiaccio fuori parametro (deve essere esattamente -20°C)';
+           }
+       } else if (nameLower.includes('congelatore')) {
+           if (tempValue > -18) {
+               isIssue = true;
+               alertMsg = 'Prodotto Congelato fuori parametro (deve essere ≤ -18°C)';
+           }
+       } else if (nameLower.includes('cald') || nameLower.includes('cottura') || nameLower.includes('forno')) {
+           if (tempValue < 65) {
+               isIssue = true;
+               alertMsg = 'Catena del Caldo fuori parametro (deve essere ≥ 65°C)';
+           }
+       } else if (nameLower.includes('frigo') || nameLower.includes('frigorifero') || nameLower.includes('cella') || nameLower.includes('fredd') || nameLower.includes('vetrina')) {
+           if (tempValue < 4 || tempValue > 8) {
+               isIssue = true;
+               alertMsg = 'Prodotto Refrigerato fuori parametro (deve essere tra +4° e +8°C)';
+           }
+       }
+
+       this.statusMap.update(map => ({
+          ...map,
+          [id]: { 
+              ...map[id], 
+              status: isIssue ? 'issue' : 'ok',
+              isAutomaticIssue: isIssue,
+              note: isIssue ? alertMsg : undefined
+          }
+       }));
+
+       if (isIssue) {
+           this.toast.error('HACCP Warning', alertMsg);
+       }
+       
        this.autoSave();
    }
 
@@ -699,6 +803,7 @@ export class OperativeChecklistComponent {
 
    openIssueModal(item: ChecklistItem) {
       this.currentItem.set(item);
+      this.anomalySubject = `Anomalia riscontrata in: ${item.label}`;
       this.isModalOpen.set(true);
    }
 
@@ -716,14 +821,25 @@ export class OperativeChecklistComponent {
          }));
          this.autoSave();
 
-         // Segnalazione amministratore
+         const operatorName = this.state.currentUser()?.name || 'Operatore';
+         const currentDate = new Date().toLocaleDateString();
+
+         // Segnalazione amministratore (Record persistente)
          this.state.saveNonConformity({
             id: Math.random().toString(36).substring(2, 9),
             moduleId: 'operative-checklist',
             date: this.selectedDate(),
-            description: note || 'Anomalia riscontrata durante il controllo operativo',
+            description: `[OPERATIVA] ${this.currentItem()?.label}: ${note || 'Anomalia rilevata'}`,
             itemName: this.currentItem()?.label
          });
+
+         // Notifica chat all'amministrazione con dettagli strutturati
+         this.state.sendMessage(
+             `🚨 ANOMALIA OPERATIVA: ${this.currentItem()?.label}`,
+             `⚠ SEGNALAZIONE NON CONFORMITÀ ⚠\n\nFASE: Operativa (In Corso)\nELEMENTO: ${this.currentItem()?.label}\nOPERATORE: ${operatorName}\nDATA: ${currentDate}\n\nNOTE OPERATORE:\n${note || 'Nessuna specifica'}`,
+             'SINGLE',
+             'ADMIN_OFFICE'
+         );
          
          this.toast.info('Anomalia Salvata', 'La non conformità è stata registrata e segnalata.');
       }
@@ -745,7 +861,8 @@ export class OperativeChecklistComponent {
                     congelatore: this.congelatoreCount(),
                     pozzetto: this.pozzettoCount()
                 },
-                timestamp: new Date()
+                timestamp: new Date(),
+                status: this.isSubmitted() ? (this.hasIssues() ? 'Non Conforme' : 'Conforme') : undefined
             });
         }, 2000); // 2 seconds debounce to let the operator click multiple items smoothly
     }
@@ -768,12 +885,19 @@ export class OperativeChecklistComponent {
                congelatore: this.congelatoreCount(),
                pozzetto: this.pozzettoCount()
             },
-            timestamp: new Date()
+            timestamp: new Date(),
+            status: this.hasIssues() ? 'Non Conforme' : 'Conforme'
          }
       });
 
       this.toast.success('Registro Inviato', 'I dati sono stati salvati correttamente.');
       this.isSubmitted.set(true);
+   }
+
+   confirmReset() {
+      this.startNewChecklist();
+      this.isResetModalOpen.set(false);
+      this.toast.info('Scheda Resettata', 'I dati sono stati azzerati correttamente.');
    }
 
    startNewChecklist() {
@@ -821,6 +945,58 @@ export class OperativeChecklistComponent {
       this.statusMap.set(map);
       this.isSubmitted.set(!!record.data?.status);
       window.scrollTo({ top: 0, behavior: 'smooth' });
+   }
+
+   openProcedureModal(item: ChecklistItem) {
+      this.selectedProcedureItem.set(item);
+      this.isProcedureModalOpen.set(true);
+   }
+
+   closeProcedureModal() {
+      this.isProcedureModalOpen.set(false);
+      this.selectedProcedureItem.set(null);
+   }
+
+   getItemProcedures(item: ChecklistItem | null): string[] {
+      if (!item) return [];
+      const label = item.label.toLowerCase();
+
+      if (label.includes('frigo') || label.includes('cella') || label.includes('refrigerato')) {
+         return [
+            'Verificare la chiusura ermetica delle porte.',
+            'Controllare che non ci sia un sovraccarico di merce che ostacoli il ricircolo d\'aria.',
+            'Verificare la pulizia dell\'evaporatore e del condensatore.',
+            'Monitorare la temperatura per i successivi 30 minuti.'
+         ];
+      }
+      if (label.includes('congelatore')) {
+         return [
+            'Effettuare sbrinamento se presente ghiaccio eccessivo.',
+            'Controllare le guarnizioni delle porte.',
+            'Verificare il funzionamento del termostato.',
+            'Spostare i prodotti in un altro congelatore se la temperatura sale sopra i -15°C.'
+         ];
+      }
+      if (label.includes('cottura') || label.includes('forno') || label.includes('caldo')) {
+         return [
+            'Aumentare la potenza del sistema di riscaldamento.',
+            'Verificare l\'integrità delle resistenze o bruciatori.',
+            'Mantenere i contenitori coperti.',
+            'Verificare al cuore del prodotto la temperatura (deve essere > 65°C).'
+         ];
+      }
+      return [
+         'Scollegare e ricollegare l\'attrezzatura.',
+         'Effettuare una pulizia profonda dei sensori.',
+         'Consultare il manuale tecnico del produttore.',
+         'Segnalare al manutentore se il problema persiste.'
+      ];
+   }
+
+   resolveItemIssue(id: string) {
+      this.setStatus(id, 'ok');
+      this.closeProcedureModal();
+      this.toast.success('Stato Aggiornato', 'L\'elemento è stato segnato come conforme dopo l\'azione correttiva.');
    }
 
    getFormattedDate() {

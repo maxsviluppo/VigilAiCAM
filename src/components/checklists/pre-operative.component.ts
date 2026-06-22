@@ -165,37 +165,23 @@ interface AreaChecklist {
                         <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
                             <div class="divide-y divide-slate-100">
                                 @for (item of globalItems(); track item.id) {
-                                    <div class="p-3 flex items-center justify-between gap-3 transition-colors hover:bg-slate-50 group"
-                                         [class.bg-emerald-50/30]="item.status === 'ok'"
-                                         [class.bg-red-50/30]="item.status === 'issue'">
+                                    <div (click)="item.id === 'g_cleaning_sanit' ? showCleaningInfo.set(true) : showPestInfo.set(true)"
+                                         class="p-4 flex items-center gap-4 transition-all hover:bg-blue-50/50 active:bg-blue-100/50 cursor-pointer group bg-white border-b border-slate-100 last:border-0">
                                         
-                                        <div class="flex items-center gap-3 flex-1 min-w-0">
-                                            <div class="w-8 h-8 rounded-md flex items-center justify-center shrink-0 border"
-                                                 [class.bg-slate-50]="item.status === 'pending'" [class.border-slate-200]="item.status === 'pending'" [class.text-slate-400]="item.status === 'pending'"
-                                                 [class.bg-emerald-50]="item.status === 'ok'" [class.border-emerald-200]="item.status === 'ok'" [class.text-emerald-600]="item.status === 'ok'"
-                                                 [class.bg-red-50]="item.status === 'issue'" [class.border-red-200]="item.status === 'issue'" [class.text-red-600]="item.status === 'issue'">
-                                                <i [class]="'fa-solid ' + item.icon + ' text-xs'"></i>
+                                        <div class="w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 border border-slate-100 bg-slate-50 text-slate-400 shadow-sm transition-all group-hover:scale-105 group-hover:bg-blue-500 group-hover:text-white group-hover:border-blue-500">
+                                            <i [class]="'fa-solid ' + item.icon + ' text-xl'"></i>
+                                        </div>
+                                        
+                                        <div class="min-w-0 flex-1">
+                                            <h4 class="font-black text-slate-800 text-sm leading-tight uppercase tracking-tight truncate group-hover:text-blue-700 transition-colors">{{ item.label }}</h4>
+                                            <div class="flex items-center gap-2 mt-1">
+                                                <span class="text-[9px] font-black text-blue-500 uppercase tracking-widest bg-blue-50 px-1.5 py-0.5 rounded">Standard HACCP</span>
+                                                <span class="text-[8px] font-bold text-slate-300 uppercase tracking-widest flex items-center gap-1">
+                                                    Clicca per leggere <i class="fa-solid fa-chevron-right text-[7px]"></i>
+                                                </span>
                                             </div>
-                                            <div class="min-w-0">
-                                                <h4 class="font-bold text-slate-700 text-base truncate">{{ item.label }}</h4>
-                                                @if (item.status !== 'pending') {
-                                                    <span class="text-[10px] font-black uppercase tracking-widest mt-0.5 block"
-                                                          [class.text-emerald-600]="item.status === 'ok'"
-                                                          [class.text-red-600]="item.status === 'issue'">
-                                                        {{ item.status === 'ok' ? 'CONFORME' : 'NON CONFORME' }}
-                                                    </span>
-                                                }
-                                            </div>
-                                                                              <div class="flex items-center gap-2 shrink-0 w-full sm:w-auto">
-                                            <button (click)="item.id === 'g_cleaning_sanit' ? showCleaningInfo.set(true) : showPestInfo.set(true)" 
-                                                    [disabled]="isSubmitted() || !state.isContextEditable()"
-                                                    class="flex-1 sm:flex-none px-4 py-2 rounded-lg border border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-600 hover:text-white flex items-center justify-center gap-2 transition-all font-bold text-xs uppercase tracking-tight group-hover:shadow-md disabled:opacity-30">
-                                                <i class="fa-solid fa-circle-info text-base"></i>
-                                                <span>{{ item.status === 'ok' ? 'Info Standard' : 'Visualizza Info e Conferma' }}</span>
-                                            </button>
                                         </div>
                                     </div>
-    </div>
                                 }
                             </div>
                         </div>
@@ -208,69 +194,126 @@ interface AreaChecklist {
                 <div class="grid grid-cols-1 gap-2">
                     <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
                         <div class="divide-y divide-slate-100">
-                            @for (area of areas(); track area.id) {
+                            @for (area of areas(); track area.id; let i = $index) {
                                 <div class="flex flex-col">
                                     <!-- Area Header -->
-                                    <div class="p-3 flex items-center justify-between transition-colors cursor-pointer select-none border-b border-transparent"
-                                         [class.bg-slate-100]="area.expanded" [class.hover:bg-slate-50]="!area.expanded" [class.shadow-sm]="!area.expanded"
-                                         (click)="toggleArea(area.id)">
-                                        <div class="flex items-center gap-3 flex-1">
-                                            <div class="h-8 w-8 rounded flex items-center justify-center text-lg transition-all border"
-                                                 [class.bg-blue-50]="isAreaComplete(area.id)" [class.text-blue-600]="isAreaComplete(area.id)" [class.border-blue-100]="isAreaComplete(area.id)"
-                                                 [class.bg-white]="!isAreaComplete(area.id)" [class.text-slate-400]="!isAreaComplete(area.id)" [class.border-slate-200]="!isAreaComplete(area.id)">
-                                                <i [class]="'fa-solid ' + area.icon"></i>
-                                            </div>
-                                            <div>
-                                                <h3 class="font-bold text-slate-700 text-lg leading-tight">{{ area.label }}</h3>
-                                                <div class="flex items-center gap-2 mt-0.5">
-                                                    <span class="text-[10px] font-black uppercase tracking-widest"
-                                                          [class.text-emerald-600]="isAreaComplete(area.id) && !hasAreaIssues(area.id)" 
-                                                          [class.text-red-600]="hasAreaIssues(area.id)"
-                                                          [class.text-slate-400]="!isAreaComplete(area.id)">
-                                                        {{ getAreaStatusLabel(area.id) }}
-                                                    </span>
+                                    <div (click)="hasAreaIssues(area.id) ? openProcedureModal(area) : toggleArea(area.id)"
+                                         class="p-5 flex flex-col gap-4 transition-all cursor-pointer select-none border-b border-slate-100 group"
+                                         [class.bg-slate-50]="area.expanded" 
+                                         [class.bg-red-50/50]="hasAreaIssues(area.id)"
+                                         [class.border-red-200]="hasAreaIssues(area.id)">
+                                        
+                                        <!-- Row 1: Info & Title -->
+                                        <div class="flex items-center justify-between">
+                                            <div class="flex items-center gap-3">
+                                                <div class="h-12 w-12 rounded-2xl flex items-center justify-center text-xl transition-all border shadow-sm"
+                                                     [class.bg-red-500]="hasAreaIssues(area.id)" [class.text-white]="hasAreaIssues(area.id)" [class.border-red-600]="hasAreaIssues(area.id)"
+                                                     [class.bg-blue-500]="isAreaComplete(area.id) && !hasAreaIssues(area.id)" [class.text-white]="isAreaComplete(area.id) && !hasAreaIssues(area.id)" [class.border-blue-600]="isAreaComplete(area.id) && !hasAreaIssues(area.id)"
+                                                     [class.bg-white]="!isAreaComplete(area.id)" [class.text-slate-400]="!isAreaComplete(area.id)" [class.border-slate-200]="!isAreaComplete(area.id)">
+                                                    <i [class]="'fa-solid ' + (hasAreaIssues(area.id) ? 'fa-triangle-exclamation' : area.icon)"></i>
+                                                </div>
+                                                <div>
+                                                    <h3 class="font-black text-slate-800 text-lg leading-tight uppercase tracking-tight"
+                                                        [class.text-red-800]="hasAreaIssues(area.id)">{{ area.label }}</h3>
+                                                    <div class="flex items-center gap-2 mt-1">
+                                                        <span class="text-[9px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded"
+                                                              [class.bg-emerald-100]="isAreaComplete(area.id) && !hasAreaIssues(area.id)" [class.text-emerald-700]="isAreaComplete(area.id) && !hasAreaIssues(area.id)"
+                                                              [class.bg-red-100]="hasAreaIssues(area.id)" [class.text-red-700]="hasAreaIssues(area.id)"
+                                                              [class.bg-slate-100]="!isAreaComplete(area.id)" [class.text-slate-500]="!isAreaComplete(area.id)">
+                                                            {{ getAreaStatusLabel(area.id) }}
+                                                        </span>
+                                                        @if (!hasAreaIssues(area.id)) {
+                                                            <span class="text-[9px] font-bold text-slate-300 uppercase tracking-tighter">
+                                                                {{ area.expanded ? 'Chiudi' : 'Dettagli' }} <i class="fa-solid" [class.fa-chevron-up]="area.expanded" [class.fa-chevron-down]="!area.expanded"></i>
+                                                            </span>
+                                                        }
+                                                    </div>
                                                 </div>
                                             </div>
+
+                                            @if (hasAreaIssues(area.id)) {
+                                                <div class="h-10 w-10 rounded-full bg-red-100 text-red-600 flex items-center justify-center animate-pulse border border-red-200">
+                                                    <i class="fa-solid fa-hand-pointer"></i>
+                                                </div>
+                                            }
                                         </div>
-                                        
-                                        <div class="flex items-center gap-2 shrink-0">
+
+                                        <!-- Row 2: Large Touch-Friendly Buttons -->
+                                        <div class="flex items-center gap-3 w-full">
+                                            <!-- OK BUTTON -->
                                             <button (click)="setAllStepsInArea(area.id, 'ok'); $event.stopPropagation()" 
                                                     [disabled]="isSubmitted() || !state.isContextEditable()"
-                                                    class="h-7 w-7 rounded border border-emerald-200 bg-emerald-50 text-emerald-600 hover:bg-emerald-500 hover:text-white hover:border-emerald-600 transition-all flex items-center justify-center tooltip disabled:opacity-30" title="Tutti Conformi">
-                                                <i class="fa-solid fa-check-double text-xs"></i>
+                                                    class="flex-1 h-16 rounded-2xl border-2 transition-all flex items-center justify-center gap-3 shadow-md active:scale-95 disabled:opacity-30"
+                                                    [class.border-emerald-500]="isAreaComplete(area.id) && !hasAreaIssues(area.id)"
+                                                    [class.bg-emerald-500]="isAreaComplete(area.id) && !hasAreaIssues(area.id)"
+                                                    [class.text-white]="isAreaComplete(area.id) && !hasAreaIssues(area.id)"
+                                                    [class.border-slate-200]="!isAreaComplete(area.id) || hasAreaIssues(area.id)"
+                                                    [class.bg-white]="!isAreaComplete(area.id) || hasAreaIssues(area.id)"
+                                                    [class.text-slate-400]="!isAreaComplete(area.id) || hasAreaIssues(area.id)">
+                                                <i class="fa-solid fa-circle-check text-2xl"></i>
+                                                <span class="text-xs font-black uppercase tracking-widest">CONFORME</span>
                                             </button>
-                                            <i class="fa-solid fa-chevron-down text-slate-400 text-xs transition-transform duration-300 ml-1" [class.rotate-180]="area.expanded"></i>
+
+                                            <!-- NO BUTTON -->
+                                            <button (click)="setAreaIssue(area.id); $event.stopPropagation()" 
+                                                    [disabled]="isSubmitted() || !state.isContextEditable()"
+                                                    class="flex-1 h-16 rounded-2xl border-2 transition-all flex items-center justify-center gap-3 shadow-md active:scale-95 disabled:opacity-30"
+                                                    [class.border-red-500]="hasAreaIssues(area.id)"
+                                                    [class.bg-red-500]="hasAreaIssues(area.id)"
+                                                    [class.text-white]="hasAreaIssues(area.id)"
+                                                    [class.border-slate-200]="!hasAreaIssues(area.id)"
+                                                    [class.bg-white]="!hasAreaIssues(area.id)"
+                                                    [class.text-slate-400]="!hasAreaIssues(area.id)">
+                                                <i class="fa-solid fa-circle-exclamation text-2xl"></i>
+                                                <span class="text-xs font-black uppercase tracking-widest">ANOMALIA</span>
+                                            </button>
                                         </div>
+
+                                        <!-- NON-CONFORMITY SUMMARY (Only if issues) -->
+                                        @if (hasAreaIssues(area.id)) {
+                                            <div class="p-4 bg-white/60 rounded-xl border border-red-100 space-y-1">
+                                                @for (step of getIssueSteps(area.id); track step.id) {
+                                                    <p class="text-[11px] font-bold text-red-600 flex items-center gap-2">
+                                                        <i class="fa-solid fa-circle text-[4px]"></i>
+                                                        {{ step.label }}
+                                                    </p>
+                                                }
+                                                <p class="text-[10px] font-black text-red-400 mt-2 uppercase tracking-tight italic">
+                                                    <i class="fa-solid fa-circle-info mr-1"></i> Clicca il banner per i dettagli
+                                                </p>
+                                            </div>
+                                        }
                                     </div>
 
                                     <!-- Area Steps (Expanded) -->
                                     @if (area.expanded) {
-                                        <div class="bg-slate-50 border-t border-slate-200/60 px-3 py-1 divide-y divide-slate-200/50 shadow-inner">
-                                            @for (step of area.steps; track step.id; let i = $index) {
-                                                <div class="py-2.5 flex items-center justify-between gap-4 group/step">
-                                                    <div class="flex items-center gap-2 flex-1">
-                                                        <span class="text-[10px] font-black text-slate-400 w-4 h-4 rounded bg-white flex items-center justify-center border border-slate-200 shrink-0 leading-none">
-                                                            {{ i + 1 }}
+                                        <div class="bg-slate-50 border-t border-slate-200/60 px-4 py-2 divide-y divide-slate-200/50 shadow-inner">
+                                            @for (step of area.steps; track step.id; let j = $index) {
+                                                <div class="py-4 px-3 flex items-center justify-between gap-4 group/step cursor-pointer hover:bg-white rounded-xl transition-all border border-transparent hover:border-slate-100"
+                                                     (click)="step.status === 'issue' ? openProcedureModal(area) : toggleStepStatus(area.id, step.id)">
+                                                    <div class="flex items-center gap-3 flex-1">
+                                                        <span class="text-[11px] font-black text-slate-400 w-5 h-5 rounded-lg bg-white flex items-center justify-center border border-slate-200 shrink-0 leading-none shadow-xs group-hover/step:border-indigo-200 group-hover/step:text-indigo-400 transition-colors">
+                                                            {{ j + 1 }}
                                                         </span>
-                                                        <span class="text-base font-semibold text-slate-600 leading-tight"
-                                                              [class.text-emerald-600]="step.status === 'ok'"
-                                                              [class.text-red-600]="step.status === 'issue'">
+                                                        <span class="text-lg font-bold text-slate-600 leading-tight"
+                                                              [class.text-emerald-700]="step.status === 'ok'"
+                                                              [class.text-red-700]="step.status === 'issue'">
                                                             {{ step.label }}
                                                         </span>
                                                     </div>
-                                                    <div class="flex gap-1.5 shrink-0">
-                                                        @if (step.status === 'pending') {
-                                                            <button (click)="setStepStatus(areaId(area), step.id, 'ok')" [disabled]="isSubmitted() || !state.isContextEditable()" class="w-6 h-6 rounded border border-emerald-200 text-emerald-600 hover:bg-emerald-500 hover:text-white transition-all shadow-sm flex items-center justify-center bg-white disabled:opacity-30"><i class="fa-solid fa-check text-[11px]"></i></button>
-                                                            <button (click)="setStepStatus(areaId(area), step.id, 'issue')" [disabled]="isSubmitted() || !state.isContextEditable()" class="w-6 h-6 rounded border border-red-200 text-red-600 hover:bg-red-500 hover:text-white transition-all shadow-sm flex items-center justify-center bg-white disabled:opacity-30"><i class="fa-solid fa-triangle-exclamation text-[11px]"></i></button>
-                                                        } @else {
-                                                            <div class="flex items-center gap-2">
-                                                                <span class="text-[10px] font-black uppercase tracking-widest px-1.5"
-                                                                      [class.text-emerald-600]="step.status === 'ok'"
-                                                                      [class.text-red-600]="step.status === 'issue'">
-                                                                    {{ step.status === 'ok' ? 'Conforme' : 'Anomalia' }}
-                                                                </span>
-                                                                <button (click)="setStepStatus(areaId(area), step.id, 'pending')" [disabled]="isSubmitted() || !state.isContextEditable()" class="w-6 h-6 rounded bg-white border border-slate-200 text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-all flex items-center justify-center shadow-sm disabled:opacity-30"><i class="fa-solid fa-rotate-left text-[10px]"></i></button>
-                                                            </div>
+                                                    
+                                                    <!-- Simplified status for the new design -->
+                                                    <div class="flex items-center gap-2">
+                                                        <span class="text-[10px] font-black uppercase tracking-widest px-2 py-1 rounded bg-white border border-slate-100 shadow-xs"
+                                                              [class.text-emerald-600]="step.status === 'ok'"
+                                                              [class.text-red-600]="step.status === 'issue'"
+                                                              [class.text-slate-300]="step.status === 'pending'">
+                                                            {{ step.status === 'ok' ? 'Conforme' : (step.status === 'issue' ? 'Anomalia' : 'In attesa') }}
+                                                        </span>
+                                                        @if (step.status !== 'pending') {
+                                                            <i class="fa-solid" 
+                                                               [class.fa-circle-check]="step.status === 'ok'" [class.text-emerald-500]="step.status === 'ok'"
+                                                               [class.fa-circle-exclamation]="step.status === 'issue'" [class.text-red-500]="step.status === 'issue'"></i>
                                                         }
                                                     </div>
                                                 </div>
@@ -446,9 +489,9 @@ interface AreaChecklist {
                     </div>
 
                     <div class="px-6 py-4 bg-white border-t border-slate-200 flex-shrink-0 flex justify-end">
-                        <button (click)="showCleaningInfo.set(false); setGlobalStatus('g_cleaning_sanit', 'ok')"
+                        <button (click)="showCleaningInfo.set(false)"
                                 class="px-6 py-2 bg-slate-800 text-white rounded-lg font-black text-xs uppercase tracking-widest hover:bg-slate-700 transition-all shadow-sm">
-                            <i class="fa-solid fa-check mr-2"></i> HO PRESO VISIONE E CONFERMO
+                            <i class="fa-solid fa-xmark mr-2"></i> CHIUDI
                         </button>
                     </div>
                 </div>
@@ -516,9 +559,9 @@ interface AreaChecklist {
                     </div>
 
                     <div class="px-6 py-4 bg-white border-t border-slate-200 flex-shrink-0 flex justify-end">
-                        <button (click)="showPestInfo.set(false); setGlobalStatus('g_pest_control', 'ok')"
+                        <button (click)="showPestInfo.set(false)"
                                 class="px-6 py-2 bg-slate-800 text-white rounded-lg font-black text-xs uppercase tracking-widest hover:bg-slate-700 transition-all shadow-sm">
-                            <i class="fa-solid fa-check mr-2"></i> HO PRESO VISIONE E CONFERMO
+                            <i class="fa-solid fa-xmark mr-2"></i> CHIUDI
                         </button>
                     </div>
                 </div>
@@ -560,6 +603,7 @@ interface AreaChecklist {
                         <div class="space-y-2">
                             <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Dettaglio Anomalia / Azione Correttiva</label>
                             <textarea #anomalyText
+                                      [value]="anomalySubject"
                                       placeholder="Descrivi l'anomalia riscontrata e l'eventuale azione correttiva immediata intrapresa..."
                                       class="w-full h-32 px-4 py-3 rounded-2xl border border-slate-200 focus:ring-4 focus:ring-red-500/10 focus:border-red-500 outline-none text-base font-medium text-slate-700 transition-all shadow-sm bg-white resize-none"></textarea>
                         </div>
@@ -579,30 +623,139 @@ interface AreaChecklist {
             </div>
         }
 
+        <!-- PROCEDURE MODAL (Procedimento Correttivo) -->
+        @if (isProcedureModalOpen()) {
+            <div class="fixed inset-0 z-[130] flex items-center justify-center p-4">
+                <div class="absolute inset-0 bg-slate-900/60 backdrop-blur-md animate-fade-in" (click)="closeProcedureModal()"></div>
+                <div class="relative bg-white w-full max-w-lg rounded-[40px] shadow-2xl overflow-hidden animate-slide-up border border-slate-200 flex flex-col">
+                    
+                    <!-- Header -->
+                    <div class="p-8 bg-gradient-to-br from-red-600 to-rose-700 text-white flex-shrink-0">
+                        <div class="flex items-center gap-5">
+                            <div class="h-14 w-14 rounded-2xl bg-white/20 backdrop-blur-md flex items-center justify-center text-2xl shadow-lg border border-white/30">
+                                <i class="fa-solid fa-hand-holding-medical"></i>
+                            </div>
+                            <div>
+                                <h3 class="text-2xl font-black tracking-tight">Procedimento Correttivo</h3>
+                                <p class="text-rose-100 text-[10px] font-black uppercase tracking-widest opacity-80">Azione richiesta per ripristinare la conformità</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="p-8 space-y-6 overflow-y-auto max-h-[60vh] custom-scrollbar">
+                        <div class="p-5 bg-red-50 rounded-3xl border border-red-100">
+                            <h4 class="text-[10px] font-black text-red-500 uppercase tracking-widest mb-2 flex items-center gap-2">
+                                <i class="fa-solid fa-triangle-exclamation"></i> Area Interessata
+                            </h4>
+                            <p class="text-xl font-bold text-slate-800 leading-tight">
+                                {{ selectedProcedureArea()?.label }}
+                            </p>
+                            <div class="mt-3 flex flex-wrap gap-2">
+                                @for (step of getIssueSteps(selectedProcedureArea()?.id || ''); track step.id) {
+                                    <span class="px-2 py-1 bg-white border border-red-200 text-red-700 text-[10px] font-bold rounded-lg uppercase shadow-xs">
+                                        {{ step.label }}
+                                    </span>
+                                }
+                            </div>
+                        </div>
+
+                        <div class="space-y-4">
+                            <h4 class="text-xs font-black text-slate-400 uppercase tracking-widest px-1">Protocollo di Intervanto</h4>
+                            
+                            <div class="space-y-3">
+                                @for (step of getAreaProcedures(selectedProcedureArea()?.id || ''); track $index) {
+                                    <div class="flex gap-4 p-4 bg-slate-50 rounded-2xl border border-slate-100 transition-all hover:bg-white hover:border-red-200 group">
+                                        <div class="h-8 w-8 rounded-xl bg-white border border-slate-200 text-slate-400 flex items-center justify-center shrink-0 font-black text-xs shadow-sm group-hover:bg-red-600 group-hover:text-white group-hover:border-red-600 transition-all">
+                                            {{ $index + 1 }}
+                                        </div>
+                                        <p class="text-sm font-bold text-slate-600 leading-relaxed group-hover:text-slate-800 transition-colors">
+                                            {{ step }}
+                                        </p>
+                                    </div>
+                                } @empty {
+                                    <div class="p-6 text-center bg-slate-50 rounded-2xl border border-dashed border-slate-200">
+                                        <p class="text-xs font-bold text-slate-400 uppercase tracking-widest">Procedura standard non definita</p>
+                                        <p class="text-[10px] text-slate-400 mt-1 italic">Contattare il responsabile HACCP per indicazioni specifiche.</p>
+                                    </div>
+                                }
+                            </div>
+                        </div>
+
+                        <div class="p-5 bg-blue-50 rounded-3xl border border-blue-100">
+                            <div class="flex gap-3">
+                                <i class="fa-solid fa-circle-info text-blue-500 mt-0.5"></i>
+                                <p class="text-xs text-blue-800 leading-relaxed">
+                                    <b>Nota:</b> Dopo aver eseguito le azioni sopra indicate, è obbligatorio verificare nuovamente l'area e, se conforme, aggiornare lo stato del registro.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="p-8 pt-0 flex gap-4">
+                        <button (click)="closeProcedureModal()"
+                                class="flex-1 py-4 bg-slate-50 text-slate-500 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-slate-100 transition-all border border-slate-200">
+                            Chiudi
+                        </button>
+                        <button (click)="resolveAreaIssues(selectedProcedureArea()?.id || '')"
+                                class="flex-[1.5] py-4 bg-emerald-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-emerald-700 transition-all shadow-xl shadow-emerald-200 active:scale-95">
+                            Risolto e Conforme
+                        </button>
+                    </div>
+                </div>
+            </div>
+        }
+
         <!-- Footer Actions -->
 
         <!-- Footer Actions -->
-        <div class="fixed bottom-6 right-6 z-30">
-            @if (!isSubmitted()) {
-                <button (click)="submitChecklist()" [disabled]="!isAllCompleted() || !state.isContextEditable()"
-                        class="bg-blue-600 text-white rounded-xl px-8 py-3.5 shadow-lg font-black text-xs uppercase tracking-widest flex items-center gap-3 disabled:opacity-50 disabled:grayscale transition-all hover:bg-blue-700 active:scale-95 border border-blue-500 tooltip relative overflow-hidden group">
-                    <span class="relative z-10 w-full flex items-center gap-3 justify-center">Registra Operazioni <i class="fa-solid fa-check-double text-blue-300 group-hover:text-white transition-colors"></i></span>
+        <!-- Bottom Utility Actions (Discrete) -->
+        <div class="mt-8 mb-20 px-6 flex flex-col items-center gap-6">
+            <div class="h-px w-24 bg-slate-200"></div>
+            
+            <div class="flex items-center gap-4 w-full max-w-xs">
+                <button (click)="printReport()" 
+                        class="flex-1 h-12 rounded-2xl text-slate-500 bg-white border border-slate-200 hover:bg-slate-50 flex items-center justify-center gap-2 transition-all font-black text-[10px] uppercase tracking-widest shadow-sm">
+                    <i class="fa-solid fa-print text-sm"></i> Stampa
                 </button>
-            } @else {
-                <div class="bg-white/95 backdrop-blur-sm p-2 rounded-xl shadow-lg flex items-center gap-2 border border-slate-200 animate-slide-up">
-                    <div class="bg-emerald-50 border border-emerald-100 text-emerald-600 px-4 py-2 rounded-lg font-black text-[11px] uppercase tracking-widest text-center shadow-sm"><i class="fa-solid fa-check"></i> Registrato</div>
-                    <button (click)="printReport()" class="h-9 px-4 rounded-lg bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-blue-600 flex items-center gap-2 font-bold text-xs uppercase tracking-widest transition-colors shadow-sm">
-                        <i class="fa-solid fa-print"></i> Stampa
-                    </button>
-                    <button *ngIf="state.isContextEditable()" (click)="isSubmitted.set(false)" class="h-9 px-4 rounded-lg bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-amber-600 flex items-center gap-2 font-bold text-xs uppercase tracking-widest transition-colors shadow-sm" title="Modifica">
-                        <i class="fa-solid fa-pen-to-square"></i> Modifica
-                    </button>
-                    <button (click)="startNewChecklist()" class="h-9 px-4 rounded-lg bg-blue-600 text-white hover:bg-blue-700 flex items-center gap-2 font-bold text-xs uppercase tracking-widest transition-colors shadow-sm">
-                        <i class="fa-solid fa-rotate-right"></i> Nuova
-                    </button>
-                </div>
-            }
+                <button (click)="isResetModalOpen.set(true)" 
+                        class="flex-1 h-12 rounded-2xl text-rose-500 bg-white border border-rose-100 hover:bg-rose-50 flex items-center justify-center gap-2 transition-all font-black text-[10px] uppercase tracking-widest shadow-sm">
+                    <i class="fa-solid fa-rotate-left text-sm"></i> Reset
+                </button>
+            </div>
+            
+            <p class="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] animate-pulse">
+                <i class="fa-solid fa-cloud-check text-emerald-400 mr-1"></i> Salvataggio Automatico Attivo
+            </p>
         </div>
+
+        <!-- RESET CONFIRMATION MODAL -->
+        @if (isResetModalOpen()) {
+           <div class="fixed inset-0 z-[150] flex items-center justify-center p-4">
+              <div class="absolute inset-0 bg-slate-900/60 backdrop-blur-sm animate-fade-in" (click)="isResetModalOpen.set(false)"></div>
+              <div class="relative w-full max-w-sm bg-white rounded-[32px] shadow-2xl overflow-hidden animate-slide-up border border-slate-200">
+                 <div class="p-8 text-center">
+                    <div class="w-16 h-16 rounded-2xl bg-rose-50 text-rose-500 flex items-center justify-center mx-auto mb-4 border border-rose-100 shadow-sm">
+                       <i class="fa-solid fa-triangle-exclamation text-3xl"></i>
+                    </div>
+                    <h3 class="text-xl font-black text-slate-800 mb-2">Reset Pre-Op?</h3>
+                    <p class="text-xs font-bold text-slate-500 leading-relaxed mb-8">
+                       Questa azione cancellerà tutti i dati inseriti nella fase pre-operativa attuale. L'operazione non è reversibile.
+                    </p>
+                    
+                    <div class="flex flex-col gap-3">
+                       <button (click)="confirmReset()" 
+                               class="w-full py-4 bg-rose-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-lg shadow-rose-200 active:scale-95 transition-all">
+                          SÌ, RESETTA TUTTO
+                       </button>
+                       <button (click)="isResetModalOpen.set(false)" 
+                               class="w-full py-4 bg-slate-50 text-slate-500 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-slate-100 transition-all">
+                          ANNULLA
+                       </button>
+                    </div>
+                 </div>
+              </div>
+           </div>
+        }
 
     </div>
     `,
@@ -617,6 +770,7 @@ export class PreOperationalChecklistComponent {
     state = inject(AppStateService);
     toast = inject(ToastService);
 
+    isResetModalOpen = signal(false);
     isSubmitted = signal(false);
     currentRecordId = signal<string | null>(null);
 
@@ -638,6 +792,42 @@ export class PreOperationalChecklistComponent {
     isAnomalyModalOpen = signal(false);
     currentAnomalyStep = signal<{areaId: string, id: string, label: string} | null>(null);
     currentAnomalyType = signal<'global' | 'step'>('step');
+    anomalySubject = '';
+
+    // Procedure Modal State
+    isProcedureModalOpen = signal(false);
+    selectedProcedureArea = signal<AreaChecklist | null>(null);
+
+    private readonly AREA_PROCEDURES: Record<string, string[]> = {
+        'staff-hygiene': [
+            'Allontanare temporaneamente l\'operatore dall\'area di produzione.',
+            'Richiedere il cambio immediato del vestiario o l\'uso dei DPI (copricapo).',
+            'Effettuare un nuovo lavaggio antisettico delle mani.',
+            'Registrare l\'intervento formativo nel registro del personale.'
+        ],
+        'cucina-sala': [
+            'Isolare le superfici o le attrezzature non conformi.',
+            'Eseguire una detersione meccanica con sgrassante specifico.',
+            'Procedere alla disinfezione con soluzione a base di cloro o alcolica.',
+            'Risciacquare accuratamente se previsto dal protocollo chimico.'
+        ],
+        'area-lavaggio': [
+            'Ripristinare immediatamente le scorte di sapone e carta asciugamani.',
+            'Verificare la temperatura dell\'acqua calda (deve essere > 45°C).',
+            'Pulire e disinfettare il lavello e la rubinetteria.'
+        ],
+        'deposito': [
+            'Isolare i materiali con imballo danneggiato.',
+            'Verificare l\'integrità del prodotto interno.',
+            'Spostare i prodotti in area protetta o procedere allo smaltimento se contaminati.',
+            'Sanificare il ripiano di stoccaggio.'
+        ],
+        'pavimenti': [
+            'Rimuovere i residui grossolani con scopa a panno umido.',
+            'Lavare con soluzione detergente ad alta concentrazione.',
+            'Asciugare completamente per prevenire rischi di scivolamento e muffe.'
+        ]
+    };
 
     masterEquipmentList = [
         { area: 'Area Lavaggio', items: ['Mobile pensile', 'Lavello', 'Tavolo da lavoro'] },
@@ -649,15 +839,11 @@ export class PreOperationalChecklistComponent {
     docDefinitions = [
         { id: 'scia', label: 'Scia e planimetria', icon: 'fa-map-location-dot' },
         { id: 'camerale', label: 'Camerale', icon: 'fa-building-columns' },
-        { id: 'haccp_plan', label: 'Piano autocontrollo sistema HACCP', icon: 'fa-file-shield' },
+        { id: 'haccp_plan', label: 'Manuale applicazione sistema HACCP', icon: 'fa-file-shield' },
         { id: 'osa', label: 'Attestato OSA', icon: 'fa-user-graduate' },
-        { id: 'pec', label: 'PEC (Posta Elettronica Certificata)', icon: 'fa-envelope-circle-check', hasExpiry: true },
-        { id: 'firma_digitale', label: 'Firma digitale', icon: 'fa-signature' },
-        { id: 'registro_personale', label: 'Registro del personale', icon: 'fa-users-rectangle' },
-        { id: 'inps_inail', label: 'Iscrizione INPS / INAIL', icon: 'fa-stamp' },
+        { id: 'registro_personale', label: 'Elenco del personale con mansioni', icon: 'fa-users-rectangle' },
         { id: 'messa_terra', label: 'DM 37/08 messa a terra DPR 462/01', icon: 'fa-bolt' },
-        { id: 'dvr', label: 'DVR (Documento Valutazione Rischi)', icon: 'fa-triangle-exclamation' },
-        { id: 'locazione', label: 'Contratto locazione o titolo proprietà', icon: 'fa-house-chimney' }
+        { id: 'dvr', label: 'DVR (Documento Valutazione Rischi)', icon: 'fa-triangle-exclamation' }
     ];
 
     globalItems = signal<{ id: string; label: string; icon: string; status: 'pending' | 'ok' | 'issue'; note?: string }[]>([
@@ -688,6 +874,12 @@ export class PreOperationalChecklistComponent {
 
     getInitialSteps(areaId: string) {
         if (areaId === 'staff-hygiene') return this.getStaffHygieneSteps();
+        if (areaId.startsWith('eq-')) {
+            return [
+                { id: 'ispezione', label: 'Ispezione visiva', icon: 'fa-eye', status: 'pending' as const },
+                { id: 'integrita', label: 'Integrità e funzionamento', icon: 'fa-screwdriver-wrench', status: 'pending' as const }
+            ];
+        }
         return this.stepDefinitions
             .filter(def => {
                 // Area Lavaggio and Pavimenti: elimina Integrità attrezzature
@@ -753,7 +945,9 @@ export class PreOperationalChecklistComponent {
     constructor() {
         effect(() => {
             this.state.filterDate();
-            this.state.selectedEquipment(); // re-run when equipment changes
+            this.state.filterCollaboratorId(); // Reload when selected collaborator changes
+            this.state.selectedEquipment(); // Re-run when equipment changes
+            this.state.initialSyncDone(); // Depend on initial sync done status
             untracked(() => this.loadData());
         }, { allowSignalWrites: true });
     }
@@ -845,7 +1039,7 @@ export class PreOperationalChecklistComponent {
               this.currentRecordId.set(rawRecord.id);
             }
 
-            this.isSubmitted.set(!!rawRecord.data?.status);
+            this.isSubmitted.set(!!rawRecord?.data?.status);
         } else {
             this.isSubmitted.set(false);
             this.currentRecordId.set(null);
@@ -875,6 +1069,7 @@ export class PreOperationalChecklistComponent {
         if (status === 'issue' && step) {
             this.currentAnomalyStep.set({ areaId, id: stepId, label: step.label });
             this.currentAnomalyType.set('step');
+            this.anomalySubject = `Anomalia riscontrata in: ${step.label}`;
             this.isAnomalyModalOpen.set(true);
             return;
         }
@@ -894,6 +1089,7 @@ export class PreOperationalChecklistComponent {
         if (status === 'issue' && item) {
             this.currentAnomalyStep.set({ areaId: 'global', id, label: item.label });
             this.currentAnomalyType.set('global');
+            this.anomalySubject = `Anomalia riscontrata in: ${item.label}`;
             this.isAnomalyModalOpen.set(true);
             return;
         }
@@ -905,6 +1101,16 @@ export class PreOperationalChecklistComponent {
             return item;
         }));
         this.autoSave();
+    }
+
+    setAreaIssue(areaId: string) {
+        const area = this.areas().find(a => a.id === areaId);
+        if (area) {
+            this.currentAnomalyStep.set({ areaId, id: 'area_full', label: area.label });
+            this.currentAnomalyType.set('step');
+            this.anomalySubject = `Anomalia riscontrata in: ${area.label}`;
+            this.isAnomalyModalOpen.set(true);
+        }
     }
 
     closeAnomalyModal() {
@@ -921,6 +1127,10 @@ export class PreOperationalChecklistComponent {
         if (type === 'step') {
             this.areas.update(areas => areas.map(a => {
                 if (a.id === anomaly.areaId) {
+                    if (anomaly.id === 'area_full') {
+                        // Mark all steps in area as issue
+                        return { ...a, steps: a.steps.map(s => ({ ...s, status: 'issue', note })), expanded: true };
+                    }
                     return { ...a, steps: a.steps.map(s => s.id === anomaly.id ? { ...s, status: 'issue', note } : s) };
                 }
                 return a;
@@ -932,25 +1142,46 @@ export class PreOperationalChecklistComponent {
             }));
         }
 
-        // Auto-post to admin alerts
+        const parentArea = this.areas().find(a => a.id === anomaly.areaId || a.steps.some(s => s.id === anomaly.id));
+        const areaName = parentArea ? parentArea.label : 'Generale';
+        const operatorName = this.state.currentUser()?.name || 'Operatore';
+        const currentDate = new Date().toLocaleDateString();
+
+        // Auto-post to admin alerts with detailed info
         this.state.sendMessage(
-            `ANOMALIA: ${anomaly.label}`,
-            `Segnalata anomalia durante la fase pre-operativa.\n\nControllo: ${anomaly.label}\nNote operatore: ${note || 'Nessuna specifica'}`,
-            'ALL'
+            `🚨 ANOMALIA PRE-OPERATIVA: ${anomaly.label}`,
+            `⚠ SEGNALAZIONE NON CONFORMITÀ ⚠\n\nFASE: Pre-operativa (Avvio)\nAREA: ${areaName}\nELEMENTO: ${anomaly.label}\nOPERATORE: ${operatorName}\nDATA: ${currentDate}\n\nNOTE OPERATORE:\n${note || 'Nessuna specifica'}`,
+            'SINGLE',
+            'ADMIN_OFFICE'
         );
 
-        // Persistent record
+        // Persistent record with structured description
         this.state.saveNonConformity({
             id: Math.random().toString(36).substring(2, 9),
             moduleId: 'pre-op-checklist',
             date: this.state.filterDate(),
-            description: note || 'Anomalia durante pre-operativa',
+            description: `[PRE-OP] ${areaName} -> ${anomaly.label}: ${note || 'Anomalia rilevata'}`,
             itemName: anomaly.label
         });
 
         this.toast.warning('Anomalia registrata', 'Segnalazione inviata per revisione amministrativa.');
         this.autoSave();
         this.closeAnomalyModal();
+    }
+
+    toggleStepStatus(areaId: string, stepId: string) {
+        if (this.isSubmitted() || !this.state.isContextEditable()) return;
+        
+        const area = this.areas().find(a => a.id === areaId);
+        const step = area?.steps.find(s => s.id === stepId);
+        
+        if (!step) return;
+
+        if (step.status === 'ok') {
+            this.setStepStatus(areaId, stepId, 'issue');
+        } else {
+            this.setStepStatus(areaId, stepId, 'ok');
+        }
     }
 
     setAllStepsInArea(areaId: string, status: 'ok' | 'issue') {
@@ -979,7 +1210,8 @@ export class PreOperationalChecklistComponent {
 
             this.state.saveRecord('pre-op-checklist', {
                 areas: this.areas(),
-                globalItems: this.globalItems()
+                globalItems: this.globalItems(),
+                status: this.isSubmitted() ? ((this.areas().some(a => a.steps.some(s => s.status === 'issue')) || this.globalItems().some(i => i.status === 'issue')) ? 'Non Conforme' : 'Conforme') : undefined
             });
         }, 2000);
     }
@@ -1004,12 +1236,51 @@ export class PreOperationalChecklistComponent {
         return this.hasAreaIssues(id) ? 'Rilevate Anomalie' : 'Conforme';
     }
 
-    totalStepsCount() { return (this.areas().length * this.stepDefinitions.length) + this.globalItems().length; }
+    getIssueSteps(areaId: string) {
+        const area = this.areas().find(a => a.id === areaId);
+        return area?.steps.filter(s => s.status === 'issue') || [];
+    }
+
+    getAreaProcedures(areaId: string): string[] {
+        // Handle equipment areas
+        if (areaId.startsWith('eq-')) {
+            return [
+                'Scollegare l\'apparecchiatura se presenta difetti elettrici.',
+                'Pulire le guarnizioni e le superfici interne con sanificante.',
+                'Chiamare l\'assistenza tecnica se il malfunzionamento persiste.',
+                'Spostare eventuali alimenti in un altro frigo/cella conforme.'
+            ];
+        }
+        return this.AREA_PROCEDURES[areaId] || [
+            'Identificare la causa specifica della non conformità.',
+            'Eseguire un intervento di pulizia o manutenzione mirato.',
+            'Verificare il ripristino delle condizioni igienico-sanitarie.',
+            'Documentare l\'azione correttiva nel registro specifico.'
+        ];
+    }
+
+    openProcedureModal(area: AreaChecklist) {
+        this.selectedProcedureArea.set(area);
+        this.isProcedureModalOpen.set(true);
+    }
+
+    closeProcedureModal() {
+        this.isProcedureModalOpen.set(false);
+        this.selectedProcedureArea.set(null);
+    }
+
+    resolveAreaIssues(areaId: string) {
+        this.setAllStepsInArea(areaId, 'ok');
+        this.closeProcedureModal();
+        this.toast.success('Problemi Risolti', 'L\'area è stata ripristinata e segnata come conforme.');
+    }
+
+    totalStepsCount() {
+        return this.areas().reduce((acc, a) => acc + a.steps.length, 0);
+    }
 
     completedStepsCount() {
-        const areaDone = this.areas().reduce((acc, a) => acc + a.steps.filter(s => s.status !== 'pending').length, 0);
-        const globalDone = this.globalItems().filter(i => i.status !== 'pending').length;
-        return areaDone + globalDone;
+        return this.areas().reduce((acc, a) => acc + a.steps.filter(s => s.status !== 'pending').length, 0);
     }
 
     progressPercentage() {
@@ -1047,6 +1318,12 @@ export class PreOperationalChecklistComponent {
             expanded: false
         })));
         this.globalItems.update(items => items.map(i => ({ ...i, status: 'pending' as const })));
+    }
+
+    confirmReset() {
+        this.resetForm();
+        this.isResetModalOpen.set(false);
+        this.toast.info('Scheda Resettata', 'I dati pre-operativi sono stati azzerati.');
     }
 
     startNewChecklist() {

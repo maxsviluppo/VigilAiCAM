@@ -21,6 +21,7 @@ import { MicrobioMonitorViewComponent } from './components/microbio-monitor-view
 import { MessagesViewComponent } from './components/messages-view.component';
 import { DocumentationViewComponent } from './components/documentation-view.component';
 import { ProductionLogViewComponent } from './components/production-log-view.component';
+import { AbbattimentoLogViewComponent } from './components/abbattimento-log-view.component';
 import { ToastContainerComponent } from './components/toast-container.component';
 import { ChecklistHistoryComponent } from './components/checklist-history.component';
 import { TemperaturesViewComponent } from './components/temperatures-view.component';
@@ -32,6 +33,10 @@ import { AllergensConfigViewComponent } from './components/allergens-config-view
 import { CleaningProductsViewComponent } from './components/cleaning-products-view.component';
 import { IngredientsBookViewComponent } from './components/ingredients-book-view.component';
 import { OperationalPhasesConfigViewComponent } from './components/operational-phases-config-view.component';
+import { PublicProductInfoComponent } from './components/public-product-info.component';
+import { HomeViewComponent } from './components/home-view.component';
+import { DdtViewComponent } from './components/ddt-view.component';
+import { PreparationsViewComponent } from './components/preparations-view.component';
 
 @Component({
   selector: 'app-root',
@@ -57,6 +62,7 @@ import { OperationalPhasesConfigViewComponent } from './components/operational-p
     MessagesViewComponent,
     DocumentationViewComponent,
     ProductionLogViewComponent,
+    AbbattimentoLogViewComponent,
     ToastContainerComponent,
     ChecklistHistoryComponent,
     TemperaturesViewComponent,
@@ -67,12 +73,24 @@ import { OperationalPhasesConfigViewComponent } from './components/operational-p
     AllergensConfigViewComponent,
     CleaningProductsViewComponent,
     IngredientsBookViewComponent,
-    OperationalPhasesConfigViewComponent
+    OperationalPhasesConfigViewComponent,
+    PublicProductInfoComponent,
+    HomeViewComponent,
+    DdtViewComponent,
+    PreparationsViewComponent
   ],
   templateUrl: './app.component.html'
 })
 export class AppComponent {
   state = inject(AppStateService);
+
+  constructor() {
+    const urlParams = new URLSearchParams(window.location.search);
+    const infoId = urlParams.get('info');
+    if (infoId) {
+      this.state.publicInfoId.set(infoId);
+    }
+  }
 
   getItemsByCategory(category: string): MenuItem[] {
     return this.state.menuItems.filter(item => item.category === category);
@@ -101,6 +119,14 @@ export class AppComponent {
     if (!id) return '';
     const c = this.state.clients().find(c => c.id === id);
     return c ? c.name : '';
+  }
+
+  handleMenuClick(item: MenuItem) {
+    if (item.id === 'abbattimento-log' && !this.state.hasAbbattitore()) {
+      return;
+    }
+    this.state.setModule(item.id);
+    this.isMobileMenuOpen.set(false);
   }
 
   toggleMobileMenu() {

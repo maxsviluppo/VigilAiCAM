@@ -71,7 +71,7 @@ interface CheckItem {
                         </div>
                         
                         <div class="flex-1 min-w-0">
-                            <h3 class="font-bold text-slate-800 text-base leading-tight mb-2">{{ check.label }}</h3>
+                            <h3 class="font-bold text-slate-800 text-sm md:text-base leading-tight mb-2">{{ check.label }}</h3>
                             <div class="flex items-center gap-2">
                                 @if (check.checked) {
                                     <span class="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-500 text-white text-xs font-bold rounded-full">

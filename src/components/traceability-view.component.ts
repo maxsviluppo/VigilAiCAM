@@ -163,8 +163,7 @@ interface ProductionBatch {
                               <input type="text" [(ngModel)]="currentBatch()!.productName" placeholder="Es. Ragù Bolognese"
                                      class="w-full p-2 rounded border border-slate-300 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 outline-none font-bold text-slate-700 capitalize">
                           </div>
-
-                          <div class="grid grid-cols-2 gap-3">
+                          <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
                                 <div>
                                     <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Data Prep.</label>
                                     <input type="date" [(ngModel)]="currentBatch()!.preparationDate" (change)="onDateChange()"
@@ -246,10 +245,9 @@ interface ProductionBatch {
                                   </button>
                               </div>
 
-                              <!-- Ingredient Form -->
                               <div class="flex-1 space-y-4">
-                                  <div class="grid grid-cols-2 gap-4">
-                                      <div class="col-span-2">
+                                  <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                      <div class="sm:col-span-2">
                                           <label class="block text-[10px] font-bold text-indigo-400 uppercase mb-1">Ingrediente Identificato</label>
                                           <input type="text" [(ngModel)]="newIngredient.productName" placeholder="Es. Farina 00"
                                               class="w-full p-2 rounded bg-white border border-indigo-100 focus:border-indigo-400 outline-none text-sm font-bold text-indigo-900 capitalize">
@@ -260,13 +258,14 @@ interface ProductionBatch {
                                           <input type="text" [(ngModel)]="newIngredient.lotNumber" placeholder="L-..."
                                               class="w-full p-2 rounded bg-white border border-indigo-100 focus:border-indigo-400 outline-none text-sm font-mono capitalize">
                                       </div>
-
+ 
                                       <div>
                                           <label class="block text-[10px] font-bold text-indigo-400 uppercase mb-1">Scadenza</label>
                                           <input type="date" [(ngModel)]="newIngredient.expiryDate"
                                               class="w-full p-2 rounded bg-white border border-indigo-100 focus:border-indigo-400 outline-none text-sm">
                                       </div>
                                   </div>
+                              </div>
 
                                   <div class="flex justify-end pt-2">
                                       <button (click)="addIngredient()" [disabled]="!newIngredient.productName"

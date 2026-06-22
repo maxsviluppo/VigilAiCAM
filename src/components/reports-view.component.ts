@@ -233,16 +233,17 @@ export class ReportsViewComponent {
         userIds.includes(r.userId) && r.date === this.state.filterDate()
       );
 
+      const phaseIds = ['pre-op-checklist', 'operative-checklist', 'post-op-checklist'];
       const users = allClientUsers
         .filter(u => u.role !== 'ADMIN')
         .map(u => {
-          const userRecords = clientRecords.filter(r => r.userId === u.id);
+          const userRecords = clientRecords.filter(r => r.userId === u.id && phaseIds.includes(r.moduleId));
           return {
             id: u.id,
             name: u.name,
             department: u.department || 'Generale',
-            checksCompleted: userRecords.length,
-            checksTotal: 14, // Assuming 14 standard modules for now or based on menu
+            checksCompleted: new Set(userRecords.map(r => r.moduleId)).size,
+            checksTotal: 3,
             lastActivity: userRecords.length > 0 ?
               new Date(userRecords[userRecords.length - 1].timestamp).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }) :
               'Nessuna'

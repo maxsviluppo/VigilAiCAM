@@ -1,13 +1,14 @@
 
-import { Component, inject, signal, computed } from '@angular/core';
+import { Component, inject, signal, computed, effect } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { ReactiveFormsModule, FormBuilder, FormGroup, Validators } from '@angular/forms';
+import { ReactiveFormsModule, FormsModule, FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { AppStateService, ClientEntity } from '../services/app-state.service';
+import { ToastService } from '../services/toast.service';
 
 @Component({
   selector: 'app-settings-view',
   standalone: true,
-  imports: [CommonModule, ReactiveFormsModule],
+  imports: [CommonModule, ReactiveFormsModule, FormsModule],
   template: `
     <div class="space-y-6 animate-fade-in">
       
@@ -38,7 +39,7 @@ import { AppStateService, ClientEntity } from '../services/app-state.service';
              
              <div class="flex gap-2 w-full sm:w-auto relative">
                  <input type="email" #newEmail [value]="state.reportRecipientEmail()"
-                         class="bg-white text-slate-800 border border-slate-200 rounded text-xs px-3 py-2 font-bold focus:outline-none focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500 w-full sm:min-w-[200px]"
+                         class="bg-white text-slate-800 border border-slate-200 rounded text-base px-3 py-2 font-bold focus:outline-none focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500 w-full sm:min-w-[200px]"
                          placeholder="email@esempio.it">
                  <button (click)="state.setReportRecipientEmail(newEmail.value)"
                          class="px-4 py-2 bg-white border border-slate-200 hover:bg-cyan-50 text-cyan-600 rounded text-[11px] font-bold transition-colors shadow-sm whitespace-nowrap">
@@ -98,7 +99,7 @@ import { AppStateService, ClientEntity } from '../services/app-state.service';
               <div class="space-y-1.5 lg:col-span-1">
                 <label class="text-[9px] uppercase font-black text-slate-400 tracking-widest pl-1">Ragione Sociale</label>
                 @if (isEditingAdmin()) {
-                  <input type="text" formControlName="name" class="w-full px-3 py-2 bg-slate-50/50 border border-slate-200 rounded text-sm focus:ring-2 focus:ring-indigo-500/20 outline-none font-bold text-slate-800 transition-colors">
+                  <input type="text" formControlName="name" class="w-full px-3 py-2 bg-slate-50/50 border border-slate-200 rounded text-base focus:ring-2 focus:ring-indigo-500/20 outline-none font-bold text-slate-800 transition-colors">
                 } @else {
                   <p class="text-sm font-bold text-slate-800 bg-slate-50 border border-transparent px-3 py-2 rounded">{{ state.adminCompany().name || '-' }}</p>
                 }
@@ -107,7 +108,7 @@ import { AppStateService, ClientEntity } from '../services/app-state.service';
               <div class="space-y-1.5">
                 <label class="text-[9px] uppercase font-black text-slate-400 tracking-widest pl-1">Partita IVA</label>
                 @if (isEditingAdmin()) {
-                  <input type="text" formControlName="piva" class="w-full px-3 py-2 bg-slate-50/50 border border-slate-200 rounded text-sm focus:ring-2 focus:ring-indigo-500/20 outline-none font-bold text-slate-800 transition-colors font-mono uppercase">
+                  <input type="text" formControlName="piva" class="w-full px-3 py-2 bg-slate-50/50 border border-slate-200 rounded text-base focus:ring-2 focus:ring-indigo-500/20 outline-none font-bold text-slate-800 transition-colors font-mono uppercase">
                 } @else {
                   <p class="text-sm font-bold text-slate-800 bg-slate-50 border border-transparent px-3 py-2 rounded font-mono">{{ state.adminCompany().piva || '-' }}</p>
                 }
@@ -116,7 +117,7 @@ import { AppStateService, ClientEntity } from '../services/app-state.service';
               <div class="space-y-1.5">
                 <label class="text-[9px] uppercase font-black text-slate-400 tracking-widest pl-1">Indirizzo Sede Centrale</label>
                 @if (isEditingAdmin()) {
-                  <input type="text" formControlName="address" class="w-full px-3 py-2 bg-slate-50/50 border border-slate-200 rounded text-sm focus:ring-2 focus:ring-indigo-500/20 outline-none font-bold text-slate-800 transition-colors">
+                  <input type="text" formControlName="address" class="w-full px-3 py-2 bg-slate-50/50 border border-slate-200 rounded text-base focus:ring-2 focus:ring-indigo-500/20 outline-none font-bold text-slate-800 transition-colors">
                 } @else {
                   <p class="text-sm font-bold text-slate-800 bg-slate-50 border border-transparent px-3 py-2 rounded">{{ state.adminCompany().address || '-' }}</p>
                 }
@@ -125,7 +126,7 @@ import { AppStateService, ClientEntity } from '../services/app-state.service';
               <div class="space-y-1.5">
                 <label class="text-[9px] uppercase font-black text-slate-400 tracking-widest pl-1">Email Amministrativa</label>
                 @if (isEditingAdmin()) {
-                  <input type="email" formControlName="email" class="w-full px-3 py-2 bg-slate-50/50 border border-slate-200 rounded text-sm focus:ring-2 focus:ring-indigo-500/20 outline-none font-bold text-slate-800 transition-colors lowercase">
+                  <input type="email" formControlName="email" class="w-full px-3 py-2 bg-slate-50/50 border border-slate-200 rounded text-base focus:ring-2 focus:ring-indigo-500/20 outline-none font-bold text-slate-800 transition-colors lowercase">
                 } @else {
                   <p class="text-sm font-bold text-slate-800 bg-slate-50 border border-transparent px-3 py-2 rounded">{{ state.adminCompany().email || '-' }}</p>
                 }
@@ -134,7 +135,7 @@ import { AppStateService, ClientEntity } from '../services/app-state.service';
               <div class="space-y-1.5">
                 <label class="text-[9px] uppercase font-black text-slate-400 tracking-widest pl-1">PEC</label>
                 @if (isEditingAdmin()) {
-                  <input type="email" formControlName="pec" class="w-full px-3 py-2 bg-slate-50/50 border border-slate-200 rounded text-sm focus:ring-2 focus:ring-indigo-500/20 outline-none font-bold text-slate-800 transition-colors lowercase">
+                  <input type="email" formControlName="pec" class="w-full px-3 py-2 bg-slate-50/50 border border-slate-200 rounded text-base focus:ring-2 focus:ring-indigo-500/20 outline-none font-bold text-slate-800 transition-colors lowercase">
                 } @else {
                   <p class="text-sm font-bold text-indigo-600 bg-indigo-50/50 border border-transparent px-3 py-2 rounded">{{ state.adminCompany().pec || '-' }}</p>
                 }
@@ -143,7 +144,7 @@ import { AppStateService, ClientEntity } from '../services/app-state.service';
               <div class="space-y-1.5">
                 <label class="text-[9px] uppercase font-black text-slate-400 tracking-widest pl-1">Codice Univoco (SDI)</label>
                 @if (isEditingAdmin()) {
-                  <input type="text" formControlName="sdi" class="w-full px-3 py-2 bg-slate-50/50 border border-slate-200 rounded text-sm focus:ring-2 focus:ring-indigo-500/20 outline-none font-bold text-slate-800 transition-colors uppercase font-mono">
+                  <input type="text" formControlName="sdi" class="w-full px-3 py-2 bg-slate-50/50 border border-slate-200 rounded text-base focus:ring-2 focus:ring-indigo-500/20 outline-none font-bold text-slate-800 transition-colors uppercase font-mono">
                 } @else {
                   <p class="text-sm font-bold text-slate-800 font-mono tracking-widest bg-slate-50 border border-transparent px-3 py-2 rounded">{{ state.adminCompany().sdi || '-' }}</p>
                 }
@@ -152,7 +153,7 @@ import { AppStateService, ClientEntity } from '../services/app-state.service';
               <div class="space-y-1.5">
                 <label class="text-[9px] uppercase font-black text-slate-400 tracking-widest pl-1">Telefono Fisso</label>
                 @if (isEditingAdmin()) {
-                  <input type="text" formControlName="phone" class="w-full px-3 py-2 bg-slate-50/50 border border-slate-200 rounded text-sm focus:ring-2 focus:ring-indigo-500/20 outline-none font-bold text-slate-800 transition-colors">
+                  <input type="text" formControlName="phone" class="w-full px-3 py-2 bg-slate-50/50 border border-slate-200 rounded text-base focus:ring-2 focus:ring-indigo-500/20 outline-none font-bold text-slate-800 transition-colors">
                 } @else {
                   <p class="text-sm font-bold text-slate-800 bg-slate-50 border border-transparent px-3 py-2 rounded">{{ state.adminCompany().phone || '-' }}</p>
                 }
@@ -161,7 +162,7 @@ import { AppStateService, ClientEntity } from '../services/app-state.service';
               <div class="space-y-1.5">
                 <label class="text-[9px] uppercase font-black text-slate-400 tracking-widest pl-1">Cellulare</label>
                 @if (isEditingAdmin()) {
-                  <input type="text" formControlName="cellphone" class="w-full px-3 py-2 bg-slate-50/50 border border-slate-200 rounded text-sm focus:ring-2 focus:ring-indigo-500/20 outline-none font-bold text-slate-800 transition-colors">
+                  <input type="text" formControlName="cellphone" class="w-full px-3 py-2 bg-slate-50/50 border border-slate-200 rounded text-base focus:ring-2 focus:ring-indigo-500/20 outline-none font-bold text-slate-800 transition-colors">
                 } @else {
                   <p class="text-sm font-bold text-slate-800 bg-slate-50 border border-transparent px-3 py-2 rounded">{{ state.adminCompany().cellphone || '-' }}</p>
                 }
@@ -170,7 +171,7 @@ import { AppStateService, ClientEntity } from '../services/app-state.service';
               <div class="space-y-1.5">
                 <label class="text-[9px] uppercase font-black text-slate-400 tracking-widest pl-1">WhatsApp</label>
                 @if (isEditingAdmin()) {
-                  <input type="text" formControlName="whatsapp" class="w-full px-3 py-2 bg-slate-50/50 border border-slate-200 rounded text-sm focus:ring-2 focus:ring-indigo-500/20 outline-none font-bold text-slate-800 transition-colors">
+                  <input type="text" formControlName="whatsapp" class="w-full px-3 py-2 bg-slate-50/50 border border-slate-200 rounded text-base focus:ring-2 focus:ring-indigo-500/20 outline-none font-bold text-slate-800 transition-colors">
                 } @else {
                   <p class="text-sm font-bold text-emerald-600 flex items-center gap-2 bg-emerald-50 border border-transparent px-3 py-2 rounded">
                     <i class="fa-brands fa-whatsapp"></i> {{ state.adminCompany().whatsapp || '-' }}
@@ -181,7 +182,7 @@ import { AppStateService, ClientEntity } from '../services/app-state.service';
               <div class="space-y-1.5 lg:col-span-1">
                 <label class="text-[9px] uppercase font-black text-slate-400 tracking-widest pl-1">Nr. Licenza Master</label>
                 @if (isEditingAdmin()) {
-                  <input type="text" formControlName="licenseNumber" class="w-full px-3 py-2 bg-slate-50/50 border border-slate-200 rounded text-sm focus:ring-2 focus:ring-indigo-500/20 outline-none font-bold text-slate-800 transition-colors uppercase font-mono">
+                  <input type="text" formControlName="licenseNumber" class="w-full px-3 py-2 bg-slate-50/50 border border-slate-200 rounded text-base focus:ring-2 focus:ring-indigo-500/20 outline-none font-bold text-slate-800 transition-colors uppercase font-mono">
                 } @else {
                   <p class="text-sm font-bold text-slate-800 bg-slate-50 border border-transparent px-3 py-2 rounded font-mono">{{ state.adminCompany().licenseNumber || '-' }}</p>
                 }
@@ -189,6 +190,166 @@ import { AppStateService, ClientEntity } from '../services/app-state.service';
             </form>
           </div>
         </div>
+
+        <!-- ==================== GEMINI AI PANEL ==================== -->
+        <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+          <!-- Panel Header -->
+          <div class="px-6 py-5 border-b border-slate-100 bg-gradient-to-r from-violet-50 to-indigo-50/30 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+            <div class="flex items-center gap-4">
+              <div class="w-12 h-12 rounded-xl bg-white border border-violet-100 flex items-center justify-center shadow-sm shrink-0">
+                <i class="fa-solid fa-robot text-violet-600 text-xl"></i>
+              </div>
+              <div>
+                <h3 class="text-base font-black text-slate-800">Intelligenza Artificiale – Gemini</h3>
+                <p class="text-[11px] font-bold text-slate-500 mt-0.5">Configurazione chiave API per OCR documenti e automazione</p>
+              </div>
+            </div>
+            <div class="flex items-center gap-2 shrink-0">
+              <span class="px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider border"
+                    [class]="geminiApiKey() ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-amber-50 text-amber-700 border-amber-200'">
+                <i class="fa-solid mr-1" [class]="geminiApiKey() ? 'fa-circle-check' : 'fa-circle-exclamation'"></i>
+                {{ geminiApiKey() ? 'API Configurata' : 'Non Configurata' }}
+              </span>
+            </div>
+          </div>
+
+          <div class="p-6 space-y-6">
+
+            <!-- Model Info Row -->
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div class="bg-slate-50 rounded-xl p-4 border border-slate-100">
+                <p class="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-2">Modello Attivo</p>
+                <div class="flex items-center gap-2 bg-violet-50 border border-violet-100 p-3 rounded-xl text-violet-700 font-bold text-xs">
+                  <i class="fa-solid fa-robot"></i>
+                  <span>Gemini 2.0 Flash (Consigliato & Gratuito)</span>
+                </div>
+                <div class="mt-3 space-y-1">
+                  <p class="text-[9px] text-slate-500 font-bold leading-tight"><span class="text-emerald-600">Tariffa Free:</span> Gratuito fino a 15 RPM.</p>
+                  <p class="text-[9px] text-slate-500 font-bold leading-tight"><span class="text-amber-600">Sync:</span> Configurazione salvata in Cloud per tutti i tuoi dispositivi.</p>
+                </div>
+              </div>
+              <div class="bg-slate-50 rounded-xl p-4 border border-slate-100 flex flex-col justify-between">
+                <div>
+                  <p class="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-1">Statistiche Utilizzo ({{ state.aiConfig()?.model || 'N/A' }})</p>
+                  <div class="space-y-3 mt-2">
+                    <div class="flex justify-between items-end">
+                      <span class="text-[10px] font-bold text-slate-500">Chiamate Totali</span>
+                      <span class="text-xl font-black text-slate-800">{{ state.aiConfig()?.stats?.[state.aiConfig()?.model]?.count || 0 }}</span>
+                    </div>
+                    <div class="flex justify-between items-end">
+                      <span class="text-[10px] font-bold text-slate-500">Costo Stimato</span>
+                      <span class="text-xl font-black text-emerald-600">{{ (state.aiConfig()?.stats?.[state.aiConfig()?.model]?.estimatedCost || 0) | currency:'USD' }}</span>
+                    </div>
+                  </div>
+                </div>
+                <button (click)="resetGeminiStats()" class="mt-4 text-[9px] font-black uppercase text-rose-600 hover:text-rose-700 flex items-center gap-1 transition-colors">
+                  <i class="fa-solid fa-rotate-left"></i> Reset Statistiche
+                </button>
+              </div>
+              <div class="bg-slate-50 rounded-xl p-4 border border-slate-100">
+                <p class="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-1">Costo Stimato</p>
+                <p class="text-2xl font-black text-emerald-600">~€{{ (geminiCallCount() * 0.00025).toFixed(4) }}</p>
+                <p class="text-[10px] text-slate-400 font-bold mt-1">€0.00025 per chiamata</p>
+              </div>
+            </div>
+
+            <!-- API Key Input -->
+            <div class="space-y-2">
+              <label class="text-[9px] uppercase font-black text-slate-400 tracking-widest pl-1">Chiave API Gemini</label>
+              <div class="flex gap-3">
+                <div class="relative flex-1">
+                  <i class="fa-solid fa-key absolute left-3 top-1/2 -translate-y-1/2 text-violet-400 text-sm"></i>
+                  <input 
+                    [type]="showApiKey() ? 'text' : 'password'"
+                    [(ngModel)]="geminiApiKeyInput"
+                    placeholder="AIza..."
+                    class="w-full pl-10 pr-12 py-3 bg-slate-50 border border-slate-200 rounded-xl text-base font-mono font-bold text-slate-700 focus:outline-none focus:ring-4 focus:ring-violet-500/10 focus:border-violet-500 transition-all"
+                  >
+                  <button (click)="showApiKey.set(!showApiKey())" class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors">
+                    <i class="fa-solid text-sm" [class]="showApiKey() ? 'fa-eye-slash' : 'fa-eye'"></i>
+                  </button>
+                </div>
+                <button (click)="saveGeminiApiKey()" class="px-5 py-3 bg-violet-600 hover:bg-violet-700 text-white font-black text-xs uppercase tracking-wider rounded-xl transition-all shadow-sm flex items-center gap-2 shrink-0">
+                  <i class="fa-solid fa-save"></i> Salva
+                </button>
+                <button (click)="testAiConnection()" [disabled]="!geminiApiKey() || isTestingAi()"
+                        class="px-5 py-3 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-black text-xs uppercase tracking-wider rounded-xl transition-all shadow-sm flex items-center gap-2 shrink-0">
+                  @if (isTestingAi()) {
+                    <i class="fa-solid fa-spinner fa-spin"></i>
+                  } @else {
+                    <i class="fa-solid fa-vial"></i> Testa Connessione
+                  }
+                </button>
+                @if (geminiApiKey()) {
+                  <button (click)="clearGeminiApiKey()" class="px-4 py-3 bg-white border border-red-200 hover:bg-red-50 text-red-600 font-black text-xs uppercase tracking-wider rounded-xl transition-all shadow-sm shrink-0">
+                    <i class="fa-solid fa-trash-can"></i>
+                  </button>
+                }
+              </div>
+              <p class="text-[10px] text-slate-400 font-bold pl-1">La chiave viene salvata localmente nel browser. Non viene mai inviata a terzi.</p>
+            </div>
+
+            <!-- Info + Link Box -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div class="bg-violet-50 rounded-xl p-5 border border-violet-100">
+                <h4 class="text-xs font-black text-violet-800 uppercase tracking-wider mb-3 flex items-center gap-2">
+                  <i class="fa-solid fa-circle-info text-violet-500"></i> Come ottenere la chiave API
+                </h4>
+                <ol class="space-y-2">
+                  <li class="flex items-start gap-2 text-[11px] text-violet-700 font-bold">
+                    <span class="w-5 h-5 rounded-full bg-violet-600 text-white text-[9px] font-black flex items-center justify-center shrink-0 mt-0.5">1</span>
+                    Accedi a Google AI Studio con il tuo account Google
+                  </li>
+                  <li class="flex items-start gap-2 text-[11px] text-violet-700 font-bold">
+                    <span class="w-5 h-5 rounded-full bg-violet-600 text-white text-[9px] font-black flex items-center justify-center shrink-0 mt-0.5">2</span>
+                    Clicca su <strong>"Get API Key"</strong> → <strong>"Create API Key"</strong>
+                  </li>
+                  <li class="flex items-start gap-2 text-[11px] text-violet-700 font-bold">
+                    <span class="w-5 h-5 rounded-full bg-violet-600 text-white text-[9px] font-black flex items-center justify-center shrink-0 mt-0.5">3</span>
+                    Copia la chiave generata e incollala nel campo sopra
+                  </li>
+                </ol>
+                <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer"
+                   class="mt-4 w-full py-3 flex items-center justify-center gap-2 bg-violet-600 hover:bg-violet-700 text-white font-black text-[11px] uppercase tracking-wider rounded-xl transition-all shadow-md">
+                  <i class="fa-solid fa-external-link-alt"></i>
+                  Apri Google AI Studio
+                </a>
+              </div>
+
+              <div class="bg-slate-50 rounded-xl p-5 border border-slate-100 space-y-3">
+                <h4 class="text-xs font-black text-slate-700 uppercase tracking-wider mb-3 flex items-center gap-2">
+                  <i class="fa-solid fa-chart-bar text-slate-500"></i> Limiti & Costi
+                </h4>
+                <div class="space-y-2">
+                  <div class="flex justify-between items-center text-[11px] font-bold">
+                    <span class="text-slate-500">Piano gratuito (Free Tier)</span>
+                    <span class="text-emerald-600">15 richieste/min</span>
+                  </div>
+                  <div class="flex justify-between items-center text-[11px] font-bold">
+                    <span class="text-slate-500">Costo per foto DDT</span>
+                    <span class="text-slate-700">~€0.00025</span>
+                  </div>
+                  <div class="flex justify-between items-center text-[11px] font-bold">
+                    <span class="text-slate-500">1.000 foto/mese</span>
+                    <span class="text-slate-700">~€0.25</span>
+                  </div>
+                  <div class="h-px bg-slate-200 my-1"></div>
+                  <div class="flex justify-between items-center text-[11px] font-bold">
+                    <span class="text-slate-500">Modello consigliato</span>
+                    <span class="text-violet-600 font-mono">gemini-2.0-flash</span>
+                  </div>
+                </div>
+                <a href="https://ai.google.dev/pricing" target="_blank" rel="noopener noreferrer"
+                   class="mt-2 text-[10px] text-blue-600 font-black hover:underline flex items-center gap-1">
+                  <i class="fa-solid fa-external-link-alt text-[9px]"></i> Vedi prezzi ufficiali Google AI
+                </a>
+              </div>
+            </div>
+
+          </div>
+        </div>
+        <!-- ========================================================= -->
+
       } @else {
         <!-- Collaborator View: Remains Read-Only Summary of THEIR company, with EDIT possibility -->
         <div class="max-w-4xl mx-auto bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
@@ -248,7 +409,7 @@ import { AppStateService, ClientEntity } from '../services/app-state.service';
                <div class="space-y-1.5">
                  <label class="text-[9px] uppercase font-black text-slate-400 tracking-widest pl-1">Sede Operativa (Indirizzo)</label>
                  @if (isEditingOperator()) {
-                   <input type="text" formControlName="address" class="w-full px-3 py-2 bg-slate-50/50 border border-slate-200 rounded text-sm focus:ring-2 focus:ring-indigo-500/20 outline-none font-bold text-slate-800 transition-colors" placeholder="Indirizzo">
+                   <input type="text" formControlName="address" class="w-full px-3 py-2 bg-slate-50/50 border border-slate-200 rounded text-base focus:ring-2 focus:ring-indigo-500/20 outline-none font-bold text-slate-800 transition-colors" placeholder="Indirizzo">
                  } @else {
                    <p class="text-sm font-bold text-slate-800 bg-slate-50 border border-transparent px-3 py-2 rounded truncate">{{ state.companyConfig().address || 'Non specificato' }}</p>
                  }
@@ -257,16 +418,25 @@ import { AppStateService, ClientEntity } from '../services/app-state.service';
                <div class="space-y-1.5">
                  <label class="text-[9px] uppercase font-black text-slate-400 tracking-widest pl-1">Email di Contatto</label>
                  @if (isEditingOperator()) {
-                   <input type="email" formControlName="email" class="w-full px-3 py-2 bg-slate-50/50 border border-slate-200 rounded text-sm focus:ring-2 focus:ring-indigo-500/20 outline-none font-bold text-slate-800 transition-colors lowercase" placeholder="Email">
+                   <input type="email" formControlName="email" class="w-full px-3 py-2 bg-slate-50/50 border border-slate-200 rounded text-base focus:ring-2 focus:ring-indigo-500/20 outline-none font-bold text-slate-800 transition-colors lowercase" placeholder="Email">
                  } @else {
                    <p class="text-sm font-bold text-slate-800 bg-slate-50 border border-transparent px-3 py-2 rounded truncate">{{ state.companyConfig().email || 'Non specificato' }}</p>
                  }
                </div>
 
                <div class="space-y-1.5">
+                 <label class="text-[9px] uppercase font-black text-slate-400 tracking-widest pl-1">Indirizzo PEC</label>
+                 @if (isEditingOperator()) {
+                   <input type="email" formControlName="pec" class="w-full px-3 py-2 bg-slate-50/50 border border-slate-200 rounded text-base focus:ring-2 focus:ring-indigo-500/20 outline-none font-bold text-slate-800 transition-colors lowercase" placeholder="pec@esempio.it">
+                 } @else {
+                   <p class="text-sm font-bold text-indigo-600 bg-indigo-50 border border-transparent px-3 py-2 rounded truncate">{{ state.companyConfig().pec || 'Non specificato' }}</p>
+                 }
+               </div>
+
+               <div class="space-y-1.5">
                  <label class="text-[9px] uppercase font-black text-slate-400 tracking-widest pl-1">Telefono Fisso</label>
                  @if (isEditingOperator()) {
-                   <input type="text" formControlName="phone" class="w-full px-3 py-2 bg-slate-50/50 border border-slate-200 rounded text-sm focus:ring-2 focus:ring-indigo-500/20 outline-none font-bold text-slate-800 transition-colors" placeholder="Prefisso e numero">
+                   <input type="text" formControlName="phone" class="w-full px-3 py-2 bg-slate-50/50 border border-slate-200 rounded text-base focus:ring-2 focus:ring-indigo-500/20 outline-none font-bold text-slate-800 transition-colors" placeholder="Prefisso e numero">
                  } @else {
                    <p class="text-sm font-bold text-slate-800 bg-slate-50 border border-transparent px-3 py-2 rounded">{{ state.companyConfig().phone || 'Non specificato' }}</p>
                  }
@@ -275,7 +445,7 @@ import { AppStateService, ClientEntity } from '../services/app-state.service';
                <div class="space-y-1.5">
                  <label class="text-[9px] uppercase font-black text-slate-400 tracking-widest pl-1">Cellulare / Mobile</label>
                  @if (isEditingOperator()) {
-                   <input type="text" formControlName="cellphone" class="w-full px-3 py-2 bg-slate-50/50 border border-slate-200 rounded text-sm focus:ring-2 focus:ring-indigo-500/20 outline-none font-bold text-slate-800 transition-colors" placeholder="Cellulare">
+                   <input type="text" formControlName="cellphone" class="w-full px-3 py-2 bg-slate-50/50 border border-slate-200 rounded text-base focus:ring-2 focus:ring-indigo-500/20 outline-none font-bold text-slate-800 transition-colors" placeholder="Cellulare">
                  } @else {
                    <p class="text-sm font-bold text-slate-800 bg-slate-50 border border-transparent px-3 py-2 rounded">{{ state.companyConfig().cellphone || '-' }}</p>
                  }
@@ -284,13 +454,14 @@ import { AppStateService, ClientEntity } from '../services/app-state.service';
                <div class="space-y-1.5">
                  <label class="text-[9px] uppercase font-black text-slate-400 tracking-widest pl-1">WhatsApp Business</label>
                  @if (isEditingOperator()) {
-                   <input type="text" formControlName="whatsapp" class="w-full px-3 py-2 bg-emerald-50/50 border border-emerald-200 rounded text-sm focus:ring-2 focus:ring-emerald-500/20 outline-none font-bold text-slate-800 transition-colors" placeholder="WhatsApp">
+                   <input type="text" formControlName="whatsapp" class="w-full px-3 py-2 bg-emerald-50/50 border border-emerald-200 rounded text-base focus:ring-2 focus:ring-emerald-500/20 outline-none font-bold text-slate-800 transition-colors" placeholder="WhatsApp">
                  } @else {
                    <p class="text-sm font-bold text-emerald-600 flex items-center gap-2 bg-emerald-50 border border-transparent px-3 py-2 rounded">
                      <i class="fa-brands fa-whatsapp text-lg"></i> {{ state.companyConfig().whatsapp || '-' }}
                    </p>
                  }
                </div>
+
              </form>
                           <div class="mt-8 p-4 bg-indigo-50/50 rounded-lg border border-indigo-100 flex items-start gap-3">
                 <i class="fa-solid fa-circle-info mt-0.5 text-indigo-400"></i>
@@ -314,9 +485,97 @@ import { AppStateService, ClientEntity } from '../services/app-state.service';
 export class SettingsViewComponent {
   state = inject(AppStateService);
   fb = inject(FormBuilder);
+  toast = inject(ToastService);
 
   isEditingAdmin = signal(false);
   isEditingOperator = signal(false);
+
+  showApiKey = signal(false);
+  geminiApiKeyInput = '';
+  geminiCallCount = signal(0);
+
+  geminiApiKey = computed(() => this.state.aiConfig()?.apiKey || '');
+
+  saveGeminiApiKey() {
+    this.saveGeminiConfig();
+  }
+
+  clearGeminiApiKey() {
+    const current = this.state.aiConfig() || { model: 'gemini-2.0-flash', stats: {} };
+    this.state.saveAiConfig({ ...current, apiKey: '', model: 'gemini-2.0-flash' });
+    this.geminiApiKeyInput = '';
+    this.toast.info('Configurazione Rimossa', 'La chiave API è stata rimossa dal database.');
+  }
+
+  saveGeminiConfig() {
+    const key = this.geminiApiKeyInput.trim();
+    if (key.length < 10) {
+      this.toast.error('Chiave non valida', 'La chiave API Gemini inserita sembra troppo corta.');
+      return;
+    }
+    const current = this.state.aiConfig() || { model: 'gemini-2.0-flash', stats: {} };
+    this.state.saveAiConfig({
+      ...current,
+      apiKey: key,
+      model: 'gemini-2.0-flash'
+    });
+    this.toast.success('Configurazione salvata', 'La chiave è stata cifrata e salvata nel database globale.');
+  }
+
+  setGeminiModel(model: string) {
+    const current = this.state.aiConfig() || { apiKey: '', stats: {} };
+    this.state.saveAiConfig({ ...current, model: 'gemini-2.0-flash' });
+    this.toast.success('Modello Impostato', `Modello forzato a gemini-2.0-flash`);
+  }
+
+  resetGeminiStats() {
+    const current = this.state.aiConfig() || { apiKey: '', model: 'gemini-2.0-flash' };
+    this.state.saveAiConfig({ ...current, stats: {} });
+    this.toast.info('Statistiche Resettate', 'Le statistiche di utilizzo sono state azzerate nel database.');
+  }
+  isTestingAi = signal(false);
+
+  async testAiConnection() {
+    const config = this.state.aiConfig();
+    const key = config?.apiKey;
+    const model = config?.model || 'gemini-2.0-flash';
+    if (!key) return;
+
+    this.isTestingAi.set(true);
+    try {
+      const body = {
+        contents: [{ parts: [{ text: 'Rispondi solo con la parola "OK" se mi ricevi.' }] }]
+      };
+      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+
+      if (res.ok) {
+        this.toast.success('Test Superato', 'La connessione con l\'AI è attiva e funzionante!');
+      } else {
+        const err = await res.json();
+        const msg = err.error?.message || 'Errore ignoto';
+        if (res.status === 429) {
+          this.toast.error('Limite Superato', 'Il tuo account Google ha raggiunto il limite di frequenza. Attendi o cambia chiave.');
+        } else {
+          this.toast.error('Test Fallito', msg);
+        }
+      }
+    } catch (e) {
+      this.toast.error('Errore Connessione', 'Impossibile raggiungere i server Google.');
+    } finally {
+      this.isTestingAi.set(false);
+    }
+  }
+
+  resetGeminiCounters() {
+    sessionStorage.setItem('haccp_gemini_calls', '0');
+    this.geminiCallCount.set(0);
+    this.toast.info('Contatore Azzerato', 'Il conteggio delle chiamate AI per questa sessione è stato resettato.');
+  }
+  // --- End Gemini AI Config ---
 
   adminForm: FormGroup;
   operatorForm: FormGroup;
@@ -349,8 +608,41 @@ export class SettingsViewComponent {
       cellphone: [''],
       whatsapp: [''],
       email: ['', [Validators.email]],
+      pec: ['', [Validators.email]],
       logo: [''],
       labelFormat: ['62mm']
+    });
+
+    // Reactive sync for the AI Key input
+    effect(() => {
+      const config = this.state.aiConfig();
+      if (config?.apiKey && !this.geminiApiKeyInput) {
+        this.geminiApiKeyInput = config.apiKey;
+      }
+    });
+
+    // Reactive sync for forms when data arrives from DB
+    effect(() => {
+      const adminData = this.state.adminCompany();
+      if (!this.isEditingAdmin() && adminData) {
+        this.adminForm.patchValue(adminData, { emitEvent: false });
+      }
+    });
+
+    effect(() => {
+      const operatorData = this.state.companyConfig();
+      if (!this.isEditingOperator() && operatorData) {
+        this.operatorForm.patchValue({
+          address: operatorData.address,
+          phone: operatorData.phone,
+          cellphone: operatorData.cellphone || '',
+          whatsapp: operatorData.whatsapp || '',
+          email: operatorData.email,
+          pec: operatorData.pec || '',
+          logo: operatorData.logo || '',
+          labelFormat: operatorData.labelFormat || '62mm'
+        }, { emitEvent: false });
+      }
     });
   }
 
@@ -376,7 +668,7 @@ export class SettingsViewComponent {
     if (file) {
       const maxSize = 10 * 1024 * 1024;
       if (file.size > maxSize) {
-        this.state.toastService.error('Logo troppo grande', 'L\'immagine del logo supera i 10MB.');
+        this.toast.error('Logo troppo grande', 'L\'immagine del logo supera i 10MB.');
         return;
       }
       const reader = new FileReader();
@@ -418,6 +710,7 @@ export class SettingsViewComponent {
       cellphone: config.cellphone || '',
       whatsapp: config.whatsapp || '',
       email: config.email,
+      pec: config.pec || '',
       logo: config.logo || '',
       labelFormat: config.labelFormat || '62mm'
     });
