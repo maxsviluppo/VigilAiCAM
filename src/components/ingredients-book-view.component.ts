@@ -12,49 +12,46 @@ import { ToastService } from '../services/toast.service';
     <div class="space-y-6 animate-fade-in p-2 pb-12 max-w-7xl mx-auto">
       
       <!-- Premium Hero Header -->
-      <div class="bg-white rounded-3xl p-6 md:p-8 shadow-sm border border-slate-200 flex flex-col md:flex-row items-center md:items-center justify-between gap-6 md:gap-8 relative overflow-hidden text-center md:text-left">
+      <div class="bg-white rounded-3xl p-8 shadow-sm border border-slate-200 flex flex-col md:flex-row items-start md:items-center justify-between gap-8 relative overflow-hidden">
         <div class="absolute right-0 top-0 h-full w-1/3 bg-gradient-to-l from-indigo-50/50 to-transparent pointer-events-none"></div>
         <div class="absolute -left-10 -top-10 w-40 h-40 bg-indigo-50 rounded-full blur-3xl opacity-50"></div>
         
-        <div class="flex flex-col md:flex-row items-center gap-4 md:gap-6 relative z-10">
-          <div class="h-16 w-16 bg-slate-900 text-white rounded-2xl flex items-center justify-center text-3xl shadow-xl shadow-slate-200 ring-4 ring-slate-50 shrink-0">
+        <div class="flex items-center gap-6 relative z-10">
+          <div class="h-16 w-16 bg-slate-900 text-white rounded-2xl flex items-center justify-center text-3xl shadow-xl shadow-slate-200 ring-4 ring-slate-50">
             <i class="fa-solid fa-book-open"></i>
           </div>
-          <div class="flex flex-col items-center md:items-start">
-            <h2 class="text-2xl md:text-3xl font-black text-slate-800 tracking-tight leading-tight mb-2">Libro Ingredienti</h2>
-            <div class="flex flex-wrap justify-center md:justify-start items-center gap-2 md:gap-3">
-              <span class="flex items-center gap-1.5 px-3 py-1 bg-indigo-50 text-indigo-600 rounded-full text-[9px] md:text-[10px] font-black uppercase tracking-widest border border-indigo-100">
-                <i class="fa-solid fa-utensils"></i> {{ state.filteredRecipes().length }} Ricette
+          <div>
+            <h2 class="text-3xl font-black text-slate-800 tracking-tight leading-none mb-2">Libro degli Ingredienti</h2>
+            <div class="flex items-center gap-3">
+              <span class="flex items-center gap-1.5 px-3 py-1 bg-indigo-50 text-indigo-600 rounded-full text-[10px] font-black uppercase tracking-widest border border-indigo-100">
+                <i class="fa-solid fa-utensils"></i> {{ state.filteredRecipes().length }} Ricette Archiviate
               </span>
-              <span class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">UE 1169/2011</span>
+              <span class="text-xs font-medium text-slate-300">|</span>
+              <span class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Regolamento UE 1169/2011</span>
             </div>
           </div>
         </div>
         
-        <div class="flex flex-col md:flex-row items-center gap-3 w-full md:w-auto relative z-10">
-          <div class="relative w-full md:w-64">
+        <div class="flex items-center gap-3 w-full md:w-auto relative z-10">
+          <div class="relative flex-1 md:w-64">
             <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm"></i>
-              <input type="text" [(ngModel)]="searchQuery" placeholder="Cerca piatto o ingrediente..." 
-                     class="w-full bg-slate-50 border border-slate-200 rounded-xl pl-9 pr-4 py-3 md:py-2.5 text-base font-medium focus:bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all">
+            <input type="text" [(ngModel)]="searchQuery" placeholder="Cerca piatto o ingrediente..." 
+                   class="w-full bg-slate-50 border border-slate-200 rounded-xl pl-9 pr-4 py-2.5 text-sm font-medium focus:bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all">
           </div>
-          <div class="flex gap-2 w-full md:w-auto">
-            <button (click)="printIngredientsBook()" 
-                    class="flex-1 md:flex-none h-12 md:h-11 px-4 md:px-6 bg-white border-2 border-slate-900 text-slate-900 rounded-xl font-bold text-[10px] md:text-xs uppercase tracking-widest hover:bg-slate-50 transition-all shadow-md flex items-center justify-center gap-2 active:scale-95">
-              <i class="fa-solid fa-print"></i> STAMPA
-            </button>
-            <button (click)="openAddModal()" 
-                    class="flex-1 md:flex-none h-12 md:h-11 px-4 md:px-6 bg-slate-900 text-white rounded-xl font-bold text-[10px] md:text-xs uppercase tracking-widest hover:bg-slate-800 transition-all shadow-lg flex items-center justify-center gap-2 active:scale-95">
-              <i class="fa-solid fa-plus-circle"></i> NUOVA
-            </button>
-          </div>
+          <button (click)="printIngredientsBook()" 
+                  class="h-11 px-6 bg-white border-2 border-slate-900 text-slate-900 rounded-xl font-bold text-xs uppercase tracking-widest hover:bg-slate-50 transition-all shadow-md flex items-center justify-center gap-2 active:scale-95 shrink-0">
+            <i class="fa-solid fa-print text-lg"></i> STAMPA LIBRO
+          </button>
+          <button (click)="openAddModal()" 
+                  class="h-11 px-6 bg-slate-900 text-white rounded-xl font-bold text-xs uppercase tracking-widest hover:bg-slate-800 transition-all shadow-lg flex items-center justify-center gap-2 active:scale-95 shrink-0">
+            <i class="fa-solid fa-plus-circle text-lg"></i> NUOVA SCHEDA
+          </button>
         </div>
       </div>
 
       <!-- Main Content Area -->
       <div class="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
-        
-        <!-- Desktop Table -->
-        <table class="w-full text-left border-collapse hidden md:table">
+        <table class="w-full text-left border-collapse">
           <thead>
             <tr class="bg-slate-50/50 border-b border-slate-100">
               <th class="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Piatto / Preparazione</th>
@@ -106,73 +103,20 @@ import { ToastService } from '../services/toast.service';
                   </button>
                 </td>
               </tr>
+            } @empty {
+              <tr>
+                <td colspan="4" class="px-6 py-20 text-center">
+                  <div class="w-20 h-20 bg-slate-50 rounded-3xl flex items-center justify-center mx-auto mb-4 border border-slate-100 text-slate-200">
+                    <i class="fa-solid fa-book-open text-4xl"></i>
+                  </div>
+                  <h3 class="text-lg font-bold text-slate-400 uppercase tracking-widest">Nessuna ricetta</h3>
+                  <p class="text-sm text-slate-400 mt-2">Inizia aggiungendo il primo piatto al libro degli ingredienti.</p>
+                  <button (click)="openAddModal()" class="mt-6 px-8 py-3 bg-indigo-600 text-white rounded-xl font-black text-[11px] uppercase tracking-widest hover:bg-indigo-700 transition-all shadow-lg active:scale-95">CREA ORA</button>
+                </td>
+              </tr>
             }
           </tbody>
         </table>
-
-        <!-- Mobile Cards -->
-        <div class="md:hidden divide-y divide-slate-100">
-          @for (recipe of filteredRecipes(); track recipe.id) {
-            <div class="p-6 space-y-4 bg-white animate-fade-in">
-              <div class="flex justify-between items-start">
-                <div class="flex items-center gap-4">
-                  <div class="h-12 w-12 bg-slate-900 text-white rounded-2xl flex items-center justify-center text-xl shadow-lg ring-4 ring-slate-50">
-                    <i class="fa-solid fa-plate-wheat"></i>
-                  </div>
-                  <div>
-                    <h4 class="text-base font-black text-slate-800 leading-tight">{{ recipe.name }}</h4>
-                    <span class="inline-block mt-1 px-2 py-0.5 bg-indigo-50 text-indigo-600 rounded text-[9px] font-black uppercase tracking-widest border border-indigo-100">
-                      {{ recipe.category || 'Generale' }}
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              @if (recipe.description) {
-                <p class="text-xs text-slate-500 italic leading-relaxed border-l-2 border-slate-100 pl-3">
-                  {{ recipe.description }}
-                </p>
-              }
-
-              <div class="space-y-2">
-                <p class="text-[9px] font-black text-slate-400 uppercase tracking-widest">Allergeni Presenti</p>
-                <div class="flex flex-wrap gap-1.5">
-                  @for (all of getAllergensForRecipe(recipe); track all.id) {
-                    <div class="px-2.5 py-1 rounded-lg border flex items-center gap-2 shadow-sm" [class]="all.bg + ' ' + all.active">
-                      <i [class]="'fa-solid ' + all.icon + ' text-[11px]'"></i>
-                      <span class="text-[10px] font-black uppercase">{{ all.code }}</span>
-                    </div>
-                  } @empty {
-                    <span class="text-xs font-bold text-slate-300 italic">Nessun allergene dichiarato</span>
-                  }
-                </div>
-              </div>
-
-              <div class="flex gap-2 pt-2">
-                <button (click)="printSingleRecipe(recipe)" class="flex-1 py-3 bg-white border border-slate-200 text-slate-400 rounded-xl flex items-center justify-center gap-2 text-xs font-bold hover:bg-emerald-50 hover:text-emerald-600 transition-all">
-                  <i class="fa-solid fa-print"></i> Stampa
-                </button>
-                <button (click)="openEditModal(recipe)" class="flex-1 py-3 bg-white border border-slate-200 text-slate-400 rounded-xl flex items-center justify-center gap-2 text-xs font-bold hover:bg-indigo-50 hover:text-indigo-600 transition-all">
-                  <i class="fa-solid fa-pen-to-square"></i> Modifica
-                </button>
-                <button (click)="deleteRecipe(recipe)" class="w-12 h-12 bg-rose-50 text-rose-500 rounded-xl flex items-center justify-center transition-all hover:bg-rose-100">
-                  <i class="fa-solid fa-trash-can"></i>
-                </button>
-              </div>
-            </div>
-          }
-        </div>
-
-        @if (filteredRecipes().length === 0) {
-          <div class="px-6 py-20 text-center">
-            <div class="w-20 h-20 bg-slate-50 rounded-3xl flex items-center justify-center mx-auto mb-4 border border-slate-100 text-slate-200">
-              <i class="fa-solid fa-book-open text-4xl"></i>
-            </div>
-            <h3 class="text-lg font-bold text-slate-400 uppercase tracking-widest">Nessuna ricetta</h3>
-            <p class="text-sm text-slate-400 mt-2">Inizia aggiungendo il primo piatto al libro degli ingredienti.</p>
-            <button (click)="openAddModal()" class="mt-6 px-8 py-3 bg-indigo-600 text-white rounded-xl font-black text-[11px] uppercase tracking-widest hover:bg-indigo-700 transition-all shadow-lg active:scale-95">CREA ORA</button>
-          </div>
-        }
       </div>
 
       <!-- Add/Edit Recipe Modal -->
@@ -182,14 +126,14 @@ import { ToastService } from '../services/toast.service';
           <div class="relative bg-white w-full max-w-4xl rounded-[2.5rem] shadow-2xl overflow-hidden animate-slide-up border border-slate-200 flex flex-col max-h-[90vh]">
             
             <!-- Modal Header -->
-            <div class="px-6 md:px-8 py-5 md:py-6 bg-slate-50 border-b border-slate-100 flex items-center justify-between shrink-0">
-              <div class="flex items-center gap-3 md:gap-4">
-                <div class="h-10 w-10 md:h-12 md:w-12 rounded-2xl bg-indigo-600 text-white flex items-center justify-center text-lg md:text-xl shadow-xl shadow-indigo-100">
+            <div class="px-8 py-6 bg-slate-50 border-b border-slate-100 flex items-center justify-between shrink-0">
+              <div class="flex items-center gap-4">
+                <div class="h-12 w-12 rounded-2xl bg-indigo-600 text-white flex items-center justify-center text-xl shadow-xl shadow-indigo-100">
                   <i class="fa-solid" [class.fa-plus]="!editingRecipe()" [class.fa-pen-to-square]="editingRecipe()"></i>
                 </div>
                 <div>
-                  <h3 class="text-lg md:text-xl font-black text-slate-800 tracking-tight leading-none">{{ editingRecipe() ? 'Modifica Scheda' : 'Nuova Scheda' }}</h3>
-                  <p class="text-[9px] md:text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Ingredienti & Allergeni</p>
+                  <h3 class="text-xl font-black text-slate-800 tracking-tight leading-none">{{ editingRecipe() ? 'Modifica Scheda Piatto' : 'Nuova Scheda Piatto' }}</h3>
+                  <p class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Definizione Ingredienti & Allergeni</p>
                 </div>
               </div>
               <button (click)="closeModal()" class="w-10 h-10 rounded-full bg-white border border-slate-200 text-slate-400 hover:text-rose-500 hover:border-rose-100 transition-all flex items-center justify-center">
@@ -205,14 +149,14 @@ import { ToastService } from '../services/toast.service';
               <div class="p-8 bg-gradient-to-br from-indigo-50 to-slate-50 rounded-[2.5rem] border border-indigo-100/50 mb-8 shadow-inner relative overflow-hidden">
                 <div class="absolute -right-10 -bottom-10 w-40 h-40 bg-white rounded-full blur-3xl opacity-60"></div>
                 
-                <div class="relative z-10 space-y-6 flex flex-col items-center md:items-start text-center md:text-left">
-                  <div class="flex flex-col md:flex-row items-center gap-3 mb-2">
-                    <div class="h-10 w-10 bg-indigo-600 text-white rounded-2xl flex items-center justify-center shadow-lg shadow-indigo-200 shrink-0">
+                <div class="relative z-10 space-y-6">
+                  <div class="flex items-center gap-3 mb-2">
+                    <div class="h-10 w-10 bg-indigo-600 text-white rounded-2xl flex items-center justify-center shadow-lg shadow-indigo-200">
                       <i class="fa-solid fa-magnifying-glass"></i>
                     </div>
                     <div>
-                      <h4 class="text-sm font-black text-slate-800 tracking-tight uppercase">Ricerca Rapida</h4>
-                      <p class="text-[10px] font-bold text-slate-400 uppercase tracking-widest leading-none">Oltre 320 preset professionali</p>
+                      <h4 class="text-sm font-black text-slate-800 tracking-tight uppercase">Ricerca Rapida Ricettario</h4>
+                      <p class="text-[10px] font-bold text-slate-400 uppercase tracking-widest leading-none">Trova piatti tra oltre 320 preset professionali</p>
                     </div>
                   </div>
 
@@ -226,7 +170,7 @@ import { ToastService } from '../services/toast.service';
                              [ngModel]="presetSearchQuery()" 
                              (ngModelChange)="presetSearchQuery.set($event)"
                              placeholder="Es: Carbonara, Pizza, Torta..." 
-                             class="w-full bg-white border-2 border-indigo-100 rounded-2xl px-5 py-4 text-base font-bold text-slate-700 focus:ring-8 focus:ring-indigo-500/10 focus:border-indigo-400 outline-none transition-all shadow-sm placeholder:text-slate-300">
+                             class="w-full bg-white border-2 border-indigo-100 rounded-2xl px-5 py-4 text-sm font-bold text-slate-700 focus:ring-8 focus:ring-indigo-500/10 focus:border-indigo-400 outline-none transition-all shadow-sm placeholder:text-slate-300">
                     </div>
 
                     <!-- Select Menu -->
@@ -236,7 +180,7 @@ import { ToastService } from '../services/toast.service';
                       </label>
                       <div class="relative">
                         <select (change)="loadPreset($any($event.target).value)" 
-                                class="w-full bg-white border-2 border-slate-100 rounded-2xl px-5 py-4 text-base font-bold text-slate-700 focus:ring-8 focus:ring-slate-500/5 focus:border-slate-300 outline-none transition-all shadow-sm appearance-none cursor-pointer">
+                                class="w-full bg-white border-2 border-slate-100 rounded-2xl px-5 py-4 text-sm font-bold text-slate-700 focus:ring-8 focus:ring-slate-500/5 focus:border-slate-300 outline-none transition-all shadow-sm appearance-none cursor-pointer">
                           <option value="">-- {{ filteredPresetKeys().length }} Piatti Disponibili --</option>
                           
                           <optgroup label="🥂 ANTIPASTI">
@@ -311,24 +255,24 @@ import { ToastService } from '../services/toast.service';
 
               <!-- Basic Info Section -->
               <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div class="space-y-2 flex flex-col items-center md:items-start w-full">
+                <div class="space-y-2">
                   <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Nome del Piatto</label>
-                  <div class="relative flex flex-col md:flex-row items-center gap-3 w-full">
+                  <div class="relative flex items-center gap-2">
                     <input type="text" [(ngModel)]="currentRecipe.name" placeholder="Es: Risotto ai Funghi Porcini..." 
-                           class="w-full bg-slate-50 border border-slate-200 rounded-2xl px-5 py-4 text-base font-bold text-slate-700 focus:bg-white focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none transition-all shadow-inner text-center md:text-left">
+                           class="flex-1 bg-slate-50 border border-slate-200 rounded-2xl px-5 py-3.5 text-sm font-bold text-slate-700 focus:bg-white focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none transition-all shadow-inner">
                     <button (click)="simulateAIAutocomplete()" 
                             [disabled]="isGenerating || !currentRecipe.name"
-                            class="w-full md:w-auto px-6 py-4 bg-slate-900 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-600 transition-all disabled:opacity-50 flex items-center justify-center gap-2 shrink-0 shadow-lg">
+                            class="px-6 py-3.5 bg-slate-900 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-600 transition-all disabled:opacity-50 flex items-center gap-2 shrink-0 shadow-lg">
                       <i class="fa-solid" [class.fa-wand-magic-sparkles]="!isGenerating" [class.fa-spinner]="isGenerating" [class.animate-spin]="isGenerating"></i>
-                      {{ isGenerating ? 'Analisi AI...' : 'AI Gemini' }}
+                      {{ isGenerating ? 'Analisi...' : 'AI Gemini' }}
                     </button>
                   </div>
                 </div>
 
-                <div class="space-y-2 flex flex-col items-center md:items-start w-full">
+                <div class="space-y-2">
                   <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Categoria</label>
                   <select [(ngModel)]="currentRecipe.category" 
-                          class="w-full bg-slate-50 border border-slate-200 rounded-2xl px-5 py-4 text-base font-bold text-slate-700 focus:bg-white focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none transition-all shadow-inner appearance-none cursor-pointer text-center md:text-left">
+                          class="w-full bg-slate-50 border border-slate-200 rounded-2xl px-5 py-3.5 text-sm font-bold text-slate-700 focus:bg-white focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none transition-all shadow-inner appearance-none cursor-pointer">
                     <option value="Antipasti">Antipasti</option>
                     <option value="Primi">Primi</option>
                     <option value="Secondi">Secondi</option>
@@ -360,7 +304,7 @@ import { ToastService } from '../services/toast.service';
                         </div>
                         <input type="text" [(ngModel)]="ing.name" placeholder="Ingrediente (con percentuale)..." 
                                list="common-ingredients-book"
-                               class="flex-1 bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-base font-bold text-slate-700 outline-none focus:border-indigo-400 transition-all">
+                               class="flex-1 bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-bold text-slate-700 outline-none focus:border-indigo-400 transition-all">
                         <datalist id="common-ingredients-book">
                           @for (base of state.baseIngredients(); track base) {
                             <option [value]="base"></option>
@@ -368,7 +312,7 @@ import { ToastService } from '../services/toast.service';
                         </datalist>
                         <div class="relative w-28">
                           <input type="number" [(ngModel)]="ing.percentage" (ngModelChange)="sortIngredients()"
-                                 placeholder="Q.tà" class="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-base font-bold text-slate-700 outline-none focus:border-indigo-400 transition-all pr-8">
+                                 placeholder="Q.tà" class="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-bold text-slate-700 outline-none focus:border-indigo-400 transition-all pr-8">
                           <span class="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-black text-slate-300">%</span>
                         </div>
                         <button (click)="removeIngredientRow(i)" class="w-10 h-10 rounded-xl text-slate-300 hover:text-rose-500 hover:bg-rose-50 transition-all shrink-0">
@@ -395,13 +339,13 @@ import { ToastService } from '../services/toast.service';
               <div class="space-y-2">
                 <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Note di Preparazione</label>
                 <textarea [(ngModel)]="currentRecipe.description" placeholder="Es: Cottura 12 min, abbattimento rapido..." 
-                          class="w-full bg-slate-50 border border-slate-200 rounded-2xl px-5 py-3.5 text-base font-medium text-slate-700 focus:bg-white border-indigo-500/20 outline-none transition-all shadow-inner h-24 resize-none"></textarea>
+                          class="w-full bg-slate-50 border border-slate-200 rounded-2xl px-5 py-3.5 text-sm font-medium text-slate-700 focus:bg-white border-indigo-500/20 outline-none transition-all shadow-inner h-24 resize-none"></textarea>
               </div>
             </div>
 
-            <div class="p-6 md:p-8 bg-slate-50 border-t border-slate-100 flex flex-col md:flex-row gap-3 md:gap-4 shrink-0 shadow-inner">
-              <button (click)="closeModal()" class="w-full md:flex-1 py-4 bg-white border border-slate-200 text-slate-600 rounded-3xl font-black text-[11px] uppercase tracking-widest hover:bg-slate-100 transition-all shadow-sm">Annulla</button>
-              <button (click)="saveRecipe()" class="w-full md:flex-[2] py-4 bg-slate-900 text-white rounded-3xl font-black text-[11px] uppercase tracking-widest hover:bg-slate-800 transition-all shadow-xl shadow-slate-200">CONFERMA E SALVA RICETTA</button>
+            <div class="p-8 bg-slate-50 border-t border-slate-100 flex gap-4 shrink-0 shadow-inner">
+              <button (click)="closeModal()" class="flex-1 py-4 bg-white border border-slate-200 text-slate-600 rounded-3xl font-black text-[11px] uppercase tracking-widest hover:bg-slate-100 transition-all shadow-sm">Annulla</button>
+              <button (click)="saveRecipe()" class="flex-[2] py-4 bg-slate-900 text-white rounded-3xl font-black text-[11px] uppercase tracking-widest hover:bg-slate-800 transition-all shadow-xl shadow-slate-200">CONFERMA E SALVA RICETTA</button>
             </div>
           </div>
         </div>

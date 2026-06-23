@@ -104,7 +104,7 @@ import { ToastService } from '../services/toast.service';
                                            placeholder="Es. Abbattitore celle A"
                                            (keydown.enter)="onAddCustom()"
                                            [disabled]="state.isAdmin() && !state.filterClientId()"
-                                           class="w-full pl-8 pr-3 py-2.5 border border-slate-200 rounded-lg text-base font-bold text-slate-700 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 bg-white transition-all hover:border-indigo-200 shadow-sm placeholder:font-normal disabled:bg-slate-50 disabled:cursor-not-allowed">
+                                           class="w-full pl-8 pr-3 py-2.5 border border-slate-200 rounded-lg text-sm font-bold text-slate-700 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 bg-white transition-all hover:border-indigo-200 shadow-sm placeholder:font-normal disabled:bg-slate-50 disabled:cursor-not-allowed">
                                 </div>
                                 <button (click)="onAddCustom()"
                                         [disabled]="!customName.trim() || (state.isAdmin() && !state.filterClientId())"
@@ -229,7 +229,7 @@ export class EquipmentCensusViewComponent {
     hotCount  = computed(() => this.state.groupedEquipment().filter((e: any) => e.type === 'Caldo').length);
 
     masterEquipmentList = [
-        { area: 'Cucina', items: ['Frigo', 'Congelatore', 'Piano cottura', 'Forno', 'Griglie', 'Friggitrice', 'Banchi lavori', 'Forno a legna', 'Affettatrice', 'Taglia verdure', 'Campana sottovuoto', 'Banco frigo', 'Cappa aspirante', 'Abbattitore', 'Macchina del Ghiaccio (-20°C)'] },
+        { area: 'Cucina', items: ['Frigo', 'Congelatore', 'Piano cottura', 'Forno', 'Griglie', 'Friggitrice', 'Banchi lavori', 'Forno a legna', 'Affettatrice', 'Taglia verdure', 'Campana sottovuoto', 'Banco frigo', 'Cappa aspirante', 'Abbattitore', 'Macchina del Freddo (-20°C)'] },
         { area: 'Area Lavaggio', items: ['Lavello', 'Lavastoviglie', 'Mobile pensile', 'Tavolo da lavoro'] },
         { area: 'Deposito', items: ['Cella frigorifero', 'Pozzetto congelatore'] },
         { area: 'Sala', items: ['Vetrina espositiva caldo (≥65°C)', 'Vetrina espositiva freddo (+4°C/+8°C)', 'Banco frigo espositivo'] },
@@ -243,7 +243,7 @@ export class EquipmentCensusViewComponent {
 
     getIcon(eq: any, type: string): string {
         const n = eq.name.toLowerCase();
-        if (n.includes('congelatore') || n.includes('abbattitore') || n.includes('pozzetto') || n.includes('ghiaccio')) return 'fa-icicles';
+        if (n.includes('congelatore') || n.includes('abbattitore') || n.includes('pozzetto')) return 'fa-icicles';
         if (n.includes('frigo') || n.includes('cella') || type === 'Freddo') return 'fa-snowflake';
         if (n.includes('forno') || n.includes('cottura') || n.includes('griglie') || n.includes('friggitrice') || type === 'Caldo') return 'fa-fire';
         if (n.includes('lavello') || n.includes('lavastoviglie')) return 'fa-sink';
@@ -272,7 +272,7 @@ export class EquipmentCensusViewComponent {
         if (nameLower.includes('caldo')) {
             inferredType = 'Caldo';
         } else if (nameLower.includes('frigo') || nameLower.includes('cella') || nameLower.includes('congelatore') || 
-            nameLower.includes('abbattitore') || nameLower.includes('pozzetto') || nameLower.includes('freddo') || nameLower.includes('ghiaccio')) {
+            nameLower.includes('abbattitore') || nameLower.includes('pozzetto') || nameLower.includes('freddo')) {
             inferredType = 'Freddo';
         } else if (nameLower.includes('forno') || nameLower.includes('cottura') || nameLower.includes('griglie') || 
                    nameLower.includes('friggitrice') || nameLower.includes('fuochi')) {

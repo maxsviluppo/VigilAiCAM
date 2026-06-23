@@ -158,101 +158,44 @@ interface AreaChecklist {
                         @for (area of areas(); track area.id) {
                             <div class="flex flex-col">
                                 <!-- Area Header -->
-                                <div (click)="hasAreaIssues(area.id) ? openProcedureModal(area) : toggleArea(area.id)"
-                                     class="p-5 flex flex-col gap-4 transition-all cursor-pointer select-none border-b border-slate-100 group"
-                                     [class.bg-slate-50]="area.expanded" 
-                                     [class.bg-red-50/50]="hasAreaIssues(area.id)"
-                                     [class.border-red-200]="hasAreaIssues(area.id)">
-                                    
-                                    <!-- Row 1: Info & Title -->
-                                    <div class="flex items-center justify-between">
-                                        <div class="flex items-center gap-3">
-                                            <div class="h-12 w-12 rounded-2xl flex items-center justify-center text-xl transition-all border shadow-sm"
-                                                 [class.bg-red-500]="hasAreaIssues(area.id)" [class.text-white]="hasAreaIssues(area.id)" [class.border-red-600]="hasAreaIssues(area.id)"
-                                                 [class.bg-purple-600]="isAreaComplete(area.id) && !hasAreaIssues(area.id)" [class.text-white]="isAreaComplete(area.id) && !hasAreaIssues(area.id)" [class.border-purple-700]="isAreaComplete(area.id) && !hasAreaIssues(area.id)"
-                                                 [class.bg-white]="!isAreaComplete(area.id)" [class.text-slate-400]="!isAreaComplete(area.id)" [class.border-slate-200]="!isAreaComplete(area.id)">
-                                                <i [class]="'fa-solid ' + (hasAreaIssues(area.id) ? 'fa-triangle-exclamation' : area.icon)"></i>
-                                            </div>
-                                            <div>
-                                                <h3 class="font-black text-slate-800 text-lg leading-tight uppercase tracking-tight"
-                                                    [class.text-red-800]="hasAreaIssues(area.id)">{{ area.label }}</h3>
-                                                <div class="flex items-center gap-2 mt-1">
-                                                    <span class="text-[9px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded"
-                                                          [class.bg-emerald-100]="isAreaComplete(area.id) && !hasAreaIssues(area.id)" [class.text-emerald-700]="isAreaComplete(area.id) && !hasAreaIssues(area.id)"
-                                                          [class.bg-red-100]="hasAreaIssues(area.id)" [class.text-red-700]="hasAreaIssues(area.id)"
-                                                          [class.bg-slate-100]="!isAreaComplete(area.id)" [class.text-slate-500]="!isAreaComplete(area.id)">
-                                                        {{ getAreaStatusLabel(area.id) }}
-                                                    </span>
-                                                    @if (!hasAreaIssues(area.id)) {
-                                                        <span class="text-[9px] font-bold text-slate-300 uppercase tracking-tighter">
-                                                            {{ area.expanded ? 'Chiudi' : 'Dettagli' }} <i class="fa-solid" [class.fa-chevron-up]="area.expanded" [class.fa-chevron-down]="!area.expanded"></i>
-                                                        </span>
-                                                    }
-                                                </div>
+                                <div class="px-4 py-3 flex items-center justify-between transition-colors cursor-pointer select-none border-b border-transparent"
+                                     [class.bg-slate-100]="area.expanded" [class.hover:bg-slate-50]="!area.expanded"
+                                     (click)="toggleArea(area.id)">
+                                    <div class="flex items-center gap-3 flex-1">
+                                        <div class="h-8 w-8 rounded flex items-center justify-center text-base transition-colors border"
+                                             [class.bg-purple-50]="isAreaComplete(area.id)" [class.text-purple-600]="isAreaComplete(area.id)" [class.border-purple-200]="isAreaComplete(area.id)"
+                                             [class.bg-white]="!isAreaComplete(area.id)" [class.text-slate-400]="!isAreaComplete(area.id)" [class.border-slate-200]="!isAreaComplete(area.id)">
+                                            <i [class]="'fa-solid ' + area.icon"></i>
+                                        </div>
+                                        <div>
+                                            <h3 class="font-bold text-slate-700 text-lg leading-tight">{{ area.label }}</h3>
+                                            <div class="flex items-center mt-0.5">
+                                                <span class="text-[10px] font-black uppercase tracking-widest"
+                                                      [class.text-emerald-500]="isAreaComplete(area.id) && !hasAreaIssues(area.id)" 
+                                                      [class.text-red-500]="hasAreaIssues(area.id)"
+                                                      [class.text-slate-400]="!isAreaComplete(area.id)">
+                                                    {{ getAreaStatusLabel(area.id) }}
+                                                </span>
                                             </div>
                                         </div>
-
-                                        @if (hasAreaIssues(area.id)) {
-                                            <div class="h-10 w-10 rounded-full bg-red-100 text-red-600 flex items-center justify-center animate-pulse border border-red-200">
-                                                <i class="fa-solid fa-hand-pointer"></i>
-                                            </div>
-                                        }
                                     </div>
-
-                                    <!-- Row 2: Large Touch-Friendly Buttons -->
-                                    <div class="flex items-center gap-3 w-full">
-                                        <!-- OK BUTTON -->
+                                    
+                                    <div class="flex items-center gap-3 shrink-0">
                                         <button (click)="setAllStepsInArea(area.id, 'ok'); $event.stopPropagation()" 
                                                 [disabled]="isSubmitted() || !state.isContextEditable()"
-                                                class="flex-1 h-16 rounded-2xl border-2 transition-all flex items-center justify-center gap-3 shadow-md active:scale-95 disabled:opacity-30"
-                                                [class.border-emerald-500]="isAreaComplete(area.id) && !hasAreaIssues(area.id)"
-                                                [class.bg-emerald-500]="isAreaComplete(area.id) && !hasAreaIssues(area.id)"
-                                                [class.text-white]="isAreaComplete(area.id) && !hasAreaIssues(area.id)"
-                                                [class.border-slate-200]="!isAreaComplete(area.id) || hasAreaIssues(area.id)"
-                                                [class.bg-white]="!isAreaComplete(area.id) || hasAreaIssues(area.id)"
-                                                [class.text-slate-400]="!isAreaComplete(area.id) || hasAreaIssues(area.id)">
-                                            <i class="fa-solid fa-circle-check text-2xl"></i>
-                                            <span class="text-xs font-black uppercase tracking-widest">CONFORME</span>
+                                                class="h-7 w-7 rounded bg-emerald-50 text-emerald-500 hover:bg-emerald-100 transition-colors flex items-center justify-center border border-emerald-100 disabled:opacity-30" title="Imposta tutti conformi">
+                                            <i class="fa-solid fa-check-double text-xs"></i>
                                         </button>
-
-                                        <!-- NO BUTTON -->
-                                        <button (click)="setAreaIssue(area.id); $event.stopPropagation()" 
-                                                [disabled]="isSubmitted() || !state.isContextEditable()"
-                                                class="flex-1 h-16 rounded-2xl border-2 transition-all flex items-center justify-center gap-3 shadow-md active:scale-95 disabled:opacity-30"
-                                                [class.border-red-500]="hasAreaIssues(area.id)"
-                                                [class.bg-red-500]="hasAreaIssues(area.id)"
-                                                [class.text-white]="hasAreaIssues(area.id)"
-                                                [class.border-slate-200]="!hasAreaIssues(area.id)"
-                                                [class.bg-white]="!hasAreaIssues(area.id)"
-                                                [class.text-slate-400]="!hasAreaIssues(area.id)">
-                                            <i class="fa-solid fa-circle-exclamation text-2xl"></i>
-                                            <span class="text-xs font-black uppercase tracking-widest">ANOMALIA</span>
-                                        </button>
+                                        <i class="fa-solid fa-chevron-down text-slate-400 text-base transition-transform duration-300" [class.rotate-180]="area.expanded"></i>
                                     </div>
-
-                                    <!-- NON-CONFORMITY SUMMARY (Only if issues) -->
-                                    @if (hasAreaIssues(area.id)) {
-                                        <div class="p-4 bg-white/60 rounded-xl border border-red-100 space-y-1">
-                                            @for (step of getIssueSteps(area.id); track step.id) {
-                                                <p class="text-[11px] font-bold text-red-600 flex items-center gap-2">
-                                                    <i class="fa-solid fa-circle text-[4px]"></i>
-                                                    {{ step.label }}
-                                                </p>
-                                            }
-                                            <p class="text-[10px] font-black text-red-400 mt-2 uppercase tracking-tight italic">
-                                                <i class="fa-solid fa-circle-info mr-1"></i> Clicca il banner per i dettagli
-                                            </p>
-                                        </div>
-                                    }
                                 </div>
                     <!-- Steps Content (Expanded) -->
                     @if (area.expanded) {
                         <div class="bg-slate-50 border-t border-slate-200/60 px-4 py-2 divide-y divide-slate-200/50 select-none animate-slide-down shadow-inner">
                             @for (step of area.steps; track step.id; let i = $index) {
-                                <div class="py-2.5 px-3 flex items-center justify-between gap-3 group/step cursor-pointer hover:bg-white rounded-xl transition-all border border-transparent hover:border-slate-100"
-                                     (click)="step.status === 'issue' ? openProcedureModal(area) : toggleStepStatus(area.id, step.id)">
+                                <div class="py-2.5 flex items-center justify-between gap-3 group/step">
                                     <div class="flex items-center gap-3 flex-1">
-                                        <span class="text-[11px] font-black text-slate-400 w-5 h-5 rounded bg-white flex items-center justify-center border border-slate-200 shrink-0 leading-none group-hover/step:border-purple-200 group-hover/step:text-purple-400 transition-colors">
+                                        <span class="text-[11px] font-black text-slate-400 w-5 h-5 rounded bg-white flex items-center justify-center border border-slate-200 shrink-0 leading-none">
                                             {{ i + 1 }}
                                         </span>
                                         <span class="text-sm font-bold text-slate-600 leading-tight transition-colors"
@@ -262,14 +205,19 @@ interface AreaChecklist {
                                         </span>
                                     </div>
                                     <div class="flex gap-2 shrink-0">
-                                        <div class="flex items-center gap-2">
-                                            <span class="text-[10px] font-black uppercase tracking-widest px-1"
-                                                  [class.text-emerald-500]="step.status === 'ok'"
-                                                  [class.text-red-500]="step.status === 'issue'"
-                                                  [class.text-slate-300]="step.status === 'pending'">
-                                                {{ step.status === 'ok' ? 'Conforme' : (step.status === 'issue' ? 'Anomalia' : 'In attesa') }}
-                                            </span>
-                                        </div>
+                                        @if (step.status === 'pending') {
+                                            <button (click)="setStepStatus(area.id, step.id, 'ok')" [disabled]="isSubmitted() || !state.isContextEditable()" class="w-7 h-7 rounded border border-emerald-200 text-emerald-500 hover:bg-emerald-50 transition-colors flex items-center justify-center bg-white disabled:opacity-30"><i class="fa-solid fa-check text-xs"></i></button>
+                                            <button (click)="setStepStatus(area.id, step.id, 'issue')" [disabled]="isSubmitted() || !state.isContextEditable()" class="w-7 h-7 rounded border border-red-200 text-red-500 hover:bg-red-50 transition-colors flex items-center justify-center bg-white disabled:opacity-30"><i class="fa-solid fa-triangle-exclamation text-xs"></i></button>
+                                        } @else {
+                                            <div class="flex items-center gap-2">
+                                                <span class="text-[10px] font-black uppercase tracking-widest px-1"
+                                                      [class.text-emerald-500]="step.status === 'ok'"
+                                                      [class.text-red-500]="step.status === 'issue'">
+                                                    {{ step.status === 'ok' ? 'Conforme' : 'Anomalia' }}
+                                                </span>
+                                                <button (click)="setStepStatus(area.id, step.id, 'pending')" [disabled]="isSubmitted() || !state.isContextEditable()" class="w-7 h-7 rounded bg-white border border-slate-200 text-slate-500 hover:bg-slate-100 transition-colors flex items-center justify-center disabled:opacity-30"><i class="fa-solid fa-rotate-left text-[11px]"></i></button>
+                                            </div>
+                                        }
                                     </div>
                                 </div>
                             }
@@ -283,54 +231,35 @@ interface AreaChecklist {
         </div>
 
         <!-- Footer Actions -->
-        <!-- Bottom Utility Actions (Discrete) -->
-        <div class="mt-8 mb-20 px-6 flex flex-col items-center gap-6">
-            <div class="h-px w-24 bg-slate-200"></div>
-            
-            <div class="flex items-center gap-4 w-full max-w-xs">
-                <button (click)="printReport()" 
-                        class="flex-1 h-12 rounded-2xl text-slate-500 bg-white border border-slate-200 hover:bg-slate-50 flex items-center justify-center gap-2 transition-all font-black text-[10px] uppercase tracking-widest shadow-sm">
-                    <i class="fa-solid fa-print text-sm"></i> Stampa
+        <div class="fixed bottom-6 right-6 z-50">
+            @if (!isSubmitted()) {
+                <button (click)="submitChecklist()" [disabled]="!isAllCompleted() || !state.isContextEditable()"
+                        class="h-12 px-6 bg-slate-900 border border-slate-800 text-white rounded-lg font-bold text-xs uppercase tracking-widest transition-all shadow-lg flex items-center gap-3 disabled:opacity-50 hover:bg-slate-800 hover:shadow-xl group">
+                    <span>REGISTRA POST-OPERATIVA</span>
+                    <div class="w-px h-4 bg-white/20"></div>
+                    <i class="fa-solid fa-check-double group-hover:-translate-y-0.5 transition-transform text-pink-400"></i>
                 </button>
-                <button (click)="isResetModalOpen.set(true)" 
-                        class="flex-1 h-12 rounded-2xl text-rose-500 bg-white border border-rose-100 hover:bg-rose-50 flex items-center justify-center gap-2 transition-all font-black text-[10px] uppercase tracking-widest shadow-sm">
-                    <i class="fa-solid fa-rotate-left text-sm"></i> Reset
-                </button>
-            </div>
-            
-            <p class="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] animate-pulse">
-                <i class="fa-solid fa-cloud-check text-emerald-400 mr-1"></i> Salvataggio Automatico Attivo
-            </p>
+            } @else {
+                <div class="bg-white p-2 rounded-xl shadow-xl flex items-center gap-2 border border-slate-200 animate-slide-up">
+                    <div class="px-4 py-2 border rounded-lg flex items-center gap-2"
+                         [class.bg-emerald-50]="!hasIssues()" [class.border-emerald-100]="!hasIssues()" [class.text-emerald-600]="!hasIssues()"
+                         [class.bg-red-50]="hasIssues()" [class.border-red-100]="hasIssues()" [class.text-red-600]="hasIssues()">
+                        <i class="fa-solid" [class.fa-check]="!hasIssues()" [class.fa-triangle-exclamation]="hasIssues()"></i>
+                        <span class="font-bold text-xs uppercase tracking-widest">{{ hasIssues() ? 'NON CONFORME' : 'REGISTRATO' }}</span>
+                    </div>
+                    <div class="flex items-center gap-1.5 px-2">
+                        <button (click)="printReport()" class="h-8 w-8 rounded text-slate-500 bg-slate-50 hover:bg-slate-100 border border-slate-200 hover:text-pink-600 flex items-center justify-center transition-colors" title="Stampa"><i class="fa-solid fa-print text-base"></i></button>
+                        <button *ngIf="state.isContextEditable()" (click)="isSubmitted.set(false)" class="h-8 w-8 rounded text-slate-500 bg-slate-50 hover:bg-slate-100 border border-slate-200 hover:text-amber-600 flex items-center justify-center transition-colors" title="Modifica"><i class="fa-solid fa-pen-to-square text-base"></i></button>
+                        <button (click)="sendEmail()" class="h-8 w-8 rounded text-slate-500 bg-slate-50 hover:bg-slate-100 border border-slate-200 hover:text-pink-600 flex items-center justify-center transition-colors" title="Invia Email"><i class="fa-solid fa-envelope text-base"></i></button>
+                        <button (click)="sendInternalMessage()" class="h-8 w-8 rounded text-slate-500 bg-slate-50 hover:bg-slate-100 border border-slate-200 hover:text-pink-600 flex items-center justify-center transition-colors" title="Chat Interna"><i class="fa-solid fa-comments text-base"></i></button>
+                    </div>
+                    <div class="w-px h-6 bg-slate-200"></div>
+                    <button (click)="startNewChecklist()" class="h-8 px-4 rounded bg-pink-50 border border-pink-100 text-pink-600 hover:bg-pink-600 hover:text-white flex items-center gap-2 font-bold text-xs uppercase tracking-widest transition-colors">
+                        <i class="fa-solid fa-plus text-base"></i> NUOVA
+                    </button>
+                </div>
+            }
         </div>
-
-        <!-- RESET CONFIRMATION MODAL -->
-        @if (isResetModalOpen()) {
-           <div class="fixed inset-0 z-[150] flex items-center justify-center p-4">
-              <div class="absolute inset-0 bg-slate-900/60 backdrop-blur-sm animate-fade-in" (click)="isResetModalOpen.set(false)"></div>
-              <div class="relative w-full max-w-sm bg-white rounded-[32px] shadow-2xl overflow-hidden animate-slide-up border border-slate-200">
-                 <div class="p-8 text-center">
-                    <div class="w-16 h-16 rounded-2xl bg-rose-50 text-rose-500 flex items-center justify-center mx-auto mb-4 border border-rose-100 shadow-sm">
-                       <i class="fa-solid fa-triangle-exclamation text-3xl"></i>
-                    </div>
-                    <h3 class="text-xl font-black text-slate-800 mb-2">Reset Post-Op?</h3>
-                    <p class="text-xs font-bold text-slate-500 leading-relaxed mb-8">
-                       Questa azione cancellerà tutti i dati inseriti nella fase post-operativa attuale. L'operazione non è reversibile.
-                    </p>
-                    
-                    <div class="flex flex-col gap-3">
-                       <button (click)="confirmReset()" 
-                               class="w-full py-4 bg-rose-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-lg shadow-rose-200 active:scale-95 transition-all">
-                          SÌ, RESETTA TUTTO
-                       </button>
-                       <button (click)="isResetModalOpen.set(false)" 
-                               class="w-full py-4 bg-slate-50 text-slate-500 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-slate-100 transition-all">
-                          ANNULLA
-                       </button>
-                    </div>
-                 </div>
-              </div>
-           </div>
-        }
 
         <!-- ANOMALY REPORTING MODAL -->
         @if (isAnomalyModalOpen()) {
@@ -367,7 +296,6 @@ interface AreaChecklist {
                         <div class="space-y-2">
                             <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Dettaglio Anomalia / Azione Correttiva</label>
                             <textarea #anomalyText
-                                      [value]="anomalySubject"
                                       placeholder="Descrivi l'anomalia riscontrata e l'eventuale azione correttiva immediata intrapresa..."
                                       class="w-full h-32 px-4 py-3 rounded-2xl border border-slate-200 focus:ring-4 focus:ring-red-500/10 focus:border-red-500 outline-none text-base font-medium text-slate-700 transition-all shadow-sm bg-white resize-none"></textarea>
                         </div>
@@ -386,89 +314,6 @@ interface AreaChecklist {
                 </div>
             </div>
         }
-
-        <!-- PROCEDURE MODAL (Procedimento Correttivo) -->
-        @if (isProcedureModalOpen()) {
-            <div class="fixed inset-0 z-[130] flex items-center justify-center p-4">
-                <div class="absolute inset-0 bg-slate-900/60 backdrop-blur-md animate-fade-in" (click)="closeProcedureModal()"></div>
-                <div class="relative bg-white w-full max-w-lg rounded-[40px] shadow-2xl overflow-hidden animate-slide-up border border-slate-200 flex flex-col">
-                    
-                    <!-- Header -->
-                    <div class="p-8 bg-gradient-to-br from-red-600 to-rose-700 text-white flex-shrink-0">
-                        <div class="flex items-center gap-5">
-                            <div class="h-14 w-14 rounded-2xl bg-white/20 backdrop-blur-md flex items-center justify-center text-2xl shadow-lg border border-white/30">
-                                <i class="fa-solid fa-hand-holding-medical"></i>
-                            </div>
-                            <div>
-                                <h3 class="text-2xl font-black tracking-tight">Procedimento Correttivo</h3>
-                                <p class="text-rose-100 text-[10px] font-black uppercase tracking-widest opacity-80">Azione richiesta per ripristinare la conformità</p>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="p-8 space-y-6 overflow-y-auto max-h-[60vh] custom-scrollbar">
-                        <div class="p-5 bg-red-50 rounded-3xl border border-red-100">
-                            <h4 class="text-[10px] font-black text-red-500 uppercase tracking-widest mb-2 flex items-center gap-2">
-                                <i class="fa-solid fa-triangle-exclamation"></i> Area Interessata
-                            </h4>
-                            <p class="text-xl font-bold text-slate-800 leading-tight">
-                                {{ selectedProcedureArea()?.label }}
-                            </p>
-                            <div class="mt-3 flex flex-wrap gap-2">
-                                @for (step of getIssueSteps(selectedProcedureArea()?.id || ''); track step.id) {
-                                    <span class="px-2 py-1 bg-white border border-red-200 text-red-700 text-[10px] font-bold rounded-lg uppercase shadow-xs">
-                                        {{ step.label }}
-                                    </span>
-                                }
-                            </div>
-                        </div>
-
-                        <div class="space-y-4">
-                            <h4 class="text-xs font-black text-slate-400 uppercase tracking-widest px-1">Protocollo di Intervanto</h4>
-                            
-                            <div class="space-y-3">
-                                @for (step of getAreaProcedures(selectedProcedureArea()?.id || ''); track $index) {
-                                    <div class="flex gap-4 p-4 bg-slate-50 rounded-2xl border border-slate-100 transition-all hover:bg-white hover:border-red-200 group">
-                                        <div class="h-8 w-8 rounded-xl bg-white border border-slate-200 text-slate-400 flex items-center justify-center shrink-0 font-black text-xs shadow-sm group-hover:bg-red-600 group-hover:text-white group-hover:border-red-600 transition-all">
-                                            {{ $index + 1 }}
-                                        </div>
-                                        <p class="text-sm font-bold text-slate-600 leading-relaxed group-hover:text-slate-800 transition-colors">
-                                            {{ step }}
-                                        </p>
-                                    </div>
-                                } @empty {
-                                    <div class="p-6 text-center bg-slate-50 rounded-2xl border border-dashed border-slate-200">
-                                        <p class="text-xs font-bold text-slate-400 uppercase tracking-widest">Procedura standard non definita</p>
-                                        <p class="text-[10px] text-slate-400 mt-1 italic">Contattare il responsabile HACCP per indicazioni specifiche.</p>
-                                    </div>
-                                }
-                            </div>
-                        </div>
-
-                        <div class="p-5 bg-blue-50 rounded-3xl border border-blue-100">
-                            <div class="flex gap-3">
-                                <i class="fa-solid fa-circle-info text-blue-500 mt-0.5"></i>
-                                <p class="text-xs text-blue-800 leading-relaxed">
-                                    <b>Nota:</b> Dopo aver eseguito le azioni sopra indicate, è obbligatorio verificare nuovamente l'area e, se conforme, aggiornare lo stato del registro.
-                                </p>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="p-8 pt-0 flex gap-4">
-                        <button (click)="closeProcedureModal()"
-                                class="flex-1 py-4 bg-slate-50 text-slate-500 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-slate-100 transition-all border border-slate-200">
-                            Chiudi
-                        </button>
-                        <button (click)="resolveAreaIssues(selectedProcedureArea()?.id || '')"
-                                class="flex-[1.5] py-4 bg-emerald-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-emerald-700 transition-all shadow-xl shadow-emerald-200 active:scale-95">
-                            Risolto e Conforme
-                        </button>
-                    </div>
-                </div>
-            </div>
-        }
-
 
     </div>
     `,
@@ -509,43 +354,12 @@ export class PostOperationalChecklistComponent {
 
     areas = signal<AreaChecklist[]>([]);
 
-    isResetModalOpen = signal(false);
     isSubmitted = signal(false);
     currentRecordId = signal<string | null>(null);
 
     // Anomaly Modal State
     isAnomalyModalOpen = signal(false);
     currentAnomalyStep = signal<{areaId: string, id: string, label: string} | null>(null);
-    selectedAreaForIssue = signal<string | null>(null);
-    anomalySubject = '';
-
-    // Procedure Modal State
-    isProcedureModalOpen = signal(false);
-    selectedProcedureArea = signal<AreaChecklist | null>(null);
-
-    private readonly AREA_PROCEDURES: Record<string, string[]> = {
-        'cucina-sala': [
-            'Rimuovere i rifiuti e i residui alimentari.',
-            'Procedere con la detersione profonda di tutte le superfici.',
-            'Sanificare con prodotto a base di cloro lasciando agire per 5 minuti.',
-            'Asciugare con carta a perdere.'
-        ],
-        'area-lavaggio': [
-            'Disincrostare i lavelli e le rubinetterie.',
-            'Pulire i filtri delle macchine lavastoviglie.',
-            'Sanificare le zone circostanti e i piani di scarico.'
-        ],
-        'pavimenti': [
-            'Eseguire spazzamento ad umido o aspirazione.',
-            'Lavare con detergente sgrassante ed igienizzante.',
-            'Verificare l\'assenza di ristagni d\'acqua.'
-        ],
-        'bagno-personale': [
-            'Pulire e sanificare i sanitari.',
-            'Ripristinare sapone e asciugamani monouso.',
-            'Sanificare maniglie e interruttori.'
-        ]
-    };
 
     getInitialSteps(areaId: string): StepStatus[] {
         const isEquipment = areaId.startsWith('eq-');
@@ -567,10 +381,9 @@ export class PostOperationalChecklistComponent {
 
     constructor() {
         effect(() => {
+            // Re-load data when global filters change or equipment changes
             this.state.filterDate();
-            this.state.filterCollaboratorId(); // Reload when selected collaborator changes
-            this.state.selectedEquipment(); // Re-run when equipment changes
-            this.state.initialSyncDone(); // Depend on initial sync done status
+            this.state.selectedEquipment(); // re-run when equipment changes
             untracked(() => this.loadData());
         }, { allowSignalWrites: true });
     }
@@ -683,15 +496,30 @@ export class PostOperationalChecklistComponent {
         this.areas.update(areas => areas.map(a => a.id === id ? { ...a, expanded: !a.expanded } : a));
     }
 
+    setStepStatus(areaId: string, stepId: string, status: 'pending' | 'ok' | 'issue') {
+        if (!this.state.isContextEditable()) return;
 
-    setAreaIssue(areaId: string) {
+        if (status === 'issue') {
+            const area = this.areas().find(a => a.id === areaId);
+            const step = area?.steps.find(s => s.id === stepId);
+            if (step) {
+                this.currentAnomalyStep.set({ areaId, id: stepId, label: step.label });
+                this.isAnomalyModalOpen.set(true);
+            }
+            return;
+        }
 
-        const area = this.areas().find(a => a.id === areaId);
-        if (!area) return;
+        this.areas.update(areas => areas.map(a => {
+            if (a.id === areaId) {
+                return {
+                    ...a,
+                    steps: a.steps.map(s => s.id === stepId ? { ...s, status, note: undefined } : s)
+                };
+            }
+            return a;
+        }));
 
-        this.selectedAreaForIssue.set(areaId);
-        this.anomalySubject = `Anomalia riscontrata in: ${area.label}`;
-        this.isAnomalyModalOpen.set(true);
+        this.autoSave();
     }
 
     private autoSaveTimeout: any;
@@ -701,8 +529,7 @@ export class PostOperationalChecklistComponent {
             this.state.saveRecord('post-op-checklist', {
                 areas: this.areas(),
                 totalSteps: this.totalStepsCount(),
-                completedSteps: this.completedStepsCount(),
-                status: this.isSubmitted() ? (this.hasIssues() ? 'Non Conforme' : 'Conforme') : undefined
+                completedSteps: this.completedStepsCount()
             });
         }, 2000);
     }
@@ -725,56 +552,13 @@ export class PostOperationalChecklistComponent {
         this.state.saveRecord('post-op-checklist', {
             areas: this.areas(),
             totalSteps: this.totalStepsCount(),
-            completedSteps: this.completedStepsCount(),
-            status: this.isSubmitted() ? (this.hasIssues() ? 'Non Conforme' : 'Conforme') : undefined
+            completedSteps: this.completedStepsCount()
         });
 
         // Show feedback
         const area = this.areas().find(a => a.id === areaId);
         const statusLabel = status === 'ok' ? 'Conforme' : 'Non Conforme';
         this.toast.success('Area Aggiornata', `Tutti i controlli di "${area?.label}" sono stati segnati come ${statusLabel}.`);
-    }
-
-    toggleStepStatus(areaId: string, stepId: string) {
-        if (this.isSubmitted() || !this.state.isContextEditable()) return;
-        
-        const area = this.areas().find(a => a.id === areaId);
-        const step = area?.steps.find(s => s.id === stepId);
-        
-        if (!step) return;
-
-        if (step.status === 'ok') {
-            this.setStepStatus(areaId, stepId, 'issue');
-        } else {
-            this.setStepStatus(areaId, stepId, 'ok');
-        }
-    }
-
-    setStepStatus(areaId: string, stepId: string, status: 'pending' | 'ok' | 'issue') {
-        const area = this.areas().find(a => a.id === areaId);
-        const step = area?.steps.find(s => s.id === stepId);
-        
-        if (status === 'issue' && step) {
-            this.currentAnomalyStep.set({ areaId, id: stepId, label: step.label });
-            this.selectedAreaForIssue.set(null);
-            this.anomalySubject = `Anomalia riscontrata in: ${step.label}`;
-            this.isAnomalyModalOpen.set(true);
-            return;
-        }
-
-        this.areas.update(areas => areas.map(a => {
-            if (a.id === areaId) {
-                return { ...a, steps: a.steps.map(s => s.id === stepId ? { ...s, status } : s) };
-            }
-            return a;
-        }));
-
-        this.state.saveRecord('post-op-checklist', {
-            areas: this.areas(),
-            totalSteps: this.totalStepsCount(),
-            completedSteps: this.completedStepsCount(),
-            status: this.isSubmitted() ? (this.hasIssues() ? 'Non Conforme' : 'Conforme') : undefined
-        });
     }
 
     isAreaComplete(areaId: string): boolean {
@@ -814,44 +598,6 @@ export class PostOperationalChecklistComponent {
         const area = this.areas().find(a => a.id === areaId);
         const hasIssue = area?.steps.some(s => s.status === 'issue');
         return hasIssue ? 'Rilevate Anomalie' : 'Conforme';
-    }
-
-    getIssueSteps(areaId: string) {
-        const area = this.areas().find(a => a.id === areaId);
-        return area?.steps.filter(s => s.status === 'issue') || [];
-    }
-
-    getAreaProcedures(areaId: string): string[] {
-        if (areaId.startsWith('eq-')) {
-            return [
-                'Pulire le superfici esterne ed interne dell\'attrezzatura.',
-                'Sanificare le guarnizioni e le maniglie.',
-                'Verificare il corretto svuotamento di eventuali vaschette di condensa.',
-                'Segnalare eventuali anomalie meccaniche.'
-            ];
-        }
-        return this.AREA_PROCEDURES[areaId] || [
-            'Eseguire una pulizia straordinaria dell\'elemento non conforme.',
-            'Applicare il protocollo di sanificazione specifico.',
-            'Verificare visivamente il risultato.',
-            'Documentare l\'azione nel registro di monitoraggio.'
-        ];
-    }
-
-    openProcedureModal(area: AreaChecklist) {
-        this.selectedProcedureArea.set(area);
-        this.isProcedureModalOpen.set(true);
-    }
-
-    closeProcedureModal() {
-        this.isProcedureModalOpen.set(false);
-        this.selectedProcedureArea.set(null);
-    }
-
-    resolveAreaIssues(areaId: string) {
-        this.setAllStepsInArea(areaId, 'ok');
-        this.closeProcedureModal();
-        this.toast.success('Problemi Risolti', 'L\'area è stata ripristinata e segnata come conforme.');
     }
 
     totalStepsCount() {
@@ -930,12 +676,6 @@ export class PostOperationalChecklistComponent {
         })));
     }
 
-    confirmReset() {
-        this.resetForm();
-        this.isResetModalOpen.set(false);
-        this.toast.info('Scheda Resettata', 'I dati post-operativi sono stati azzerati.');
-    }
-
     setAllOk() {
         this.areas.update(areas => areas.map(area => ({
             ...area,
@@ -979,67 +719,27 @@ export class PostOperationalChecklistComponent {
     closeAnomalyModal() {
         this.isAnomalyModalOpen.set(false);
         this.currentAnomalyStep.set(null);
-        this.selectedAreaForIssue.set(null);
     }
 
     confirmAnomaly(note: string) {
         const anomaly = this.currentAnomalyStep();
-        const areaId = this.selectedAreaForIssue();
-        
-        if (areaId) {
-            // Whole area issue
-            this.areas.update(areas => areas.map(a => {
-                if (a.id === areaId) {
-                    return {
-                        ...a,
-                        steps: a.steps.map(s => ({ ...s, status: 'issue', note: note || 'Anomalia area' }))
-                    };
-                }
-                return a;
-            }));
-        } else if (anomaly) {
-            // Single step issue
-            this.areas.update(areas => areas.map(a => {
-                if (a.id === anomaly.areaId) {
-                    return {
-                        ...a,
-                        steps: a.steps.map(s => s.id === anomaly.id ? { ...s, status: 'issue', note } : s)
-                    };
-                }
-                return a;
-            }));
-        } else return;
+        if (!anomaly) return;
+
+        this.areas.update(areas => areas.map(a => {
+            if (a.id === anomaly.areaId) {
+                return {
+                    ...a,
+                    steps: a.steps.map(s => s.id === anomaly.id ? { ...s, status: 'issue', note } : s)
+                };
+            }
+            return a;
+        }));
 
         this.state.saveRecord('post-op-checklist', {
             areas: this.areas(),
             totalSteps: this.totalStepsCount(),
-            completedSteps: this.completedStepsCount(),
-            status: this.isSubmitted() ? (this.hasIssues() ? 'Non Conforme' : 'Conforme') : undefined
+            completedSteps: this.completedStepsCount()
         });
-
-        // Persistent record
-        const area = this.areas().find(a => a.id === (areaId || anomaly?.areaId));
-        const areaName = area ? area.label : 'Generale';
-        const itemName = areaId ? areaName : (anomaly?.label || areaName);
-        const operatorName = this.state.currentUser()?.name || 'Operatore';
-        const currentDate = new Date().toLocaleDateString();
-
-        // Persistent non-conformity record
-        this.state.saveNonConformity({
-            id: Math.random().toString(36).substring(2, 9),
-            moduleId: 'post-op-checklist',
-            date: this.state.filterDate(),
-            description: `[POST-OP] ${areaName}${anomaly ? ' -> ' + anomaly.label : ''}: ${note || 'Anomalia rilevata'}`,
-            itemName: itemName
-        });
-
-        // Notifica chat all'amministrazione con dettagli strutturati
-        this.state.sendMessage(
-            `🚨 ANOMALIA POST-OPERATIVA: ${itemName}`,
-            `⚠ SEGNALAZIONE NON CONFORMITÀ ⚠\n\nFASE: Post-operativa (Fine Servizio)\nAREA: ${areaName}\nELEMENTO: ${itemName}\nOPERATORE: ${operatorName}\nDATA: ${currentDate}\n\nNOTE OPERATORE:\n${note || 'Nessuna specifica'}`,
-            'SINGLE',
-            'ADMIN_OFFICE'
-        );
 
         this.closeAnomalyModal();
     }

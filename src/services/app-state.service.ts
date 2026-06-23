@@ -28,7 +28,6 @@ export interface ClientEntity {
   cellphone?: string;
   whatsapp?: string;
   email: string;
-  pec?: string;
   licenseNumber: string;
   suspended: boolean; // Service suspension for non-payment
   paymentBalanceDue?: boolean; // New: Banner info for balance payment due
@@ -37,7 +36,6 @@ export interface ClientEntity {
   printerModel?: string;
   labelFormat?: '62mm' | '29mm' | '12mm';
   printerDriverUrl?: string;
-  qrBaseUrl?: string; // New: Custom base URL for QR codes (e.g., http://192.168.1.13:3000)
 }
 
 export interface SystemUser {
@@ -90,14 +88,6 @@ export interface Message {
   replies: MessageReply[];
 }
 
-export interface Preparation {
-  id: string;
-  clientId: string;
-  name: string;
-  category: string;
-  expiryDays: number;
-}
-
 export interface MessageReply {
   id: string;
   senderId: string;
@@ -128,7 +118,6 @@ export interface ProductionIngredient {
   packingDate: string;
   expiryDate: string;
   lotto: string; // or invoice ref
-  supplierName?: string;
   photo?: string; // base64 jpg
   allergens?: string[];
 }
@@ -224,18 +213,8 @@ export class AppStateService {
     { id: 'Lupini', label: 'Lupini', code: 'LUP', icon: 'fa-circle-dot', color: 'lime', bg: 'bg-lime-50', text: 'text-lime-700', active: 'bg-lime-100 border-lime-400 text-lime-900 shadow-[inset_0_2px_4px_rgba(0,0,0,0.05)]' },
     { id: 'Molluschi', label: 'Molluschi', code: 'MOL', icon: 'fa-otter', color: 'cyan', bg: 'bg-cyan-50', text: 'text-cyan-700', active: 'bg-cyan-100 border-cyan-400 text-cyan-900 shadow-[inset_0_2px_4px_rgba(0,0,0,0.05)]' }
   ];
-  
-  public showHome = signal(false);
-  public initialSyncDone = signal(false);
-  public supabaseSyncFailed = signal(false);
-  private syncWarningShown = false;
-  private dbWriteQueue = Promise.resolve();
-  private upsertTimeouts = new Map<string, any>();
   // --- Auth State ---
   readonly currentUser = signal<User | null>(null);
-
-  // --- Preparazioni ---
-  readonly preparations = signal<Preparation[]>([]);
 
   // --- GLOBAL INGREDIENTS DATABASE (Memorized List) ---
   readonly baseIngredients = signal<string[]>([
@@ -278,8 +257,7 @@ export class AppStateService {
     'Carciofo Romanesco (Mammola)', 'Carciofo Spinoso di Sardegna', 'Carciofo di Paestum', 'Asparago Verde di Altedo', 'Asparago Bianco di Bassano', 'Asparago Selvatico', 'Broccolo Fiolaro', 'Cima di Rapa', 'Friariello Campano', 'Cavolo Nero Toscano', 'Cavolo Kale', 'Cavolo Pak Choi', 'Cavolo Cinese', 'Cavolo Cappuccio Viola', 'Cavolo di Bruxelles', 'Finocchio Maschio', 'Sedano Bianco di Sperlonga',
     'Lattuga Romana', 'Lattuga Gentilina', 'Insatala Salanova', 'Valeriana (Songino)', 'Misticanza di campo', 'Spinacio Baby (Novello)', 'Rucola della Piana del Sele', 'Radicchio Tardivo di Treviso', 'Radicchio di Castelfranco', 'Belga (Indivia)', 'Scarola Riccia', 'Escarola Liscia', 'Portulaca', 'Agretto (Barba di Frate)',
     'Fungo Cardoncello', 'Fungo Pleurotus', 'Fungo Pioppino', 'Fungo Shiitake Fresco', 'Tartufo Nero Estivo (Scorzone)', 'Tartufo Bianco d\'Alba', 'Prugnolo', 'Gallinaccio (Finferlo)',
-    'Latte Intero (UHT)', 'Latte Scremato', 'Latte Microfiltrato', 'Latte di Capra', 'Latte di Asina', 'Caciotta Fresca', 'Caciotta Toscana', 'Formaggio Grattugiato (Mix)', 'Formaggio di Fossa', 'Squaquerone di Romagna', 'Pecorino Toscano',
-    'Noci Intere', 'Gherigli di Noci', 'Nocciole Tostate', 'Nocciole Intere', 'Arachidi Tostate', 'Arachidi Salate', 'Anacardi al Naturale', 'Anacardi Tostati', 'Mandorle Pelate', 'Mandorle a Lamelle', 'Pistacchi di Bronte', 'Pistacchi Sgusciati', 'Noci Pecan', 'Noci del Brasile', 'Noci Macadamia', 'Pinoli Mediterranei'
+    'Zenzero Fresco (Radice)', 'Curcuma Fresca', 'Rafano (Armoracia)', 'Wasabi Originale', 'Citronella (Lemongrass)'
   ]);
 
   addBaseIngredient(name: string) {
@@ -323,7 +301,6 @@ export class AppStateService {
   // --- Global Filter State ---
   readonly filterCollaboratorId = signal<string>(''); // '' means All
   readonly filterDate = signal<string>(new Date().toISOString().split('T')[0]); // Default Today
-  readonly aiConfig = signal<any>(null); // Global AI configuration and stats
   readonly reportRecipientEmail = signal<string>('amministrazione@haccppro.it');
 
   // Filter state for firms/companies
@@ -398,14 +375,14 @@ export class AppStateService {
 
   readonly currentLogo = computed(() => {
     if (this.isAdmin()) {
-      return this.adminCompany().logo || '/Logo_canva_SAI.png';
+      return this.adminCompany().logo || '/logo.png';
     }
-    return this.companyConfig().logo || '/Logo_canva_SAI.png';
+    return this.companyConfig().logo || '/logo.png';
   });
 
   // --- Admin Company / Master Data ---
   readonly adminCompany = signal<AdminCompany>({
-    name: 'SAI FAST HACCP - Sede Centrale',
+    name: 'HACCP PRO - Sede Centrale',
     piva: '01234567890',
     address: 'Via dell\'Innovazione 10, Milano (MI)',
     phone: '02 99887766',
@@ -415,7 +392,7 @@ export class AppStateService {
     pec: 'haccppro@legalmail.it',
     sdi: 'M5UXCR1',
     licenseNumber: 'HQ-RE-2024-001',
-    logo: '/Logo_canva_SAI.png'
+    logo: '/logo.png'
   });
 
   // Editing Permission Logic
@@ -438,8 +415,6 @@ export class AppStateService {
   private toastService = inject(ToastService);
 
   constructor() {
-    this.checkPublicInfo();
-    this.stripLegacyClientCache();
     this.loadState();
     this.initSupabase();
     this.loadBaseIngredients();
@@ -448,28 +423,6 @@ export class AppStateService {
     effect(() => {
       this.saveState();
     });
-
-    // Reactive reload of AI config when data is synced or company changes
-    effect(() => {
-      this.activeTargetClientId(); // Dependency to trigger on company change
-      this.loadAiConfig();
-    }, { allowSignalWrites: true });
-  }
-
-  toggleHome(show: boolean) {
-    this.showHome.set(show);
-  }
-
-  private checkPublicInfo() {
-    const params = new URLSearchParams(window.location.search);
-    const infoId = params.get('info');
-    if (infoId) {
-      this.publicInfoId.set(infoId);
-    }
-    const mode = params.get('mode');
-    if (mode === 'home') {
-      this.showHome.set(true);
-    }
   }
 
   private saveState() {
@@ -484,30 +437,11 @@ export class AppStateService {
     localStorage.setItem('haccp_pro_persistence', JSON.stringify(state));
   }
 
-  /** Rimuove aziende/utenti demo dalla cache locale: Supabase è l'unica fonte. */
-  private stripLegacyClientCache() {
-    const saved = localStorage.getItem('haccp_pro_persistence');
-    if (!saved) return;
-    try {
-      const data = JSON.parse(saved);
-      if (!data.clients && !data.systemUsers) return;
-      delete data.clients;
-      delete data.systemUsers;
-      localStorage.setItem('haccp_pro_persistence', JSON.stringify(data));
-    } catch {
-      localStorage.removeItem('haccp_pro_persistence');
-    }
-  }
-
   private syncInterval: any;
   async initSupabase() {
     if (this.syncInterval) clearInterval(this.syncInterval);
     
     await this.refreshAllData();
-
-    if (!this.currentUser() && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
-      this.loginWithCredentials('dev', 'dev');
-    }
 
     // Comprehensive Real-time Subscriptions - Optimized for immediate sync
     // Ensure we only have one channel subscription
@@ -520,9 +454,8 @@ export class AppStateService {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'system_users' }, () => this.syncUsers())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'documents' }, (payload) => this.syncDocuments())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'production_records' }, () => this.syncProductionRecords())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'non_conformities' }, () => this.syncNonConformities())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'non_conformities' }, () => this.refreshAllData())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'equipment' }, () => this.syncEquipment())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'preparations' }, () => this.syncPreparations())
       .subscribe((status) => {
           console.log('[HACCP-SYNC] Supabase Status:', status);
       });
@@ -567,7 +500,7 @@ export class AppStateService {
 
     try {
       // Must sync clients FIRST because other syncs depend on validClientIds filtering
-      await this.syncClientsWithRetry();
+      await this.syncClients();
       
       await Promise.all([
         this.syncUsers(),
@@ -579,12 +512,10 @@ export class AppStateService {
         this.syncAccounting(),
         this.syncNonConformities(),
         this.syncRecipes(),
-        this.syncConfig(),
-        this.syncPreparations()
+        this.syncConfig()
       ]);
 
       await this.syncSuspenseStatuses();
-      this.initialSyncDone.set(true);
     } catch (err) {
       console.error('Error refreshing data:', err);
     } finally {
@@ -592,79 +523,39 @@ export class AppStateService {
     }
   }
 
-  private mapDbClient(c: any): ClientEntity {
-    return {
-      id: c.id,
-      name: c.name,
-      piva: c.piva,
-      address: c.address,
-      phone: c.phone,
-      cellphone: c.cellphone,
-      whatsapp: c.whatsapp,
-      email: c.email,
-      licenseNumber: c.license_number,
-      suspended: c.suspended,
-      paymentBalanceDue: !!c.payment_balance_due,
-      licenseExpiryDate: c.license_expiry_date,
-      logo: c.logo,
-      printerModel: c.printer_model,
-      labelFormat: c.label_format,
-      printerDriverUrl: c.printer_driver_url
-    };
-  }
-
-  private notifyClientsSyncFailure() {
-    this.supabaseSyncFailed.set(true);
-    if (this.syncWarningShown) return;
-    this.syncWarningShown = true;
-    this.toastService.warning(
-      'Database non raggiungibile',
-      'Impossibile caricare le aziende da Supabase. Controlla connessione e stato del progetto.'
-    );
-  }
-
-  async syncClients(): Promise<boolean> {
-    try {
-      const { data: dbClients, error } = await supabase.from('clients').select('*');
-      if (error) {
-        console.error('[HACCP-SYNC] Error syncing clients:', error);
-        return false;
-      }
-      this.clients.set((dbClients ?? []).map((c: any) => this.mapDbClient(c)));
-      this.supabaseSyncFailed.set(false);
-      this.syncWarningShown = false;
-      console.log('[HACCP-SYNC] Clients synced:', this.clients().length);
-      return true;
-    } catch (e) {
-      console.error('[HACCP-SYNC] Exception in syncClients:', e);
-      return false;
+  async syncClients() {
+    const { data: dbClients } = await supabase.from('clients').select('*');
+    if (dbClients) {
+      this.clients.set(dbClients.map((c: any) => ({
+        id: c.id,
+        name: c.name,
+        piva: c.piva,
+        address: c.address,
+        phone: c.phone,
+        cellphone: c.cellphone,
+        whatsapp: c.whatsapp,
+        email: c.email,
+        licenseNumber: c.license_number,
+        suspended: c.suspended,
+        paymentBalanceDue: !!c.payment_balance_due,
+        licenseExpiryDate: c.license_expiry_date,
+        logo: c.logo,
+        printerModel: c.printer_model,
+        labelFormat: c.label_format,
+        printerDriverUrl: c.printer_driver_url
+      })));
     }
-  }
-
-  /** Supabase può impiegare qualche secondo al risveglio: riprova prima di avvisare l'utente. */
-  private async syncClientsWithRetry(attempts = 3): Promise<void> {
-    for (let attempt = 1; attempt <= attempts; attempt++) {
-      if (await this.syncClients()) return;
-      if (attempt < attempts) {
-        console.warn(`[HACCP-SYNC] Retry clients sync (${attempt}/${attempts})...`);
-        await new Promise(resolve => setTimeout(resolve, 1500 * attempt));
-      }
-    }
-    this.notifyClientsSyncFailure();
   }
 
   async syncUsers() {
-    try {
-      const validClientIds = this.clients().map(c => c.id);
-      const { data: dbUsers, error } = await supabase.from('system_users').select('*');
-      if (error) {
-        console.error('[HACCP-SYNC] Error syncing users:', error);
-        return;
-      }
-      this.systemUsers.set((dbUsers ?? [])
+    const validClientIds = this.clients().map(c => c.id);
+    const { data: dbUsers } = await supabase.from('system_users').select('*');
+    if (dbUsers) {
+      this.systemUsers.set(dbUsers
         .filter((u: any) => {
+          const isDemo = u.name.toLowerCase().includes('demo') || u.name.toLowerCase().includes('sviluppatore');
           const isOrphaned = u.role !== 'ADMIN' && !validClientIds.includes(u.client_id);
-          return !isOrphaned;
+          return !isDemo && !isOrphaned;
         })
         .map((u: any) => ({
           id: u.id,
@@ -679,8 +570,6 @@ export class AppStateService {
           username: u.username,
           password: u.password
         })));
-    } catch (e) {
-      console.error('[HACCP-SYNC] Exception in syncUsers:', e);
     }
   }
 
@@ -689,7 +578,7 @@ export class AppStateService {
     const { data: dbRecords } = await supabase.from('checklist_records').select('*');
     if (dbRecords) {
       this.checklistRecords.set(dbRecords
-        .filter((r: any) => r.client_id === 'demo' || r.client_id === 'GLOBAL' || validClientIds.includes(r.client_id))
+        .filter((r: any) => r.client_id === 'demo' || validClientIds.includes(r.client_id))
         .map((r: any) => ({
           id: r.id,
           moduleId: r.module_id,
@@ -704,11 +593,9 @@ export class AppStateService {
 
   async syncDocuments() {
     const validClientIds = this.clients().map(c => c.id);
-    // OPTIMIZATION: We do NOT fetch file_data (Base64) here to avoid timeouts and high memory usage.
-    // file_data is fetched on-demand when previewing or downloading.
     const { data: dbDocs } = await supabase
       .from('documents')
-      .select('id, client_id, category, type, file_name, file_type, upload_date, expiry_date, user_id')
+      .select('*')
       .order('upload_date', { ascending: false });
 
     if (dbDocs) {
@@ -721,33 +608,12 @@ export class AppStateService {
           type: d.type,
           fileName: d.file_name,
           fileType: d.file_type,
-          fileData: '', // Empty initially
+          fileData: d.file_data,
           uploadDate: new Date(d.upload_date),
           expiryDate: d.expiry_date,
           userId: d.user_id
         })));
     }
-  }
-
-  /**
-   * Fetches the actual Base64 file data for a document on-demand.
-   */
-  async fetchDocumentData(id: string): Promise<string | null> {
-    const { data, error } = await supabase
-      .from('documents')
-      .select('file_data')
-      .eq('id', id)
-      .single();
-    
-    if (error || !data) {
-        console.error('Error fetching document data:', error);
-        return null;
-    }
-
-    // Update local state so we don't have to fetch it again this session
-    this.documents.update(docs => docs.map(d => d.id === id ? { ...d, fileData: data.file_data } : d));
-    
-    return data.file_data;
   }
 
   async syncProductionRecords() {
@@ -791,8 +657,7 @@ export class AppStateService {
     try {
       const { data: dbMsgs, error: msgsError } = await supabase
         .from('messages')
-        // Use camelCase to match database schema found in production
-        .select('id, senderId, senderName, recipientType, recipientId, recipientUserId, subject, content, attachmentUrl, attachmentName, timestamp, read, replies')
+        .select('*')
         .order('timestamp', { ascending: false });
 
       if (msgsError) throw msgsError;
@@ -809,7 +674,7 @@ export class AppStateService {
           content: m.content,
           attachmentUrl: m.attachmentUrl || m.attachment_url,
           attachmentName: m.attachmentName || m.attachment_name,
-          fileData: '', // Empty initially
+          fileData: m.fileData || m.file_data,
           timestamp: new Date(m.timestamp),
           read: m.read,
           replies: (m.replies || []).map((r: any) => ({
@@ -817,8 +682,7 @@ export class AppStateService {
             senderId: r.senderId || r.sender_id,
             senderName: r.senderName || r.sender_name,
             content: r.content,
-            timestamp: new Date(r.timestamp),
-            fileData: '' // Empty for replies
+            timestamp: new Date(r.timestamp)
           }))
         }));
         this.messages.set(mappedMsgs);
@@ -826,27 +690,6 @@ export class AppStateService {
     } catch (e) {
       console.error('Error syncing messages:', e);
     }
-  }
-
-  /**
-   * Fetches the actual Base64 attachment data for a message on-demand.
-   */
-  async fetchMessageAttachment(id: string): Promise<string | null> {
-    const { data, error } = await supabase
-      .from('messages')
-      .select('file_data')
-      .eq('id', id)
-      .single();
-    
-    if (error || !data) {
-        console.error('Error fetching message attachment:', error);
-        return null;
-    }
-
-    // Update local state
-    this.messages.update(msgs => msgs.map(m => m.id === id ? { ...m, fileData: data.file_data } : m));
-    
-    return data.file_data;
   }
   async syncAccounting() {
     // Payments
@@ -899,25 +742,6 @@ export class AppStateService {
       if (config.report_email) this.reportRecipientEmail.set(config.report_email);
       if (config.master_data) this.adminCompany.set(config.master_data);
     }
-
-    // Load AI Config from system_config (Shared between Admin & Operators)
-    const { data: aiSettings } = await supabase.from('system_config').select('*').eq('id', 'ai_settings').single();
-    if (aiSettings && aiSettings.master_data) {
-        const loadedModel = aiSettings.master_data.model || 'gemini-3.5-flash';
-        const migratedModel = (loadedModel !== 'gemini-3.5-flash')
-            ? 'gemini-3.5-flash'
-            : loadedModel;
-        this.aiConfig.set({
-            ...aiSettings.master_data,
-            model: migratedModel,
-            apiKey: this.deobfuscate(aiSettings.master_data.apiKey)
-        });
-        // Se il modello era deprecato, aggiorna il DB silenziosamente
-        if (migratedModel !== loadedModel) {
-            console.warn(`[HACCP AI] Modello non supportato/deprecato "${loadedModel}" → aggiornato a standard "${migratedModel}"`);
-            this.saveAiConfig({ ...aiSettings.master_data, model: migratedModel, apiKey: this.deobfuscate(aiSettings.master_data.apiKey) });
-        }
-    }
   }
 
   async syncNonConformities() {
@@ -932,7 +756,6 @@ export class AppStateService {
         itemName: nc.item_name,
         responsibleId: nc.responsible_id,
         status: nc.status || 'OPEN',
-        resolution: nc.resolution,
         createdAt: nc.created_at ? new Date(nc.created_at) : undefined
       })));
     }
@@ -1066,55 +889,51 @@ export class AppStateService {
     itemName?: string;
     responsibleId?: string;
     status: 'OPEN' | 'CLOSED' | 'IN_PROGRESS';
-    resolution?: string;
     createdAt?: Date;
   }[]>([]);
 
   readonly filteredNonConformities = computed(() => {
     const targetClientId = this.activeTargetClientId();
     return this.nonConformities()
-      .filter(nc => !targetClientId || targetClientId === 'demo' || nc.clientId === targetClientId)
+      .filter(nc => nc.clientId === targetClientId || !targetClientId)
       .sort((a, b) => new Date(b.createdAt || b.date).getTime() - new Date(a.createdAt || a.date).getTime());
   });
 
   // Global Filtered Documents for Admin View
   readonly filteredDocuments = computed(() => {
+    const user = this.currentUser();
     const targetClientId = this.activeTargetClientId();
-    const allDocs = this.documents();
-
     if (!targetClientId) return [];
 
-    // Global Admin view: show all documents
-    if (targetClientId === 'demo') {
-        return allDocs.filter(d => d.category !== 'microbio');
-    }
+    const allClients = this.clients();
+    const target = allClients.find(c => c.id === targetClientId);
+    if (!target) return this.documents().filter(d => d.clientId === targetClientId && d.category !== 'microbio');
 
-    // Strict filtering: Only documents for the currently active unit/company
-    return allDocs
-      .filter(d => d.clientId === targetClientId)
-      .filter(d => d.category !== 'microbio');
+    // Group by Brand (PIVA or name prefix)
+    const brandKey = target.piva || target.name.split(' ')[0].toLowerCase();
+    const brandUnitIds = allClients
+      .filter(c => {
+        const cKey = c.piva || c.name.split(' ')[0].toLowerCase();
+        return cKey === brandKey;
+      })
+      .map(c => c.id);
+
+    return this.documents()
+      .filter(d => brandUnitIds.includes(d.clientId))
+      .filter(d => d.category !== 'microbio'); // Keep separated from general archive
   });
 
   readonly microbioDocuments = computed(() => {
     const targetClientId = this.activeTargetClientId();
-    const allDocs = this.documents();
-
     if (!targetClientId) return [];
-
-    if (targetClientId === 'demo') {
-        return allDocs.filter(d => d.category === 'microbio');
-    }
-
-    // Strict filtering: Only documents for the currently active unit/company
-    return allDocs.filter(d => d.clientId === targetClientId && d.category === 'microbio');
+    
+    return this.documents().filter(d => d.clientId === targetClientId && d.category === 'microbio');
   });
 
   // Global Filtered Checklists for Admin View
   readonly filteredChecklistRecords = computed(() => {
     const targetClientId = this.activeTargetClientId();
     if (!targetClientId) return [];
-
-    if (targetClientId === 'demo') return this.checklistRecords();
 
     return this.checklistRecords().filter(r => r.clientId === targetClientId);
   });
@@ -1132,10 +951,6 @@ export class AppStateService {
     if (nameLower.includes('bilancia')) return 'fa-weight-hanging';
     return 'fa-microchip';
   }
-
-  readonly hasAbbattitore = computed(() => {
-    return this.groupedEquipment().some(e => e.name.toLowerCase().includes('abbattitore'));
-  });
 
   // --- Clients / Companies Database (New) ---
   readonly clients = signal<ClientEntity[]>([]);
@@ -1172,24 +987,20 @@ export class AppStateService {
   // --- Messages Database ---
   readonly messages = signal<Message[]>([]);
 
-  // Public Info State (for QR Code landing pages)
-  readonly publicInfoId = signal<string | null>(null);
-
   readonly unreadMessagesCount = computed(() => {
     const user = this.currentUser();
     if (!user) return 0;
 
-    // Use the same filtered list that the UI shows
-    return this.getMessagesForCurrentUser().filter(msg => {
-      if (msg.read) return false;
-      
-      // If it's unread, check if the last activity was from someone else
-      if (msg.replies && msg.replies.length > 0) {
-        const lastReply = msg.replies[msg.replies.length - 1];
-        return lastReply.senderId !== user.id;
+    return this.messages().filter(msg => {
+      // Admin sees all messages
+      if (user.role === 'ADMIN') {
+        return !msg.read && msg.senderId !== user.id;
       }
-      
-      return msg.senderId !== user.id;
+      // Collaborator sees messages for their company or broadcast
+      return !msg.read &&
+        msg.senderId !== user.id &&
+        (msg.recipientType === 'ALL' ||
+          (msg.recipientId === user.clientId && (!msg.recipientUserId || msg.recipientUserId === user.id)));
     }).length;
   });
 
@@ -1213,17 +1024,8 @@ export class AppStateService {
     return records[0].data;
   });
 
-  isActivityEnabled(moduleId: string, activityId: string, clientId?: string): boolean {
-    const targetClientId = clientId || this.activeTargetClientId();
-    const records = this.checklistRecords().filter(r => 
-        r.moduleId === 'operative-phases-config' && 
-        r.clientId === targetClientId
-    );
-    const config = records.length > 0 ? records[0].data : { 
-      'pre-op-checklist': { enabled: true, activities: {} }, 
-      'operative-checklist': { enabled: true, activities: {} }, 
-      'post-op-checklist': { enabled: true, activities: {} }
-    };
+  isActivityEnabled(moduleId: string, activityId: string): boolean {
+    const config = this.operationalPhasesConfig();
     const modConfig = config[moduleId];
     if (!modConfig) return true;
     if (modConfig.enabled === false) return false;
@@ -1253,10 +1055,7 @@ export class AppStateService {
     // --- REGISTRI E FASI OPERATIVE ---
     { id: 'pre-op-checklist', label: 'Fase Pre-operativa', icon: 'fa-clipboard-check', category: 'operations', operatorOnly: true },
     { id: 'operative-checklist', label: 'Fase Operativa', icon: 'fa-briefcase', category: 'operations', operatorOnly: true },
-    { id: 'preparations', label: 'Anagrafica Preparazioni', icon: 'fa-mortar-pestle', category: 'operations', operatorOnly: true },
     { id: 'production-log', label: 'Rintracciabilità Prodotti', icon: 'fa-barcode', category: 'operations' },
-    { id: 'abbattimento-log', label: 'Registro Abbattimento', icon: 'fa-icicles', category: 'operations', operatorOnly: true },
-    { id: 'ddt-carico', label: 'Carico Merci / DDT', icon: 'fa-truck-ramp-box', category: 'operations', operatorOnly: true },
     { id: 'post-op-checklist', label: 'Fase Post-operativa', icon: 'fa-hourglass-end', category: 'operations', operatorOnly: true },
     { id: 'non-compliance', label: 'Non Conformità', icon: 'fa-circle-exclamation', category: 'operations', operatorOnly: true },
 
@@ -1293,15 +1092,15 @@ export class AppStateService {
       return true;
     }
 
-    // Standard User Access (Collaborators & Company Admins)
+    // Standard User Access (Collaborators only)
     const user = this.systemUsers().find(u => u.username === username && u.password === pass && u.active);
 
     if (user) {
-      // BLOCK: Global/Master Admins cannot log in through this standard path (must use dev/dev)
-      if (user.role === 'ADMIN' && !user.clientId) {
+      // BLOCK: Admins cannot log in through this standard path
+      if (user.role === 'ADMIN') {
         this.toastService.error(
           'Accesso Negato',
-          'L\'account amministratore di sistema non è accessibile con queste credenziali.'
+          'L\'account amministratore non è accessibile con queste credenziali.'
         );
         return false;
       }
@@ -1424,7 +1223,7 @@ export class AppStateService {
 
   // --- Data Access Methods ---
 
-  saveChecklist(moduleIdOrObj: string | any, data?: any, silent = false) {
+  saveChecklist(moduleIdOrObj: string | any, data?: any) {
     const user = this.currentUser();
     if (!user) return;
 
@@ -1432,14 +1231,12 @@ export class AppStateService {
     let actualData: any;
     let forcedId: string | undefined;
     let forcedDate: string | undefined;
-    let forcedClientId: string | undefined;
 
     if (typeof moduleIdOrObj === 'object' && moduleIdOrObj !== null && !data) {
       moduleId = moduleIdOrObj.moduleId;
       actualData = moduleIdOrObj.data;
       forcedId = moduleIdOrObj.id;
       forcedDate = moduleIdOrObj.date;
-      forcedClientId = moduleIdOrObj.clientId;
     } else {
       moduleId = moduleIdOrObj;
       actualData = data;
@@ -1456,7 +1253,7 @@ export class AppStateService {
     const record = {
       id: forcedId || Math.random().toString(36).substring(2, 9),
       userId: targetUserId,
-      clientId: forcedClientId || targetClientId || user.clientId || 'demo',
+      clientId: targetClientId || user.clientId || 'demo',
       moduleId,
       date: forcedDate || this.filterDate(),
       timestamp: new Date().toISOString(),
@@ -1464,14 +1261,9 @@ export class AppStateService {
     };
 
     // Logic to prevent duplicates and ensure updates
-    const existingIndex = this.checklistRecords().findIndex(r => {
-      const sameModule = r.moduleId === moduleId;
-      const sameDate = (r as any).date === record.date;
-      if (record.date === 'GLOBAL') {
-        return sameModule && sameDate && r.clientId === record.clientId;
-      }
-      return sameModule && sameDate && r.userId === targetUserId;
-    });
+    const existingIndex = this.checklistRecords().findIndex(r => 
+      r.moduleId === moduleId && r.userId === targetUserId && (r as any).date === record.date
+    );
 
     if (existingIndex > -1) {
       record.id = this.checklistRecords()[existingIndex].id;
@@ -1482,35 +1274,20 @@ export class AppStateService {
       return [...filtered, record as any];
     });
 
-    // Cancel existing pending write for this record to debounce database traffic
-    if (this.upsertTimeouts.has(record.id)) {
-      clearTimeout(this.upsertTimeouts.get(record.id));
-    }
+    // Supabase Sync
+    supabase.from('checklist_records').upsert({
+      id: record.id,
+      user_id: record.userId,
+      client_id: record.clientId,
+      module_id: record.moduleId,
+      date: record.date,
+      timestamp: record.timestamp,
+      data: record.data
+    }).then(({ error }) => {
+        if (error) console.error('Error syncing checklist record:', error);
+    });
 
-    // Schedule Supabase Sync (Debounced by 1s and Queued)
-    const timeout = setTimeout(() => {
-      this.upsertTimeouts.delete(record.id);
-
-      this.dbWriteQueue = this.dbWriteQueue.then(() => 
-        supabase.from('checklist_records').upsert({
-          id: record.id,
-          user_id: record.userId,
-          client_id: record.clientId,
-          module_id: record.moduleId,
-          date: record.date,
-          timestamp: record.timestamp,
-          data: record.data
-        }).then(({ error }) => {
-            if (error) console.error('Error syncing checklist record:', error);
-        })
-      );
-    }, 1000);
-
-    this.upsertTimeouts.set(record.id, timeout);
-
-    if (!silent) {
-      this.toastService.success('Registrazione Salvata', 'I dati sono stati archiviati correttamente.');
-    }
+    this.toastService.success('Registrazione Salvata', 'I dati sono stati archiviati correttamente.');
 
     // Feed to Operator if Admin is editing
     if (this.isAdmin() && this.filterCollaboratorId()) {
@@ -1518,104 +1295,29 @@ export class AppStateService {
       const menuItem = this.menuItems.find(m => m.id === moduleId);
 
       this.toastService.success(
-        'Revisione Salvata',
-        `Le modifiche al modulo "${menuItem?.label}" per ${targetUser?.name} sono state salvate.`
+        'Feedback Inviato',
+        `Le modifiche al modulo "${menuItem?.label}" sono state salvate e notificate a ${targetUser?.name}.`
       );
+
+      // Optionally we could add a system message to their chat
+      this.addMessage({
+        id: Date.now().toString(),
+        senderId: user.id,
+        senderName: 'Amministrazione (Revisione)',
+        recipientType: 'SINGLE',
+        recipientId: targetUser?.clientId,
+        recipientUserId: targetUserId,
+        subject: `Aggiornamento: ${menuItem?.label}`,
+        content: `L'amministratore ha revisionato e aggiornato i dati inseriti in data ${record.date} per il modulo ${menuItem?.label}.`,
+        timestamp: new Date(),
+        read: false,
+        replies: []
+      });
     }
   }
 
   saveRecord(moduleId: string, data: any) {
-    return this.saveChecklist(moduleId, data, true);
-  }
-
-  saveGlobalRecord(moduleId: string, data: any) {
-    const targetClientId = this.activeTargetClientId() || this.currentUser()?.clientId || 'demo';
-    return this.saveChecklist({
-      moduleId,
-      data,
-      date: 'GLOBAL',
-      clientId: targetClientId
-    });
-  }
-  getGlobalRecord(moduleId: string) {
-    const targetClientId = this.activeTargetClientId() || this.currentUser()?.clientId || 'demo';
-    const allRecords = this.checklistRecords().filter(r => r.moduleId === moduleId && (r.clientId === targetClientId || r.clientId === 'GLOBAL'));
-    
-    if (allRecords.length === 0) return null;
-
-    // Priority 1: Record with date 'GLOBAL' (must have data)
-    const globalRecord = allRecords
-      .filter(r => (r as any).date === 'GLOBAL')
-      .sort((a, b) => {
-        const timeA = a.timestamp ? new Date(a.timestamp).getTime() : 0;
-        const timeB = b.timestamp ? new Date(b.timestamp).getTime() : 0;
-        return timeB - timeA;
-      })[0];
-
-    if (globalRecord && globalRecord.data && (!Array.isArray(globalRecord.data) || globalRecord.data.length > 0)) {
-      return globalRecord.data;
-    }
-
-    // Priority 2: Most recent record regardless of date (must have data)
-    const latestWithData = allRecords
-      .filter(r => r.data && (!Array.isArray(r.data) || r.data.length > 0))
-      .sort((a, b) => {
-        const timeA = a.timestamp ? new Date(a.timestamp).getTime() : 0;
-        const timeB = b.timestamp ? new Date(b.timestamp).getTime() : 0;
-        return timeB - timeA;
-      })[0];
-
-    return latestWithData ? latestWithData.data : (globalRecord ? globalRecord.data : null);
-  }
-
-  // --- AI Configuration & Stats ---
-  
-  private obfuscate(str: string): string {
-    if (!str) return '';
-    return btoa(str.split('').map(c => String.fromCharCode(c.charCodeAt(0) ^ 42)).join(''));
-  }
-
-  private deobfuscate(str: string): string {
-    if (!str) return '';
-    try {
-      return atob(str).split('').map(c => String.fromCharCode(c.charCodeAt(0) ^ 42)).join('');
-    } catch { return str; }
-  }
-
-  loadAiConfig() {
-    this.syncConfig();
-  }
-
-  async saveAiConfig(config: any) {
-    const toSave = {
-      ...config,
-      apiKey: this.obfuscate(config.apiKey),
-      updatedAt: new Date().toISOString()
-    };
-    
-    const { error } = await supabase.from('system_config').upsert({
-        id: 'ai_settings',
-        master_data: toSave
-    });
-    
-    if (error) console.error('Error saving AI config to system_config:', error);
-    this.aiConfig.set(config);
-  }
-
-  updateAiUsage(model: string, tokens: number = 1000) {
-    const config = this.aiConfig() || { apiKey: '', model: 'gemini-3.5-flash', stats: {} };
-    const stats = config.stats || {};
-    const modelStats = stats[model] || { count: 0, estimatedCost: 0 };
-    
-    // Simplified costs: Flash is cheaper
-    const costPerRequest = model.includes('pro') ? 0.015 : 0.0005; 
-    
-    stats[model] = {
-      count: (modelStats.count || 0) + 1,
-      estimatedCost: (modelStats.estimatedCost || 0) + costPerRequest
-    };
-    
-    this.saveAiConfig({ ...config, stats });
+    return this.saveChecklist(moduleId, data);
   }
 
   // --- New Historical Methods ---
@@ -1643,50 +1345,9 @@ export class AppStateService {
     });
   }
 
-  async deleteChecklist(id: string) {
-    const record = this.checklistRecords().find(r => r.id === id);
-    if (!record) return;
-
-    // Optimistic local update
+  deleteChecklist(id: string) {
     this.checklistRecords.update(records => records.filter(r => r.id !== id));
-
-    try {
-      const { error } = await supabase
-        .from('checklist_records')
-        .delete()
-        .eq('id', id)
-        .eq('client_id', record.clientId);
-
-      if (error) throw error;
-      this.toastService.success('Record Eliminato', 'La registrazione è stata rimossa dal database.');
-    } catch (e) {
-      console.error('Error deleting checklist record:', e);
-      this.toastService.error('Errore', 'Impossibile eliminare la registrazione dal database.');
-      await this.syncChecklistRecords();
-    }
-  }
-
-  async deleteNonConformity(id: string) {
-    const nc = this.nonConformities().find(n => n.id === id);
-    if (!nc) return;
-
-    // Optimistic local update
-    this.nonConformities.update(list => list.filter(n => n.id !== id));
-
-    try {
-      const { error } = await supabase
-        .from('non_conformities')
-        .delete()
-        .eq('id', id)
-        .eq('client_id', nc.clientId);
-
-      if (error) throw error;
-      this.toastService.success('Anomalia Eliminata', 'La non conformità è stata rimossa permanentemente.');
-    } catch (e) {
-      console.error('Error deleting non-conformity:', e);
-      this.toastService.error('Errore', 'Impossibile eliminare la non conformità dal database.');
-      await this.syncNonConformities();
-    }
+    this.toastService.success('Record Eliminato', 'La registrazione è stata rimossa.');
   }
 
   getChecklistHistory(moduleId: string) {
@@ -1865,7 +1526,6 @@ export class AppStateService {
     if (updates.cellphone !== undefined) dbUpdates.cellphone = updates.cellphone;
     if (updates.whatsapp !== undefined) dbUpdates.whatsapp = updates.whatsapp;
     if (updates.email !== undefined) dbUpdates.email = updates.email;
-    if (updates.pec !== undefined) dbUpdates.pec = updates.pec;
     if (updates.licenseNumber !== undefined) dbUpdates.license_number = updates.licenseNumber;
     if (updates.suspended !== undefined) dbUpdates.suspended = updates.suspended;
     if (updates.paymentBalanceDue !== undefined) dbUpdates.payment_balance_due = updates.paymentBalanceDue;
@@ -1874,7 +1534,6 @@ export class AppStateService {
     if (updates.printerModel !== undefined) dbUpdates.printer_model = updates.printerModel;
     if (updates.labelFormat !== undefined) dbUpdates.label_format = updates.labelFormat;
     if (updates.printerDriverUrl !== undefined) dbUpdates.printer_driver_url = updates.printerDriverUrl;
-    if (updates.qrBaseUrl !== undefined) dbUpdates.qr_base_url = updates.qrBaseUrl;
 
     const { error } = await supabase.from('clients').update(dbUpdates).eq('id', id);
     if (error) {
@@ -1944,19 +1603,7 @@ export class AppStateService {
       users.map(u => u.id === id ? { ...u, ...updates } : u)
     );
 
-    // Mappatura esplicita per evitare colonne inesistenti (es. clientId in camelCase)
-    const dbUpdates: any = {};
-    if (updates.clientId !== undefined) dbUpdates.client_id = updates.clientId;
-    if (updates.name !== undefined) dbUpdates.name = updates.name;
-    if (updates.email !== undefined) dbUpdates.email = updates.email;
-    if (updates.role !== undefined) dbUpdates.role = updates.role;
-    if (updates.department !== undefined) dbUpdates.department = updates.department;
-    if (updates.active !== undefined) dbUpdates.active = updates.active;
-    if (updates.avatar !== undefined) dbUpdates.avatar = updates.avatar;
-    if (updates.username !== undefined) dbUpdates.username = updates.username;
-    if (updates.password !== undefined) dbUpdates.password = updates.password;
-
-    const { error } = await supabase.from('system_users').update(dbUpdates).eq('id', id);
+    const { error } = await supabase.from('system_users').update(updates).eq('id', id);
 
     // Auto-suspend company if all users are now disabled
     if (updates.active === false) {
@@ -1968,9 +1615,6 @@ export class AppStateService {
 
     if (!error) {
       this.toastService.success('Aggiornato', 'I dati del collaboratore sono stati salvati.');
-    } else {
-      console.error('Error updating system user:', error);
-      this.toastService.error('Errore', 'Impossibile salvare le modifiche del collaboratore sul database.');
     }
   }
 
@@ -2086,26 +1730,17 @@ export class AppStateService {
   }
 
   async updateDocumentName(id: string, newName: string) {
-    let finalName = newName;
-    const existingDoc = this.documents().find(d => d.id === id);
-    if (existingDoc && existingDoc.fileName.includes('|')) {
-        const sizePart = existingDoc.fileName.split('|')[1];
-        if (!newName.includes('|')) {
-            finalName = `${newName}|${sizePart}`;
-        }
-    }
-
     // Local Update
     this.documents.update(allDocs => allDocs.map(d => {
         if (d.id === id) {
-            return { ...d, fileName: finalName };
+            return { ...d, fileName: newName };
         }
         return d;
     }));
 
     // DB Update
     const { error } = await supabase.from('documents')
-        .update({ file_name: finalName })
+        .update({ file_name: newName })
         .eq('id', id);
 
     if (error) {
@@ -2261,7 +1896,7 @@ export class AppStateService {
         content: newMessage.content,
         attachmentUrl: newMessage.attachmentUrl,
         attachmentName: newMessage.attachmentName,
-        // fileData is omitted as the column is missing in production schema
+        fileData: newMessage.fileData,
         timestamp: newMessage.timestamp.toISOString(),
         read: newMessage.read,
         replies: []
@@ -2364,71 +1999,20 @@ export class AppStateService {
     const user = this.currentUser();
     if (!user) return [];
 
-    const targetClientId = this.activeTargetClientId();
-    const isGlobalAdmin = user.role === 'ADMIN' && (!targetClientId || targetClientId === 'demo');
-
-    let filtered: Message[] = [];
-
-    if (isGlobalAdmin) {
-      // Global Admin (no company filter) sees ALL messages
-      filtered = this.messages();
-    } else if (user.role === 'ADMIN') {
-      // Admin filtered to a specific company
-      filtered = this.messages().filter(msg => {
-        const sender = this.systemUsers().find(u => u.id === msg.senderId);
-
-        // Messages I (admin) sent TO this company
-        if (msg.senderId === user.id) {
-          return msg.recipientId === targetClientId || msg.recipientId === 'ADMIN_OFFICE';
-        }
-
-        // Skip global broadcasts in company-filtered view
-        if (msg.recipientType === 'ALL') return false;
-
-        // Messages FROM users of this company (anomaly reports go to ADMIN_OFFICE)
-        if (sender?.clientId === targetClientId) return true;
-
-        // Messages sent explicitly TO this company by admin
-        if (msg.recipientId === targetClientId) return true;
-
-        return false;
-      });
-
-      // Apply operator sub-filter if selected
-      const targetUserId = this.filterCollaboratorId();
-      if (targetUserId) {
-        filtered = filtered.filter(msg =>
-          msg.senderId === targetUserId ||
-          msg.recipientUserId === targetUserId
-        );
-      }
-    } else {
-      // OPERATOR: sees messages addressed to their company/user OR their own sent messages
-      filtered = this.messages().filter(msg => {
-        // 1. My own sent messages
-        if (msg.senderId === user.id) return true;
-
-        // Ensure the sender is an administrator (ADMIN) for incoming messages
-        const sender = this.systemUsers().find(u => u.id === msg.senderId);
-        if (sender?.role !== 'ADMIN') return false;
-
-        // 2. Broadcasts (ALL) - Usually from Admin
-        if (msg.recipientType === 'ALL') return true;
-
-        // 3. SINGLE messages addressed to my company or specifically to me
-        const matchesCompany = msg.recipientId === user.clientId;
-        const matchesMe = !msg.recipientUserId || msg.recipientUserId === user.id;
-        
-        return matchesCompany && matchesMe;
-      });
+    if (user.role === 'ADMIN') {
+      return this.messages();
     }
 
-    // Sort newest first
-    return [...filtered].sort((a, b) => {
-      const ta = a.timestamp instanceof Date ? a.timestamp.getTime() : new Date(a.timestamp).getTime();
-      const tb = b.timestamp instanceof Date ? b.timestamp.getTime() : new Date(b.timestamp).getTime();
-      return tb - ta;
-    });
+    // Collaborators see:
+    // 1. Messages they sent
+    // 2. Messages sent to everyone (broadcast)
+    // 3. Messages sent to their specific company (if not targeted to someone else)
+    // 4. Messages sent specifically to them
+    return this.messages().filter(msg =>
+      msg.senderId === user.id ||
+      msg.recipientType === 'ALL' ||
+      (msg.recipientId === user.clientId && (!msg.recipientUserId || msg.recipientUserId === user.id))
+    );
   }
 
   /**
@@ -2610,63 +2194,6 @@ export class AppStateService {
     }
   }
 
-  async syncPreparations() {
-    const { data: dbPreps } = await supabase.from('preparations').select('*');
-    if (dbPreps) {
-      this.preparations.set(dbPreps.map((p: any) => ({
-        id: p.id,
-        clientId: p.client_id,
-        name: p.name,
-        category: p.category,
-        expiryDays: p.expiry_days
-      })));
-    }
-  }
-
-  async savePreparation(prep: Partial<Preparation>) {
-    const user = this.currentUser();
-    if (!user) return;
-    const clientId = this.activeTargetClientId() || user.clientId || 'demo';
-    
-    const newPrep: Preparation = {
-      id: prep.id || Math.random().toString(36).substring(2, 9),
-      clientId: clientId,
-      name: prep.name || '',
-      category: prep.category || '',
-      expiryDays: prep.expiryDays || 0
-    };
-
-    this.preparations.update(list => {
-      const filtered = list.filter(p => p.id !== newPrep.id);
-      return [...filtered, newPrep];
-    });
-
-    const { error } = await supabase.from('preparations').upsert({
-      id: newPrep.id,
-      client_id: newPrep.clientId,
-      name: newPrep.name,
-      category: newPrep.category,
-      expiry_days: newPrep.expiryDays
-    });
-
-    if (!error) {
-      this.toastService.success('Salvato', `Preparazione "${newPrep.name}" registrata.`);
-    } else {
-        console.error('Error saving preparation:', error);
-        this.toastService.error('Errore Database', error.message || 'Impossibile salvare la preparazione.');
-    }
-  }
-
-  async deletePreparation(id: string) {
-    this.preparations.update(list => list.filter(p => p.id !== id));
-    const { error } = await supabase.from('preparations').delete().eq('id', id);
-    if (!error) {
-      this.toastService.success('Eliminato', 'Preparazione rimossa.');
-    } else {
-        this.toastService.error('Errore Database', 'Impossibile eliminare la preparazione.');
-    }
-  }
-
   // --- Recipe Management ---
   async syncRecipe(recipe: Recipe) {
     this.recipes.update(list => {
@@ -2732,168 +2259,23 @@ export class AppStateService {
             timestamp: new Date().toISOString()
         });
 
-        this.syncNonConformities();
+        this.refreshAllData();
     } catch (e) {
         console.error('Error saving non-conformity:', e);
     }
   }
 
-  async updateNonConformityStatus(id: string, status: 'OPEN' | 'IN_PROGRESS' | 'CLOSED', resolution?: string) {
-    const nc = this.nonConformities().find(n => n.id === id);
-    if (!nc) {
-        console.warn('[HACCP-NC] NC not found locally:', id);
-        return;
-    }
-
+  async updateNonConformityStatus(id: string, status: 'OPEN' | 'IN_PROGRESS' | 'CLOSED') {
     // Optimistic local update
     this.nonConformities.update(list =>
-      list.map(n => n.id === id ? { ...n, status, resolution: resolution || n.resolution } : n)
+      list.map(nc => nc.id === id ? { ...nc, status } : nc)
     );
-
     // Persist to Supabase
     try {
-      const updateData: any = { 
-        status: status,
-        updated_at: new Date()
-      };
-      
-      if (resolution !== undefined) {
-        updateData.resolution = resolution;
-      }
-      
-      const { error } = await supabase
-        .from('non_conformities')
-        .update(updateData)
-        .eq('id', id)
-        .eq('client_id', nc.clientId);
-
+      const { error } = await supabase.from('non_conformities').update({ status }).eq('id', id);
       if (error) throw error;
-
-      // --- NEW: BACK-SYNC WITH CHECKLIST ---
-      // If we closed the anomaly, and it came from a checklist/cleaning module, we mark the area as "Conforme" (ok)
-      if (status === 'CLOSED' && nc.moduleId && nc.itemName) {
-          const checklistModules = ['operative-checklist', 'pre-op-checklist', 'post-op-checklist', 'cleaning-maintenance'];
-          if (checklistModules.includes(nc.moduleId)) {
-              // Find all matching checklist records for that day/client
-              const matchingRecords = this.checklistRecords().filter(r => 
-                  r.moduleId === nc.moduleId && 
-                  r.clientId === nc.clientId && 
-                  r.date === nc.date
-              );
-
-              if (matchingRecords.length > 0) {
-                  const cleanItemName = nc.itemName
-                    .replace('Anomalia riscontrata in: ', '')
-                    .replace('Anomalia pulizia riscontrata in: ', '')
-                    .trim();
-                    
-                  const targetName = nc.itemName.toLowerCase().trim();
-                  const targetClean = cleanItemName.toLowerCase().trim();
-
-                  for (const record of matchingRecords) {
-                      if (!record.data) continue;
-
-                      let itemsArray: any[] = [];
-                      let dataKey: string | null = null;
-
-                      if (Array.isArray(record.data)) {
-                          itemsArray = record.data;
-                      } else if (record.data.items) {
-                          itemsArray = record.data.items;
-                          dataKey = 'items';
-                      } else if (record.data.areas) {
-                          itemsArray = record.data.areas;
-                          dataKey = 'areas';
-                      }
-
-                      if (itemsArray.length > 0) {
-                          let updated = false;
-
-                          // Function to update an array of items/areas (recursive for nested steps)
-                          const updateArray = (arr: any[]) => {
-                              return arr.map((item: any) => {
-                                  const itemTitle = (item.title || item.label || item.id || '').toString().toLowerCase().trim();
-                                  const resolutionNote = `Risolto: ${resolution || 'Azione correttiva completata'}`;
-                                  
-                                  // 1. Check if the top-level item matches
-                                  const isTopMatch = itemTitle === targetName || 
-                                                    itemTitle === targetClean || 
-                                                    targetName.includes(itemTitle) || 
-                                                    itemTitle.includes(targetClean);
-
-                                  let newItem = { ...item };
-                                  let itemChanged = false;
-
-                                  if (isTopMatch) {
-                                      updated = true;
-                                      itemChanged = true;
-                                      newItem.status = 'ok';
-                                      newItem.note = resolutionNote;
-                                  }
-
-                                  // 2. Deep check in steps if they exist (for Pre-op/Post-op)
-                                  if (item.steps && Array.isArray(item.steps)) {
-                                      let stepsChanged = false;
-                                      const newSteps = item.steps.map((s: any) => {
-                                          const stepTitle = (s.title || s.label || s.id || '').toString().toLowerCase().trim();
-                                          if (stepTitle === targetName || stepTitle === targetClean || 
-                                              targetName.includes(stepTitle) || stepTitle.includes(targetClean)) {
-                                              stepsChanged = true;
-                                              updated = true;
-                                              return { ...s, status: 'ok', note: resolutionNote };
-                                          }
-                                          return s;
-                                      });
-
-                                      if (stepsChanged) {
-                                          newItem.steps = newSteps;
-                                          itemChanged = true;
-                                          // Also force top status to ok if it was an issue
-                                          if (newItem.status === 'issue') newItem.status = 'ok';
-                                      }
-                                  }
-
-                                  return itemChanged ? newItem : item;
-                              });
-                          };
-
-                          const newItemsArray = updateArray(itemsArray);
-                          let newData = dataKey ? { ...record.data, [dataKey]: newItemsArray } : newItemsArray;
-
-                          // Also check globalItems (pre-op)
-                          if (record.data && record.data.globalItems) {
-                              const newGlobalItems = updateArray(record.data.globalItems);
-                              if (updated) newData = { ...newData, globalItems: newGlobalItems };
-                          }
-
-                          if (updated) {
-                              console.log(`[HACCP-SYNC] Updating ${nc.moduleId} record ${record.id} for ${nc.itemName}`);
-                              
-                              // Update local state
-                              this.checklistRecords.update(records => 
-                                  records.map(r => r.id === record.id ? { ...r, data: newData } : r)
-                              );
-
-                              // Save to DB
-                              await supabase.from('checklist_records')
-                                  .update({ data: newData })
-                                  .eq('id', record.id);
-                          }
-                      }
-                  }
-              }
-          }
-      }
-      // -------------------------------------
-      
-      this.toastService.success('Operazione Completata', 'La non conformità è stata aggiornata con successo.');
-    } catch (e: any) {
-      console.error('Error updating non-conformity:', e);
-      const dbError = e.message || 'Errore di connessione al database.';
-      this.toastService.error('Errore', `Impossibile aggiornare: ${dbError}`);
-      
-      // Rollback
-      await this.syncNonConformities();
+    } catch (e) {
+      console.error('Error updating non-conformity status:', e);
     }
   }
 

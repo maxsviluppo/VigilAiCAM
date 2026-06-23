@@ -1,27 +1,46 @@
 import { createClient } from '@supabase/supabase-js';
 
-/** Progetto Supabase HACCP PRO — usato se .env / Vercel non hanno variabili valide */
-const DEFAULT_SUPABASE_URL = 'https://xrbjvisgcrsdbdalpmlw.supabase.co';
-const DEFAULT_SUPABASE_ANON_KEY =
-  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhyYmp2aXNnY3JzZGJkYWxwbWx3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM5MzcxODksImV4cCI6MjA4OTUxMzE4OX0.v7lAgk8_0WZcronEAXQnzcIKg-FjktEEQZwTHLXNz2w';
-
-function resolveEnv(key: string, fallback: string): string {
-  const raw = (import.meta as any).env?.[key];
-  if (typeof raw === 'string') {
-    const trimmed = raw.trim();
-    // Ignora stringhe vuote o placeholder Vercel — evita connessione “spezzata” dopo deploy
-    if (trimmed.length > 10 && !trimmed.includes('your_') && trimmed !== 'undefined') {
-      return trimmed;
-    }
+// Funzione per ottenere le variabili di ambiente a runtime (iniettate dal server) o build-time (Vite)
+const getEnv = (key: string, fallback: string = ''): string => {
+  if (typeof window !== 'undefined' && (window as any).__VIGILAI_ENV__) {
+    const val = (window as any).__VIGILAI_ENV__[key];
+    if (val) return val;
   }
-  return fallback;
+  return (import.meta.env as any)[key] || fallback;
+};
+
+const supabaseUrl = getEnv('VITE_SUPABASE_URL', 'https://bdcryhunzdemuficudws.supabase.co');
+const supabaseAnonKey = getEnv('VITE_SUPABASE_ANON_KEY', '');
+
+if (!supabaseUrl || !supabaseAnonKey) {
+  console.warn("ATTENZIONE: Credenziali Supabase mancanti. Verifica il file .env o le impostazioni Vercel.");
 }
 
-export const supabaseUrl = resolveEnv('VITE_SUPABASE_URL', DEFAULT_SUPABASE_URL);
-export const supabaseAnonKey = resolveEnv('VITE_SUPABASE_ANON_KEY', DEFAULT_SUPABASE_ANON_KEY);
-
-if (typeof window !== 'undefined') {
-  console.info('[HACCP] Supabase endpoint:', supabaseUrl);
+let supabase: any;
+try {
+  if (!supabaseUrl || !supabaseAnonKey) {
+    throw new Error("Supabase URL o Anon Key mancante");
+  }
+  supabase = createClient(supabaseUrl, supabaseAnonKey);
+} catch (e) {
+  console.error("[Supabase] Failed to initialize client, using dummy fallback:", e);
+  // Fallback dummy client to prevent total crash and show descriptive errors in forms
+  supabase = {
+    auth: { 
+      getSession: async () => ({ data: { session: null }, error: null }), 
+      onAuthStateChange: () => ({ data: { subscription: { unsubscribe: () => {} } } }),
+      signInWithPassword: async () => ({ 
+        data: { session: null, user: null }, 
+        error: new Error("Supabase non configurato. Inserisci le chiavi nel file .env o completa il Setup.") 
+      }),
+      signUp: async () => ({ 
+        data: { session: null, user: null }, 
+        error: new Error("Supabase non configurato. Inserisci le chiavi nel file .env o completa il Setup.") 
+      }),
+      signOut: async () => ({ error: null })
+    },
+    from: () => ({ select: () => ({ order: () => ({ limit: () => ({ data: [], error: null }) }) }) })
+  } as any;
 }
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+export { supabase };

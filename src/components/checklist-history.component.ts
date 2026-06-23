@@ -123,12 +123,11 @@ import { ToastService } from '../services/toast.service';
                      <option value="pre-op-checklist" class="text-slate-800">Fase Pre-operativa</option>
                      <option value="operative-checklist" class="text-slate-800">Fase Operativa</option>
                      <option value="post-op-checklist" class="text-slate-800">Fase Post-operativa</option>
-                     <option value="non-compliance" class="text-slate-800">Non Conformità (Chiuse)</option>
                   </select>
                </div>
             </div>
          </div>
-       </div>
+       </div>iv>
 
        <!-- Table Container -->
        <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
@@ -155,10 +154,9 @@ import { ToastService } from '../services/toast.service';
                          
                          <!-- Type -->
                          <td class="py-3">
-                             <span [class]="'px-2.5 py-1 rounded font-bold text-[10px] uppercase tracking-wider border ' + 
-                                (record.moduleId === 'non-compliance' ? 'bg-rose-50 text-rose-600 border-rose-200' : 'bg-slate-100 text-slate-600 border-slate-200')">
-                                {{ getModuleName(record.moduleId) }}
-                             </span>
+                            <span class="px-2.5 py-1 rounded bg-slate-100 text-slate-600 font-bold text-[10px] uppercase tracking-wider border border-slate-200">
+                               {{ getModuleName(record.moduleId) }}
+                            </span>
                          </td>
 
                           <!-- Status -->
@@ -173,13 +171,13 @@ import { ToastService } from '../services/toast.service';
                                       [class.text-red-700]="getRecordStatus(record) === 'Non Conforme'"
                                       [class.border-red-200]="getRecordStatus(record) === 'Non Conforme'"
                                       
-                                      [class.bg-slate-50]="getRecordStatus(record) === 'Completata' || getRecordStatus(record) === 'Chiusa'"
-                                      [class.text-slate-600]="getRecordStatus(record) === 'Completata' || getRecordStatus(record) === 'Chiusa'"
-                                      [class.border-slate-200]="getRecordStatus(record) === 'Completata' || getRecordStatus(record) === 'Chiusa'">
+                                      [class.bg-slate-50]="getRecordStatus(record) === 'Completata'"
+                                      [class.text-slate-600]="getRecordStatus(record) === 'Completata'"
+                                      [class.border-slate-200]="getRecordStatus(record) === 'Completata'">
                                    <i class="fa-solid" 
                                       [class.fa-check]="getRecordStatus(record) === 'Conforme'" 
                                       [class.fa-triangle-exclamation]="getRecordStatus(record) === 'Non Conforme'"
-                                      [class.fa-check-circle]="getRecordStatus(record) === 'Completata' || getRecordStatus(record) === 'Chiusa'"></i>
+                                      [class.fa-check-circle]="getRecordStatus(record) === 'Completata'"></i>
                                    {{ getRecordStatus(record) }}
                                 </span>
                              </div>
@@ -228,29 +226,16 @@ export class ChecklistHistoryComponent {
    filterModule = signal('all');
 
    filteredHistory = computed(() => {
-      const checklists = this.state.filteredChecklistRecords().map(r => ({ ...r, type: 'checklist' }));
-      const closedNCs = this.state.filteredNonConformities()
-        .filter(nc => nc.status === 'CLOSED')
-        .map(nc => ({
-          id: nc.id,
-          moduleId: 'non-compliance',
-          clientId: nc.clientId,
-          timestamp: nc.createdAt || nc.date,
-          data: nc,
-          type: 'non-compliance'
-        }));
-      
-      let allRecords = [...checklists, ...closedNCs];
-      
+      let records = this.state.filteredChecklistRecords();
       const filter = this.filterModule();
       if (filter !== 'all') {
          if (filter === 'pre-op-checklist') {
-            allRecords = allRecords.filter(r => r.moduleId === 'pre-op-checklist' || r.moduleId === 'pre-operative');
+            records = records.filter(r => r.moduleId === 'pre-op-checklist' || r.moduleId === 'pre-operative');
          } else {
-            allRecords = allRecords.filter(r => r.moduleId === filter);
+            records = records.filter(r => r.moduleId === filter);
          }
       }
-      return allRecords.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+      return records.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
    });
 
    getModuleName(id: string) {
@@ -261,13 +246,11 @@ export class ChecklistHistoryComponent {
          case 'operative': return 'Fase Operativa';
          case 'post-op-checklist': return 'Fase Post-operativa';
          case 'post-operative': return 'Fase Post-operativa';
-         case 'non-compliance': return 'Non Conformità';
          default: return id;
       }
    }
 
    getRecordStatus(record: any): string {
-      if (record.type === 'non-compliance') return 'Chiusa';
       const data = record.data;
       if (!data) return 'N.D.';
 
@@ -327,12 +310,7 @@ export class ChecklistHistoryComponent {
    executeDelete() {
       const id = this.recordToDelete();
       if (id) {
-         const record = this.filteredHistory().find(r => r.id === id);
-         if (record && record.type === 'non-compliance') {
-            this.state.deleteNonConformity(id);
-         } else {
-            this.state.deleteChecklist(id);
-         }
+         this.state.deleteChecklist(id);
          this.toast.success('Eliminato', 'Registrazione rimossa con successo.');
          this.recordToDelete.set(null);
       }

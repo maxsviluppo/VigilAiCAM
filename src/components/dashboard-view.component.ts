@@ -88,45 +88,17 @@ interface SystemAlert {
              <i class="fa-solid fa-folder-open"></i>
            </div>
         </div>
-      <!-- Alert Critici -->
-      <div (click)="scrollToAlerts()" class="bg-white p-5 rounded-2xl shadow-sm border border-red-100 flex items-center justify-between cursor-pointer hover:border-red-200 transition-colors">
-         <div>
-           <p class="text-[11px] font-bold text-red-500 uppercase tracking-wider mb-1">Alert Critici</p>
-           <p class="text-2xl font-bold" [class]="criticalAlerts().length > 0 ? 'text-red-600' : 'text-slate-800'">{{ criticalAlerts().length }}</p>
-         </div>
-         <div class="h-10 w-10 rounded-full bg-red-50 flex items-center justify-center text-red-600 shrink-0">
-           <i class="fa-solid fa-triangle-exclamation"></i>
-         </div>
+        <!-- Alert Critici -->
+        <div (click)="scrollToAlerts()" class="bg-white p-5 rounded-2xl shadow-sm border border-red-100 flex items-center justify-between cursor-pointer hover:border-red-200 transition-colors">
+           <div>
+             <p class="text-[11px] font-bold text-red-500 uppercase tracking-wider mb-1">Alert Critici</p>
+             <p class="text-2xl font-bold" [class]="criticalAlerts().length > 0 ? 'text-red-600' : 'text-slate-800'">{{ criticalAlerts().length }}</p>
+           </div>
+           <div class="h-10 w-10 rounded-full bg-red-50 flex items-center justify-center text-red-600 shrink-0">
+             <i class="fa-solid fa-triangle-exclamation"></i>
+           </div>
+        </div>
       </div>
-    </div>
-
-    <!-- PERSISTENT CRITICAL ANOMALIES (Visible until resolved) -->
-    @if (criticalAlerts().length > 0) {
-    <div class="bg-red-50/50 border border-red-100 rounded-2xl p-5 mb-6 animate-fade-in">
-       <div class="flex items-center justify-between mb-4">
-          <div class="flex items-center gap-2 text-red-600">
-             <i class="fa-solid fa-circle-exclamation text-sm"></i>
-             <span class="text-xs font-bold uppercase tracking-widest">Anomalie Critiche in Sospeso</span>
-          </div>
-          <span class="bg-red-600 text-white text-[9px] font-black px-2 py-0.5 rounded-full uppercase">{{ criticalAlerts().length }} pendenti</span>
-       </div>
-       <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-          @for (alert of criticalAlerts(); track alert.id) {
-             <div class="bg-white p-3 rounded-xl border border-red-100 shadow-sm hover:shadow-md transition-shadow cursor-pointer group" (click)="scrollToAlerts()">
-                <div class="flex items-start justify-between mb-1">
-                   <h4 class="text-xs font-bold text-slate-800 truncate pr-2">{{ alert.title }}</h4>
-                   <span class="text-[8px] bg-red-100 text-red-600 px-1.5 py-0.5 rounded font-black uppercase">Critico</span>
-                </div>
-                <p class="text-[11px] text-slate-600 leading-tight mb-2 line-clamp-2 h-8 overflow-hidden">{{ alert.message }}</p>
-                <div class="flex items-center justify-between mt-auto pt-2 border-t border-slate-50">
-                   <span class="text-[9px] font-bold text-slate-400">{{ alert.userName }}</span>
-                   <span class="text-[9px] font-bold text-slate-400">{{ alert.timestamp }}</span>
-                </div>
-             </div>
-          }
-       </div>
-    </div>
-    }
 
       <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <!-- Main Left Column -->
@@ -173,10 +145,8 @@ interface SystemAlert {
                 {id: 'collaborators', label: 'Collaboratori', icon: 'fa-users-gear'},
                 {id: 'documentation', label: 'Archivio', icon: 'fa-box-archive'},
                 {id: 'settings', label: 'Impostazioni', icon: 'fa-sliders'},
-                {id: 'general-checks', label: 'Check Generali', icon: 'fa-list-check'},
-                {id: 'phases', label: 'Fasi Operative', icon: 'fa-layer-group'},
-                {id: 'microbio-monitor', label: 'Analisi Microbio', icon: 'fa-microscope'},
-                {id: 'ingredients-book', label: 'Libro Ingredienti', icon: 'fa-book-open'}
+                {id: 'reports', label: 'Report', icon: 'fa-file-signature'},
+                {id: 'general-checks', label: 'Check Generali', icon: 'fa-list-check'}
               ]; track action.id) {
                 <button (click)="state.setModule(action.id)" class="flex flex-col items-center justify-center p-4 rounded-xl border border-slate-100 bg-slate-50 hover:bg-white hover:border-slate-300 hover:shadow-sm transition-all text-center group">
                    <i class="fa-solid {{ action.icon }} text-xl text-slate-400 group-hover:text-blue-600 mb-2 transition-colors"></i>
@@ -212,6 +182,18 @@ interface SystemAlert {
         <!-- Right Side Sidebar -->
         <div class="space-y-6" id="alerts-section">
           
+          <!-- Export & Compliance Action Card -->
+          <div class="bg-slate-900 rounded-2xl p-6 shadow-md text-white border border-slate-800 relative overflow-hidden">
+            <div class="absolute right-0 top-0 h-32 w-32 bg-blue-500/20 rounded-full blur-2xl"></div>
+            <h3 class="text-lg font-bold mb-2 relative z-10 tracking-tight">Esportazione Ufficiale</h3>
+            <p class="text-xs text-slate-400 mb-6 relative z-10">Genera i registri conformi in formato PDF per la giornata odierna.</p>
+            
+            <div class="space-y-3 relative z-10">
+                 <button (click)="printDailyReport()" class="w-full py-3 bg-white hover:bg-slate-100 text-slate-900 text-sm font-bold rounded-xl transition-colors flex items-center justify-center gap-2 shadow-sm">
+                   <i class="fa-solid fa-file-pdf text-red-500"></i> GENERA REPORTE PDF
+                 </button>
+            </div>
+          </div>
 
           <!-- Alerts Summary -->
           <div class="bg-white rounded-2xl shadow-sm border border-slate-200 flex flex-col h-[400px]">
@@ -244,7 +226,7 @@ interface SystemAlert {
                           <div class="flex items-center justify-between mt-2 pt-2 border-t" [class.border-red-200]="alert.type === 'error'" [class.border-orange-200]="alert.type === 'warning'" [class.border-blue-200]="alert.type === 'info'">
                             <span class="text-[9px] text-slate-500 font-semibold">{{ alert.userName || 'Sistema' }} • {{ alert.timestamp }}</span>
                             @if (alert.actionable) {
-                              <button (click)="handleAlertAction(alert)" class="text-[10px] font-bold text-blue-600 hover:underline">Verifica</button>
+                              <button (click)="openUserProfile(alert.userId || '')" class="text-[10px] font-bold text-blue-600 hover:underline">Verifica</button>
                             }
                           </div>
                         </div>
@@ -388,11 +370,8 @@ export class DashboardViewComponent {
 
     if (currentFilterId) {
       users = allUsers.filter(u => u.id === currentFilterId);
-    } else if (currentCompanyId && currentCompanyId !== 'demo') {
+    } else if (currentCompanyId) {
       users = allUsers.filter(u => u.clientId === currentCompanyId && u.role !== 'ADMIN');
-    } else {
-      // In Global Admin view (no filter or demo company), show all non-admin users
-      users = allUsers.filter(u => u.role !== 'ADMIN');
     }
 
     return users;
@@ -453,22 +432,11 @@ export class DashboardViewComponent {
       r.date === currentDate
     );
 
-    // 1. Anomalies from daily checklists
     relevantRecords.forEach(record => {
       if (record.data.status === 'Non Conforme') {
-        // CHECK if there is a CLOSED non-conformity for this module/date/client
         const user = users.find(u => u.id === record.userId);
-        const isResolved = this.state.nonConformities().some(nc => 
-          nc.moduleId === record.moduleId && 
-          nc.date === record.date && 
-          nc.clientId === user?.clientId &&
-          nc.status === 'CLOSED'
-        );
-
-        if (isResolved) return; // Skip if resolved
-
         alerts.push({
-          id: `nc-rec-${record.id}`,
+          id: `nc-${record.id}`,
           type: 'error',
           title: `Anomalia in ${this.getModuleName(record.moduleId)}`,
           message: record.data.summary || 'Rilevata non conformità durante l\'ispezione.',
@@ -478,31 +446,6 @@ export class DashboardViewComponent {
           actionable: true
         });
       }
-    });
-
-    // 2. Dedicated Non-Conformities (Show all OPEN/IN_PROGRESS regardless of date)
-    const allNCs = this.state.nonConformities();
-    const relevantNCs = allNCs.filter(nc => 
-      userIds.includes(nc.responsibleId || '') && 
-      nc.status !== 'CLOSED'
-    );
-    
-    relevantNCs.forEach(nc => {
-      const user = users.find(u => u.id === nc.responsibleId);
-      const isToday = nc.date === currentDate;
-      
-      alerts.push({
-        id: `nc-table-${nc.id}`,
-        type: 'error',
-        title: `Anomalia: ${nc.itemName || 'Generale'}`,
-        message: nc.description.length > 60 ? nc.description.substring(0, 57) + '...' : nc.description,
-        userId: nc.responsibleId,
-        userName: user?.name || 'Sistema',
-        timestamp: isToday ? 
-          (nc.createdAt ? nc.createdAt.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }) : 'Oggi') : 
-          new Date(nc.date).toLocaleDateString('it-IT', { day: 'numeric', month: 'short' }),
-        actionable: true
-      });
     });
 
     users.forEach(user => {
@@ -527,11 +470,7 @@ export class DashboardViewComponent {
       }
     });
 
-    // Sort: Errors (Critical) first, then Warnings, then Info
-    return alerts.sort((a, b) => {
-      const priority = { 'error': 0, 'warning': 1, 'info': 2, 'success': 3 };
-      return priority[a.type] - priority[b.type];
-    });
+    return alerts;
   });
 
   criticalAlerts = computed(() =>
@@ -558,66 +497,9 @@ export class DashboardViewComponent {
         return String(cid) === String(clientId);
       }).length;
 
-      if (moduleId === 'pre-op-checklist') {
-        let count = 0;
-
-        const areaSteps: Record<string, number> = {
-          'staff-hygiene': 2,
-          'cucina-sala': 4,
-          'area-lavaggio': 3,
-          'deposito': 3,
-          'spogliatoio': 3,
-          'antibagno-bagno-personale': 4,
-          'bagno-clienti': 4,
-          'pavimenti': 2,
-          'pareti': 1,
-          'soffitto': 2,
-          'infissi': 2
-        };
-
-        Object.keys(areaSteps).forEach(areaId => {
-          if (this.state.isActivityEnabled('pre-op-checklist', areaId, clientId)) {
-            count += areaSteps[areaId];
-          }
-        });
-
-        count += (clientEquipmentCount * 2);
-        return count;
-      }
-
-      if (moduleId === 'operative-checklist') {
-        let count = 0;
-        if (this.state.isActivityEnabled('operative-checklist', 'temperature', clientId)) {
-          count += clientEquipmentCount;
-        }
-        return count;
-      }
-
-      if (moduleId === 'post-op-checklist') {
-        let count = 0;
-        const areaSteps: Record<string, number> = {
-          'cucina-sala': 3,
-          'area-lavaggio': 3,
-          'deposito': 3,
-          'spogliatoio': 3,
-          'antibagno-bagno-personale': 3,
-          'bagno-clienti': 3,
-          'pavimenti': 3,
-          'pareti': 2,
-          'soffitto': 2,
-          'infissi': 2,
-          'reti-antiintrusione': 2
-        };
-
-        Object.keys(areaSteps).forEach(areaId => {
-          if (this.state.isActivityEnabled('post-op-checklist', areaId, clientId)) {
-            count += areaSteps[areaId];
-          }
-        });
-
-        count += (clientEquipmentCount * 2);
-        return count;
-      }
+      if (moduleId === 'pre-op-checklist') return 42 + (clientEquipmentCount * 2);
+      if (moduleId === 'operative-checklist') return 2 + clientEquipmentCount;
+      if (moduleId === 'post-op-checklist') return 22 + (clientEquipmentCount * 2);
       return 1;
     };
 
@@ -626,7 +508,8 @@ export class DashboardViewComponent {
       if (!data) return 0;
       if (record.moduleId === 'pre-op-checklist') {
         const areaDone = (data.areas || []).reduce((acc: number, a: any) => acc + (a.steps || []).filter((s: any) => s.status !== 'pending').length, 0);
-        return areaDone;
+        const globalDone = (data.globalItems || []).filter((i: any) => i.status !== 'pending').length;
+        return areaDone + globalDone;
       }
       if (record.moduleId === 'operative-checklist') {
         return (data.items || []).filter((i: any) => i.status !== 'pending').length;
@@ -644,37 +527,15 @@ export class DashboardViewComponent {
       let issueCount = 0;
 
       targetClients.forEach(client => {
-        const clientRec = moduleRecords.find(r => r.clientId === client.id);
-
-        let possibleForClient = 0;
-        if (clientRec) {
-          if (moduleId === 'pre-op-checklist') {
-            possibleForClient = (clientRec.data?.areas || []).reduce((acc: number, a: any) => acc + (a.steps || []).length, 0);
-          } else if (moduleId === 'operative-checklist') {
-            possibleForClient = (clientRec.data?.items || []).length;
-          } else if (moduleId === 'post-op-checklist') {
-            possibleForClient = (clientRec.data?.areas || []).reduce((acc: number, a: any) => acc + (a.steps || []).length, 0);
-          }
-        }
-
-        if (!clientRec || possibleForClient === 0) {
-          possibleForClient = getModulePossibleChecks(client.id, moduleId);
-        }
-
-        totalPossible += possibleForClient;
-
+        totalPossible += getModulePossibleChecks(client.id, moduleId);
+        const clientRec = moduleRecords.find(r => {
+           const user = this.state.systemUsers().find(u => u.id === r.userId);
+           return user?.clientId === client.id;
+        });
         if (clientRec) {
           totalDone += countCompletedItemsInRecord(clientRec);
           const hasIssue = (clientRec.data?.status === 'Non Conforme' || clientRec.data?.areas?.some((a: any) => a.steps?.some((s: any) => s.status === 'issue')) || clientRec.data?.items?.some((i: any) => i.status === 'issue'));
-          
-          const isResolved = this.state.nonConformities().some(nc => 
-            nc.moduleId === moduleId && 
-            nc.date === currentDate && 
-            nc.clientId === client.id &&
-            nc.status === 'CLOSED'
-          );
-
-          if (hasIssue && !isResolved) issueCount++;
+          if (hasIssue) issueCount++;
         }
       });
 
@@ -709,12 +570,8 @@ export class DashboardViewComponent {
     }
   }
 
-  handleAlertAction(alert: SystemAlert) {
-    if (alert.type === 'error' || alert.title.toLowerCase().includes('anomalia')) {
-      this.state.setModule('general-checks');
-    } else {
-      this.state.setModule('collaborators');
-    }
+  openUserProfile(userId: string) {
+    this.state.setModule('collaborators');
   }
 
   scrollToAlerts() {

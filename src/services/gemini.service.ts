@@ -1,15 +1,18 @@
-import { inject, Injectable } from '@angular/core';
+import { Injectable } from '@angular/core';
 import { GoogleGenAI, Type } from '@google/genai';
-import { AppStateService } from './app-state.service';
 
 @Injectable({
     providedIn: 'root'
 })
 export class GeminiService {
-    private state = inject(AppStateService);
     private apiKey = '';
 
     private getApiKey(): string {
+        const localKey = typeof window !== 'undefined' ? localStorage.getItem("vigilai_gemini_key") : null;
+        if (localKey && localKey.trim() !== "") {
+            return localKey.trim();
+        }
+
         const env = (import.meta as any).env || {};
         const processEnv = (window as any).process?.env || {};
 
@@ -27,13 +30,12 @@ export class GeminiService {
     }
 
     async analyzeImage(file: File): Promise<any> {
-        const activeKey = this.state.aiConfig()?.apiKey || this.apiKey;
-        if (!activeKey || activeKey === 'PLACEHOLDER_API_KEY') {
+        if (!this.apiKey || this.apiKey === 'PLACEHOLDER_API_KEY') {
             throw new Error('API_KEY_MISSING');
         }
 
-        const ai = new GoogleGenAI({ apiKey: activeKey });
-        const modelsToTry = ['gemini-3.5-flash', 'gemini-3.1-flash-lite', 'gemini-3-flash-preview'];
+        const ai = new GoogleGenAI({ apiKey: this.apiKey });
+        const modelsToTry = ['gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-1.5-flash-latest'];
         let lastError = null;
 
         for (const modelName of modelsToTry) {

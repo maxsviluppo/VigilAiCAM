@@ -81,14 +81,8 @@ import { ToastService } from '../services/toast.service';
                                             <i class="fa-solid fa-file-pdf"></i>
                                         </div>
                                         <div class="flex flex-col truncate">
-                                            <span class="text-xs font-black text-slate-700 truncate max-w-[120px]" [title]="getDisplayFileName(doc.fileName)">{{ getDisplayFileName(doc.fileName) }}</span>
-                                            <div class="flex items-center gap-1">
-                                                <span class="text-[9px] text-slate-400 font-bold uppercase">{{ doc.uploadDate | date:'dd/MM/yy' }}</span>
-                                                @if (getFileSize(doc.fileName)) {
-                                                    <span class="text-[9px] text-slate-300">•</span>
-                                                    <span class="text-[9px] text-slate-400 font-bold uppercase">{{ getFileSize(doc.fileName) }}</span>
-                                                }
-                                            </div>
+                                            <span class="text-xs font-black text-slate-700 truncate max-w-[120px]">{{ doc.fileName }}</span>
+                                            <span class="text-[9px] text-slate-400 font-bold uppercase">{{ doc.uploadDate | date:'dd/MM/yy' }}</span>
                                         </div>
                                     </div>
                                     <div class="flex items-center gap-1 opacity-0 group-hover/file:opacity-100 transition-all">
@@ -178,11 +172,15 @@ export class DocsRegularityViewComponent {
     docDefinitions = [
         { id: 'scia', label: 'Scia e planimetria', icon: 'fa-map-location-dot' },
         { id: 'camerale', label: 'Camerale', icon: 'fa-building-columns' },
-        { id: 'haccp_plan', label: 'Manuale applicazione sistema HACCP', icon: 'fa-file-shield' },
+        { id: 'haccp_plan', label: 'Piano autocontrollo sistema HACCP', icon: 'fa-file-shield' },
         { id: 'osa', label: 'Attestato OSA', icon: 'fa-user-graduate' },
-        { id: 'registro_personale', label: 'Elenco del personale con mansioni', icon: 'fa-users-rectangle' },
+        { id: 'pec', label: 'PEC (Posta Elettronica Certificata)', icon: 'fa-envelope-circle-check', hasExpiry: true },
+        { id: 'firma_digitale', label: 'Firma digitale', icon: 'fa-signature' },
+        { id: 'registro_personale', label: 'Registro del personale', icon: 'fa-users-rectangle' },
+        { id: 'inps_inail', label: 'Iscrizione INPS / INAIL', icon: 'fa-stamp' },
         { id: 'messa_terra', label: 'DM 37/08 messa a terra DPR 462/01', icon: 'fa-bolt' },
-        { id: 'dvr', label: 'DVR (Documento Valutazione Rischi)', icon: 'fa-triangle-exclamation' }
+        { id: 'dvr', label: 'DVR (Documento Valutazione Rischi)', icon: 'fa-triangle-exclamation' },
+        { id: 'locazione', label: 'Contratto locazione o titolo proprietà', icon: 'fa-house-chimney' }
     ];
 
     uploadedCount = signal(0);
@@ -222,7 +220,7 @@ export class DocsRegularityViewComponent {
                 clientId: '', // Handled by context
                 category: 'regolarita-documentazione',
                 type,
-                fileName: `${file.name}|${file.size}`,
+                fileName: file.name,
                 fileType: file.type,
                 fileData: 'BASE64_PLACE_HOLDER'
             });
@@ -250,7 +248,7 @@ export class DocsRegularityViewComponent {
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = this.getDisplayFileName(doc.fileName);
+        a.download = doc.fileName;
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
@@ -278,19 +276,5 @@ export class DocsRegularityViewComponent {
         if (!targetClientId) return 'HACCP Pro';
         const client = this.state.clients().find(c => c.id === targetClientId);
         return client ? client.name : (this.state.isAdmin() ? 'Amministrazione' : 'Mia Unità');
-    }
-
-    getDisplayFileName(name: string): string {
-        return name ? name.split('|')[0] : '';
-    }
-
-    getFileSize(name: string): string {
-        if (!name || !name.includes('|')) return '';
-        const sizeStr = name.split('|')[1];
-        const bytes = parseInt(sizeStr, 10);
-        if (isNaN(bytes)) return '';
-        if (bytes < 1024) return bytes + ' B';
-        if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
-        return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
     }
 }
