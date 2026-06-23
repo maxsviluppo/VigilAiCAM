@@ -42,7 +42,10 @@ import {
   CameraOff,
   Wifi,
   WifiOff,
-  RefreshCw
+  RefreshCw,
+  Pencil,
+  Download,
+  Check
 } from "lucide-react";
 import * as Lucide from "lucide-react";
 import { motion, AnimatePresence, Reorder } from "framer-motion";
@@ -50,6 +53,24 @@ import { QRCodeCanvas } from 'qrcode.react';
 import { analyzeFrame, DetectionResult } from "./services/gemini";
 import { Camera, Incident, AlertTrigger, AlertTriggerItem, Zone, ZoneType, Point } from "./types";
 import { supabase } from "./supabase";
+import {
+  finalizeCameraForSave,
+  getCameraOrderNumber,
+  getDefaultCameraIpPrefix,
+  getIpLastOctet,
+  buildIpFromPrefixAndOctet,
+  sanitizeCameraIpForEdit,
+  hasValidStreamConfig,
+  isCompleteCameraIp,
+  isPartialIpEntry,
+  mapDbCamera,
+  parseEnabledTriggers,
+  persistLocalCameraSettings,
+  prepareCameraNetworkFields,
+  parseIpFromRtspUrl,
+  requiresStreamUrl,
+  toDbCameraRecord,
+} from "./utils/cameraNetwork";
 import { User } from "@supabase/supabase-js";
 import { GEMINI_API_KEY_MODAL_PLACEHOLDER, GEMINI_API_KEY_PLACEHOLDER, normalizeGeminiApiKey } from "./utils/geminiApiKey";
 
@@ -119,79 +140,129 @@ const IPCameraPlayer = ({ url, isAlertActive, isNightMode, imgRefCallback }: {
   isNightMode: boolean;
   imgRefCallback?: (el: HTMLImageElement | null) => void;
 }) => {
-  const [src, setSrc] = useState<string>("");
-  const [isWarmingUp, setIsWarmingUp] = useState(true);
+  const [src, setSrc] = useState("");
+  const [isReady, setIsReady] = useState(false);
   const [connectionError, setConnectionError] = useState<string | null>(null);
   const mountedRef = useRef(true);
+  const hasFrameRef = useRef(false);
+  const blobUrlRef = useRef<string | null>(null);
+  const waitSinceRef = useRef(Date.now());
 
   useEffect(() => {
     mountedRef.current = true;
-    let timeoutId: any;
+    hasFrameRef.current = false;
+    waitSinceRef.current = Date.now();
+    setIsReady(false);
+    setConnectionError(null);
+    setSrc("");
+
+    if (!url || !url.trim()) {
+      setConnectionError("IP/URL non configurato");
+      return () => {
+        mountedRef.current = false;
+      };
+    }
+
+    let timeoutId: ReturnType<typeof setTimeout>;
 
     const fetchFrame = async () => {
       if (!mountedRef.current) return;
-      
+
       try {
-        const response = await fetch(`/api/snapshot?rtsp=${encodeURIComponent(url)}&t=${Date.now()}`);
-        
+        const response = await fetch(
+          `/api/snapshot?rtsp=${encodeURIComponent(url.trim())}&t=${Date.now()}`
+        );
+
         if (!mountedRef.current) return;
 
         if (response.ok) {
           const blob = await response.blob();
-          const newSrc = URL.createObjectURL(blob);
-          setSrc(prev => {
-            if (prev) URL.revokeObjectURL(prev);
-            return newSrc;
-          });
-          setIsWarmingUp(false);
-          setConnectionError(null);
-          timeoutId = setTimeout(fetchFrame, 200);
-        } else if (response.status === 503) {
-          setIsWarmingUp(true);
-          setConnectionError(null);
-          timeoutId = setTimeout(fetchFrame, 1000);
-        } else {
-          setConnectionError(`Errore Server (${response.status})`);
-          timeoutId = setTimeout(fetchFrame, 3000);
+          const objectUrl = URL.createObjectURL(blob);
+          const img = new Image();
+          img.onload = () => {
+            if (!mountedRef.current) {
+              URL.revokeObjectURL(objectUrl);
+              return;
+            }
+            if (blobUrlRef.current) URL.revokeObjectURL(blobUrlRef.current);
+            blobUrlRef.current = objectUrl;
+            setSrc(objectUrl);
+            hasFrameRef.current = true;
+            waitSinceRef.current = Date.now();
+            setIsReady(true);
+            setConnectionError(null);
+          };
+          img.onerror = () => URL.revokeObjectURL(objectUrl);
+          img.src = objectUrl;
+          timeoutId = setTimeout(fetchFrame, 400);
+          return;
         }
-      } catch (e: any) {
+
+        if (response.status === 503) {
+          if (!hasFrameRef.current && Date.now() - waitSinceRef.current > 25000) {
+            setConnectionError("Camera in avvio — verifica IP e credenziali Tapo");
+          }
+          timeoutId = setTimeout(fetchFrame, 900);
+          return;
+        }
+
+        if (!hasFrameRef.current) {
+          setConnectionError(`Errore stream (${response.status})`);
+        }
+        timeoutId = setTimeout(fetchFrame, 3000);
+      } catch {
         if (!mountedRef.current) return;
-        setConnectionError("Errore di Rete");
+        if (!hasFrameRef.current && Date.now() - waitSinceRef.current > 20000) {
+          setConnectionError("Errore di rete verso la camera");
+        }
         timeoutId = setTimeout(fetchFrame, 3000);
       }
     };
 
     fetchFrame();
+
     return () => {
       mountedRef.current = false;
       if (timeoutId) clearTimeout(timeoutId);
-      setSrc(prev => {
-        if (prev) URL.revokeObjectURL(prev);
-        return "";
-      });
+      if (blobUrlRef.current) {
+        URL.revokeObjectURL(blobUrlRef.current);
+        blobUrlRef.current = null;
+      }
     };
   }, [url]);
 
+  if (!url || !url.trim()) {
+    return (
+      <div className="relative w-full h-full bg-slate-950 flex items-center justify-center">
+        <p className="text-[10px] font-black text-red-500 uppercase tracking-widest">IP/URL non configurato</p>
+      </div>
+    );
+  }
+
   return (
     <div className="relative w-full h-full bg-slate-950 flex items-center justify-center overflow-hidden">
-      {connectionError ? (
-        <div className="flex flex-col items-center gap-2 p-4 text-center">
+      {!isReady && !connectionError && (
+        <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-slate-950/80">
+          <div className="w-12 h-12 border-4 border-blue-500/20 border-t-blue-500 rounded-full animate-spin" />
+          <p className="text-[10px] font-black text-blue-500 uppercase tracking-widest animate-pulse mt-4">
+            Connessione camera...
+          </p>
+        </div>
+      )}
+      {connectionError && !hasFrameRef.current && (
+        <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-2 p-4 text-center bg-slate-950/90">
           <AlertTriangle size={24} className="text-red-500 animate-pulse" />
           <p className="text-[10px] font-black text-red-500 uppercase tracking-widest">{connectionError}</p>
-          <p className="text-[8px] text-slate-500 font-bold uppercase mt-1">Tentativo di riconnessione...</p>
+          <p className="text-[8px] text-slate-500 font-bold uppercase mt-1">Riprovo in background...</p>
         </div>
-      ) : isWarmingUp ? (
-        <div className="flex flex-col items-center gap-4">
-          <div className="w-12 h-12 border-4 border-blue-500/20 border-t-blue-500 rounded-full animate-spin" />
-          <p className="text-[10px] font-black text-blue-500 uppercase tracking-widest animate-pulse">Inizializzazione Cam...</p>
-        </div>
-      ) : (
+      )}
+      {src && (
         <img 
           ref={imgRefCallback}
-          src={src} 
-          className={`w-full h-full object-cover transition-all duration-300 ${isAlertActive ? 'opacity-40 saturate-150' : 'opacity-100'}`}
+          src={src}
+          alt=""
+          className={`w-full h-full object-cover ${isAlertActive ? 'opacity-40 saturate-150' : 'opacity-100'}`}
           style={isNightMode ? { filter: 'grayscale(1) brightness(1.2) contrast(1.1) sepia(0.2) hue-rotate(180deg)' } : {}}
-          crossOrigin="anonymous"
         />
       )}
     </div>
@@ -515,6 +586,42 @@ const DEFAULT_TRIGGERS: AlertTriggerItem[] = [
   { id: 'earthquake', label: 'Terremoto', description: 'Vibrazioni, oscillazioni continue o scuotimento dell\'inquadratura compatibili con un terremoto/scossa sismica (da distinguere da urti singoli al tavolo/supporto).', icon_name: 'Zap', color_class: 'text-amber-500' }
 ];
 
+const TRIGGER_ICON_GRADIENTS: Record<string, string> = {
+  'text-blue-400': 'from-blue-500 to-blue-700',
+  'text-red-500': 'from-red-500 to-red-700',
+  'text-orange-500': 'from-orange-500 to-orange-700',
+  'text-slate-300': 'from-slate-400 to-slate-600',
+  'text-green-400': 'from-green-500 to-green-700',
+  'text-purple-400': 'from-purple-500 to-purple-700',
+  'text-cyan-400': 'from-cyan-500 to-cyan-700',
+  'text-amber-500': 'from-amber-500 to-amber-700',
+};
+
+const SIMULATED_UPDATE_CHANGELOG =
+  'Simulazione OTA — nessun file verrà modificato.\n• Fix setup camera per numero\n• Trigger salvati correttamente\n• UI 3.5" ottimizzata';
+
+function bumpPatchVersion(version: string): string {
+  const core = version.split("-")[0].trim();
+  const parts = core.split(".").map((part) => parseInt(part, 10) || 0);
+  while (parts.length < 3) parts.push(0);
+  parts[2] += 1;
+  return parts.join(".");
+}
+
+function isSimulatedUpdateUi(ui: { simulated?: boolean; changelog?: string }): boolean {
+  return ui.simulated === true || (ui.changelog?.startsWith("Simulazione OTA") ?? false);
+}
+
+async function readJsonResponse<T = Record<string, unknown>>(res: Response): Promise<T | null> {
+  try {
+    const text = await res.text();
+    if (!text.trim()) return null;
+    return JSON.parse(text) as T;
+  } catch {
+    return null;
+  }
+}
+
 export default function App() {
 
   const [connectMethod, setConnectMethod] = useState<'direct' | 'advanced' | 'browser'>('direct');
@@ -538,6 +645,7 @@ export default function App() {
   const [showSettings, setShowSettings] = useState(false);
   const [showPlans, setShowPlans] = useState(false);
   const [showCameraModal, setShowCameraModal] = useState(false);
+  const [editingCameraNumber, setEditingCameraNumber] = useState<number | null>(null);
   const [editingCamera, setEditingCamera] = useState<Camera | null>(null);
   const [activeCameraTab, setActiveCameraTab] = useState<'info' | 'source' | 'triggers' | 'client'>('info');
   const [activeCamStatuses, setActiveCamStatuses] = useState<Record<string, boolean>>({});
@@ -548,6 +656,8 @@ export default function App() {
     return saved ? JSON.parse(saved) : ["allarme.vigilai@gmail.com"];
   });
   const [newEmail, setNewEmail] = useState("");
+  const [emailSelectedIndex, setEmailSelectedIndex] = useState(0);
+  const [editingEmailIndex, setEditingEmailIndex] = useState<number | null>(null);
   const [isSimulating, setIsSimulating] = useState(false);
   const [isMultiView, setIsMultiView] = useState(true);
   const [preventSleep, setPreventSleep] = useState(true);
@@ -568,6 +678,22 @@ export default function App() {
   const [diagnosticResult, setDiagnosticResult] = useState<any>(null);
   const [loadingDiagnostic, setLoadingDiagnostic] = useState(false);
 
+  const [appVersion, setAppVersion] = useState("…");
+  const [updateUi, setUpdateUi] = useState<{
+    open: boolean;
+    phase: "prompt" | "progress" | "done" | "error";
+    availableVersion?: string;
+    currentVersion?: string;
+    changelog?: string;
+    progress?: number;
+    message?: string;
+    error?: string;
+    critical?: boolean;
+    simulated?: boolean;
+  }>({ open: false, phase: "prompt" });
+  const updatePollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const simulateUpdateTimeoutsRef = useRef<ReturnType<typeof setTimeout>[]>([]);
+
   const [networkStatus, setNetworkStatus] = useState<{
     online: boolean;
     hasLocalNetwork: boolean;
@@ -583,6 +709,7 @@ export default function App() {
   const [wifiScanning, setWifiScanning] = useState(false);
   const [wifiStatusMessage, setWifiStatusMessage] = useState<{ type: 'error' | 'success' | 'info'; message: string } | null>(null);
   const [wifiNetworkPage, setWifiNetworkPage] = useState(0);
+  const [wifiSelectedIndex, setWifiSelectedIndex] = useState(0);
   const WIFI_NETWORKS_PER_PAGE_35 = 3;
 
   useEffect(() => {
@@ -707,6 +834,12 @@ export default function App() {
       if (data.success && Array.isArray(data.networks)) {
         setWifiNetworks(data.networks);
         setWifiNetworkPage(0);
+        if (data.networks.length > 0) {
+          setWifiSelectedIndex(0);
+          setSelectedWifiSsid(data.networks[0].ssid);
+        } else {
+          setSelectedWifiSsid("");
+        }
         if (data.networks.length === 0) {
           setWifiStatusMessage({ type: 'info', message: 'Nessuna rete Wi-Fi rilevata. Riprova tra qualche secondo.' });
         }
@@ -754,6 +887,68 @@ export default function App() {
     }
   }, [selectedWifiSsid, wifiPassword, checkNetworkStatus]);
 
+  const cycleWifiNetwork = useCallback((delta: number) => {
+    if (wifiNetworks.length === 0) return;
+    setWifiSelectedIndex((prev) => {
+      const next = (prev + delta + wifiNetworks.length) % wifiNetworks.length;
+      setSelectedWifiSsid(wifiNetworks[next].ssid);
+      setWifiPassword("");
+      setWifiStatusMessage(null);
+      return next;
+    });
+  }, [wifiNetworks]);
+
+  const cycleEmailRecipient = useCallback((delta: number) => {
+    if (notificationEmails.length === 0) return;
+    setEmailSelectedIndex((prev) => (prev + delta + notificationEmails.length) % notificationEmails.length);
+    setEditingEmailIndex(null);
+    setNewEmail("");
+  }, [notificationEmails]);
+
+  const handleAddOrUpdateEmail = useCallback(() => {
+    const trimmed = newEmail.trim();
+    if (!trimmed) return;
+    if (editingEmailIndex !== null) {
+      setNotificationEmails((prev) => {
+        const updated = [...prev];
+        updated[editingEmailIndex] = trimmed;
+        return updated;
+      });
+      setEditingEmailIndex(null);
+    } else {
+      setNotificationEmails((prev) => {
+        if (prev.includes(trimmed)) return prev;
+        setEmailSelectedIndex(prev.length);
+        return [...prev, trimmed];
+      });
+    }
+    setNewEmail("");
+  }, [newEmail, editingEmailIndex, notificationEmails]);
+
+  const handleEditSelectedEmail = useCallback(() => {
+    if (notificationEmails.length === 0) return;
+    const idx = emailSelectedIndex;
+    setEditingEmailIndex(idx);
+    setNewEmail(notificationEmails[idx]);
+  }, [notificationEmails, emailSelectedIndex]);
+
+  const handleDeleteSelectedEmail = useCallback(() => {
+    if (notificationEmails.length === 0) return;
+    setNotificationEmails((prev) => {
+      const filtered = prev.filter((_, i) => i !== emailSelectedIndex);
+      setEmailSelectedIndex((cur) => Math.min(cur, Math.max(0, filtered.length - 1)));
+      return filtered;
+    });
+    setEditingEmailIndex(null);
+    setNewEmail("");
+  }, [notificationEmails.length, emailSelectedIndex]);
+
+  useEffect(() => {
+    if (emailSelectedIndex >= notificationEmails.length) {
+      setEmailSelectedIndex(Math.max(0, notificationEmails.length - 1));
+    }
+  }, [notificationEmails.length, emailSelectedIndex]);
+
   useEffect(() => {
     checkNetworkStatus();
     const interval = setInterval(checkNetworkStatus, 30000);
@@ -788,6 +983,7 @@ export default function App() {
   // Settings State
   const [aiModel, setAiModel] = useState(() => localStorage.getItem("vigilai_model") || "gemini-3-flash-preview");
   const [showEmailPass, setShowEmailPass] = useState(false);
+  const [showGeminiKey, setShowGeminiKey] = useState(false);
   const [appSettings, setAppSettings] = useState({
     geminiKey: localStorage.getItem("vigilai_gemini_key") || "",
     emailUser: localStorage.getItem("vigilai_email_user") || "",
@@ -928,6 +1124,351 @@ export default function App() {
     }
   };
 
+  const handleSaveSettings = useCallback(() => {
+    const normalizedGeminiKey = normalizeGeminiApiKey(appSettings.geminiKey);
+    localStorage.setItem("vigilai_gemini_key", normalizedGeminiKey);
+    localStorage.setItem("vigilai_gemini_key_updated_at", new Date().toISOString());
+    localStorage.setItem("vigilai_email_user", appSettings.emailUser);
+    localStorage.setItem("vigilai_email_pass", appSettings.emailPass);
+    localStorage.setItem("vigilai_telegram_chat_id", appSettings.telegramChatId);
+    localStorage.setItem("vigilai_telegram_token", appSettings.telegramToken);
+    localStorage.setItem("vigilai_model", aiModel);
+    localStorage.setItem("vigilai_notification_emails", JSON.stringify(notificationEmails));
+
+    fetch("/api/settings", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        geminiKey: normalizedGeminiKey,
+        emailUser: appSettings.emailUser,
+        emailPass: appSettings.emailPass,
+        telegramChatId: appSettings.telegramChatId,
+        telegramToken: appSettings.telegramToken,
+        notificationEmails: notificationEmails,
+      }),
+    })
+      .then((res) => res.json())
+      .then((resData) => {
+        if (resData.success) {
+          setGlobalModal({
+            type: "success",
+            title: "Impostazioni Salvate",
+            message: "Le impostazioni sono state applicate e sincronizzate con successo!",
+          });
+        }
+      })
+      .catch((err) => console.error("[Settings] Errore salvataggio:", err));
+
+    backupApiKeyToSupabase(normalizedGeminiKey);
+    if (user) {
+      supabase.auth
+        .updateUser({
+          data: {
+            gemini_key: normalizedGeminiKey,
+            email_user: appSettings.emailUser,
+            email_pass: appSettings.emailPass,
+            telegram_chat_id: appSettings.telegramChatId,
+            telegram_token: appSettings.telegramToken,
+            notification_emails: notificationEmails,
+          },
+        })
+        .catch((err: any) => console.warn("[Settings] Errore backup cloud:", err));
+    }
+
+    setShowSettings(false);
+  }, [appSettings, aiModel, notificationEmails, user]);
+
+  const fetchUpdateStatus = useCallback(async () => {
+    try {
+      const res = await fetch("/api/update/status");
+      const data = await readJsonResponse<{
+        currentVersion?: string;
+        state?: string;
+        progress?: number;
+        message?: string;
+        error?: string;
+        availableVersion?: string;
+        changelog?: string;
+      }>(res);
+      if (!data) return null;
+      if (data.currentVersion) setAppVersion(data.currentVersion);
+      return data;
+    } catch (err) {
+      console.warn("[Update] Errore lettura stato:", err);
+      return null;
+    }
+  }, []);
+
+  const stopUpdatePolling = useCallback(() => {
+    if (updatePollRef.current) {
+      clearInterval(updatePollRef.current);
+      updatePollRef.current = null;
+    }
+  }, []);
+
+  const clearSimulateUpdateTimeouts = useCallback(() => {
+    simulateUpdateTimeoutsRef.current.forEach(clearTimeout);
+    simulateUpdateTimeoutsRef.current = [];
+  }, []);
+
+  const runLocalSimulatedUpdate = useCallback(() => {
+    stopUpdatePolling();
+    clearSimulateUpdateTimeouts();
+    const steps: Array<{
+      delay: number;
+      progress: number;
+      message: string;
+      phase?: "progress" | "done";
+    }> = [
+      { delay: 0, progress: 8, message: "Download pacchetto simulato..." },
+      { delay: 1800, progress: 32, message: "Verifica checksum simulata..." },
+      { delay: 3600, progress: 58, message: "Installazione componenti simulata..." },
+      { delay: 5400, progress: 82, message: "Configurazione servizi simulata..." },
+      {
+        delay: 7200,
+        progress: 100,
+        message: "Simulazione completata — nessun riavvio, nessun file modificato.",
+        phase: "done",
+      },
+    ];
+
+    setUpdateUi((prev) => ({
+      ...prev,
+      open: true,
+      phase: "progress",
+      progress: 5,
+      message: "Avvio simulazione aggiornamento...",
+      simulated: true,
+      error: undefined,
+    }));
+
+    for (const step of steps) {
+      simulateUpdateTimeoutsRef.current.push(
+        setTimeout(() => {
+          setUpdateUi((prev) => ({
+            ...prev,
+            open: true,
+            phase: step.phase ?? "progress",
+            progress: step.progress,
+            message: step.message,
+            simulated: true,
+          }));
+        }, step.delay)
+      );
+    }
+  }, [clearSimulateUpdateTimeouts, stopUpdatePolling]);
+
+  const startUpdatePolling = useCallback(() => {
+    stopUpdatePolling();
+    updatePollRef.current = setInterval(async () => {
+      const status = await fetchUpdateStatus();
+      if (!status) return;
+
+      setUpdateUi((prev) => {
+        if (prev.simulated && isSimulatedUpdateUi(prev)) {
+          return prev;
+        }
+        const nextPhase =
+          status.state === "success"
+            ? "done"
+            : status.state === "error" || status.state === "rollback"
+              ? "error"
+              : "progress";
+        return {
+          ...prev,
+          open: true,
+          phase: nextPhase,
+          progress: status.progress ?? prev.progress,
+          message: status.message,
+          error: status.error,
+          availableVersion: status.availableVersion ?? prev.availableVersion,
+          currentVersion: status.currentVersion ?? prev.currentVersion,
+        };
+      });
+
+      if (status.state === "success" || status.state === "error" || status.state === "rollback") {
+        stopUpdatePolling();
+      }
+    }, 2000);
+  }, [fetchUpdateStatus, stopUpdatePolling]);
+
+  const checkForUpdates = useCallback(async (silent = false) => {
+    try {
+      const res = await fetch("/api/update/check");
+      const data = await readJsonResponse<{
+        success?: boolean;
+        updateAvailable?: boolean;
+        currentVersion?: string;
+        availableVersion?: string;
+        changelog?: string;
+        critical?: boolean;
+        error?: string;
+      }>(res);
+      if (!data) {
+        if (!silent) {
+          setGlobalModal({
+            type: "error",
+            title: "Errore Aggiornamento",
+            message: `Risposta server non valida (HTTP ${res.status})`,
+          });
+        }
+        return;
+      }
+      if (data.currentVersion) setAppVersion(data.currentVersion);
+
+      if (data.success && data.updateAvailable) {
+        setUpdateUi({
+          open: true,
+          phase: "prompt",
+          simulated: false,
+          availableVersion: data.availableVersion,
+          currentVersion: data.currentVersion,
+          changelog: data.changelog,
+          critical: data.critical,
+        });
+        return;
+      }
+
+      if (!silent) {
+        setGlobalModal({
+          type: "success",
+          title: "Software Aggiornato",
+          message: data.error
+            ? `Controllo completato con avviso: ${data.error}`
+            : `Versione installata: v${data.currentVersion}`,
+        });
+      }
+    } catch (err: any) {
+      if (!silent) {
+        setGlobalModal({
+          type: "error",
+          title: "Errore Aggiornamento",
+          message: err.message || "Impossibile controllare gli aggiornamenti",
+        });
+      }
+    }
+  }, []);
+
+  const simulateUpdateCheck = useCallback(async () => {
+    stopUpdatePolling();
+    clearSimulateUpdateTimeouts();
+
+    let currentVersion = appVersion;
+    if (!currentVersion || currentVersion === "…") {
+      try {
+        const res = await fetch("/api/update/status");
+        const data = await readJsonResponse<{ currentVersion?: string }>(res);
+        if (data?.currentVersion) {
+          currentVersion = data.currentVersion;
+          setAppVersion(data.currentVersion);
+        }
+      } catch {
+        // fallback locale sotto
+      }
+    }
+    if (!currentVersion || currentVersion === "…") {
+      currentVersion = "2.0.0";
+    }
+
+    const availableVersion = bumpPatchVersion(currentVersion);
+    setUpdateUi({
+      open: true,
+      phase: "prompt",
+      simulated: true,
+      availableVersion,
+      currentVersion,
+      changelog: SIMULATED_UPDATE_CHANGELOG,
+      critical: false,
+    });
+  }, [appVersion, stopUpdatePolling, clearSimulateUpdateTimeouts]);
+
+  const applyRealSystemUpdate = useCallback(async () => {
+    stopUpdatePolling();
+    setUpdateUi((prev) => ({
+      ...prev,
+      open: true,
+      phase: "progress",
+      progress: 5,
+      message: "Avvio aggiornamento...",
+      simulated: false,
+      error: undefined,
+    }));
+    startUpdatePolling();
+
+    try {
+      const res = await fetch("/api/update/apply", { method: "POST" });
+      const data = await readJsonResponse<{ success?: boolean; error?: string }>(res);
+      if (!data?.success) {
+        stopUpdatePolling();
+        setUpdateUi((prev) => ({
+          ...prev,
+          phase: "error",
+          error:
+            data?.error ||
+            (res.status === 404 || res.status === 405
+              ? "API aggiornamento non disponibile sul server. Ricompila e riavvia vigilai."
+              : `Impossibile avviare l'aggiornamento (HTTP ${res.status})`),
+        }));
+      }
+    } catch (err: any) {
+      stopUpdatePolling();
+      setUpdateUi((prev) => ({
+        ...prev,
+        phase: "error",
+        error: err.message || "Errore di rete durante l'aggiornamento",
+      }));
+    }
+  }, [startUpdatePolling, stopUpdatePolling]);
+
+  const handleUpdateConfirm = useCallback(() => {
+    if (isSimulatedUpdateUi(updateUi)) {
+      runLocalSimulatedUpdate();
+      return;
+    }
+    applyRealSystemUpdate();
+  }, [updateUi, runLocalSimulatedUpdate, applyRealSystemUpdate]);
+
+  useEffect(() => {
+    fetchUpdateStatus().then((status) => {
+      if (!status) return;
+      if (status.state === "downloading" || status.state === "installing") {
+        setUpdateUi({
+          open: true,
+          phase: "progress",
+          progress: status.progress,
+          message: status.message,
+          availableVersion: status.availableVersion,
+          currentVersion: status.currentVersion,
+        });
+        startUpdatePolling();
+      } else if (status.state === "available") {
+        const simulated = status.changelog?.startsWith("Simulazione OTA") ?? false;
+        setUpdateUi({
+          open: true,
+          phase: "prompt",
+          simulated,
+          availableVersion: status.availableVersion,
+          currentVersion: status.currentVersion,
+          changelog: status.changelog,
+        });
+      }
+    });
+    return () => {
+      stopUpdatePolling();
+      clearSimulateUpdateTimeouts();
+    };
+  }, [fetchUpdateStatus, stopUpdatePolling, startUpdatePolling, clearSimulateUpdateTimeouts]);
+
+  useEffect(() => {
+    if (!isMobile35) return;
+    const bootCheck = setTimeout(() => checkForUpdates(true), 60000);
+    const interval = setInterval(() => checkForUpdates(true), 6 * 60 * 60 * 1000);
+    return () => {
+      clearTimeout(bootCheck);
+      clearInterval(interval);
+    };
+  }, [isMobile35, checkForUpdates]);
+
   const prevKeyboardTargetRef = useRef<{ id: string; title: string } | null>(null);
   useEffect(() => {
     const prevTarget = prevKeyboardTargetRef.current;
@@ -1055,13 +1596,16 @@ export default function App() {
         };
       }
       if (id === 'cameraIp') {
+        const ipPrefix = getDefaultCameraIpPrefix(getPrimaryNetworkIp());
         return {
-          value: editingCamera.ip || '',
+          value: getIpLastOctet(editingCamera.ip || ''),
           setValue: (val: string | ((prev: string) => string)) => {
             setEditingCamera(prev => {
               if (!prev) return null;
-              const nextVal = typeof val === 'function' ? val(prev.ip || '') : val;
-              return { ...prev, ip: nextVal };
+              const currentOctet = getIpLastOctet(prev.ip || '');
+              const nextVal = typeof val === 'function' ? val(currentOctet) : val;
+              const oct = String(nextVal).replace(/\D/g, '').slice(0, 3);
+              return { ...prev, ip: buildIpFromPrefixAndOctet(ipPrefix, oct) };
             });
           }
         };
@@ -1237,7 +1781,8 @@ export default function App() {
               emailPass: passMail,
               telegramChatId: tgChatId,
               telegramToken: tgToken,
-              notificationEmails: recs
+              notificationEmails: recs,
+              skipCloudSync: true,
             })
           }).then(res => res.json()).then(resData => {
             if (resData.success) {
@@ -1335,6 +1880,24 @@ export default function App() {
               finalRecipients = newData.notification_emails.split(",").map((e: string) => e.trim()).filter(Boolean);
             }
 
+            const currentUser = localStorage.getItem("vigilai_email_user") || "";
+            const currentPass = localStorage.getItem("vigilai_email_pass") || "";
+            const currentChatId = localStorage.getItem("vigilai_telegram_chat_id") || "";
+            const currentToken = localStorage.getItem("vigilai_telegram_token") || "";
+            const currentRecipients = localStorage.getItem("vigilai_notification_emails") || "[]";
+
+            const unchanged =
+              finalUser === currentUser &&
+              finalPass === currentPass &&
+              finalChatId === currentChatId &&
+              finalToken === currentToken &&
+              JSON.stringify(finalRecipients) === currentRecipients;
+
+            if (unchanged) {
+              console.log("[VigilAI Realtime] Impostazioni già allineate, skip sync server.");
+              return;
+            }
+
             localStorage.setItem("vigilai_email_user", finalUser);
             localStorage.setItem("vigilai_email_pass", finalPass);
             localStorage.setItem("vigilai_telegram_chat_id", finalChatId);
@@ -1359,7 +1922,8 @@ export default function App() {
                 emailPass: finalPass,
                 telegramChatId: finalChatId,
                 telegramToken: finalToken,
-                notificationEmails: finalRecipients
+                notificationEmails: finalRecipients,
+                skipCloudSync: true,
               })
             }).then(res => res.json()).then(resData => {
               if (resData.success) {
@@ -1384,29 +1948,27 @@ export default function App() {
     if (!user) return;
     const { data: cams } = await supabase.from('cameras').select('*').order('order', { ascending: true });
     if (cams) {
-      const mappedCams = cams.map((c: any) => ({ ...c, enabledTriggers: c.enabled_triggers || [], rtspPath: c.rtsp_path || '/stream1' }));
+      const subnet = getPrimaryNetworkIp();
+      const mappedCams = cams.map((c: Record<string, unknown>) => mapDbCamera(c, subnet));
       setCameras(mappedCams);
-      // Auto-enable monitoring for active cams if desired
       const initialStatuses: Record<string, boolean> = {};
       mappedCams.forEach(c => initialStatuses[c.id] = true);
       setActiveCamStatuses(initialStatuses);
-      if (mappedCams.length > 0 && !activeCameraId) setActiveCameraId(mappedCams[0].id);
+      setActiveCameraId(prev => {
+        if (prev && mappedCams.some(c => c.id === prev)) return prev;
+        return mappedCams.length > 0 ? mappedCams[0].id : null;
+      });
     }
-  }, [user, activeCameraId]);
+  }, [user, getPrimaryNetworkIp]);
 
   const updateCameraOrder = async (newOrder: Camera[]) => {
     setCameras(newOrder);
     if (!user) return;
     
     // Persist new order to Supabase without wiping other columns
-    const updates = newOrder.map((cam, index) => ({
-      ...cam,
-      user_id: user.id,
-      order: index,
-      // Map frontend field names to DB column names if they differ
-      enabled_triggers: cam.enabledTriggers,
-      rtsp_path: cam.rtspPath
-    }));
+    const updates = newOrder.map((cam, index) =>
+      toDbCameraRecord({ ...cam, order: index }, user.id, index)
+    );
     
     const { error } = await supabase.from('cameras').upsert(updates, { onConflict: 'id' });
     if (error) console.error("Errore salvataggio ordine:", error);
@@ -1441,6 +2003,8 @@ export default function App() {
 
 
   const videoRefs = useRef<Map<string, HTMLVideoElement>>(new Map());
+  const cameraModalScrollRef = useRef<HTMLDivElement>(null);
+  const editingCameraRef = useRef<Camera | null>(null);
   const imgRefs = useRef<Map<string, HTMLImageElement>>(new Map());
   const cardRefs = useRef<Map<string, HTMLDivElement>>(new Map());
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -2106,50 +2670,70 @@ export default function App() {
     setIsSaving(true);
     setSaveStatus(null);
     try {
-      const finalCam: any = { 
-        ...cam, 
-        user_id: user.id, 
-        enabled_triggers: cam.enabledTriggers, 
-        rtsp_path: cam.rtspPath 
-      };
-      
-      // Handle ONVIF URL construction
-      if (finalCam.type === 'onvif' && finalCam.ip && finalCam.username) {
-        if (finalCam.ip.endsWith('.') || finalCam.ip === '192.168.1.') {
-          throw new Error("Indirizzo IP non completo. Assicurati di inserire l'IP completo (es. 192.168.1.10)");
-        }
-        // Build the URL only if it's missing or needs update
-        finalCam.url = `rtsp://${finalCam.username}:${finalCam.password}@${finalCam.ip}:${finalCam.port || 554}${finalCam.rtspPath || '/stream1'}`;
-      } else if (finalCam.type === 'ip' && !finalCam.url) {
-        if (!finalCam.ip || finalCam.ip.endsWith('.') || finalCam.ip === '192.168.1.') {
-          throw new Error("Indirizzo IP non completo. Assicurati di inserire l'IP completo (es. 192.168.1.10)");
-        }
-        // Fallback for IP type if URL is missing
-        finalCam.url = `rtsp://${finalCam.username}:${finalCam.password}@${finalCam.ip}:${finalCam.port || 554}/stream1`;
-      }
-      
-      const dbCam = { ...finalCam };
-      // If it's a new camera (temporary ID), remove ID to let Supabase generate one
-      if (dbCam.id?.startsWith('cam-')) {
-        delete dbCam.id;
-      }
-      
-      // Clean up fields that shouldn't be in the DB
-      delete dbCam.enabledTriggers; 
-      delete dbCam.rtspPath;
-      
-      console.log("[Supabase] Saving camera:", dbCam);
-      
-      const { error } = await supabase.from('cameras').upsert(dbCam);
+      const latestCam = editingCameraRef.current && editingCameraRef.current.id === cam.id
+        ? editingCameraRef.current
+        : cam;
+      const persisted = latestCam.id && !latestCam.id.startsWith('cam-')
+        ? cameras.find(c => c.id === latestCam.id)
+        : undefined;
+      const subnet = getPrimaryNetworkIp();
+      const finalized = finalizeCameraForSave(latestCam, persisted, subnet);
+      const streamOk = !requiresStreamUrl(finalized.type) || hasValidStreamConfig(finalized, subnet);
+      const isNewCamera = !persisted;
+      const dbPayload = toDbCameraRecord(finalized, user.id, isNewCamera ? cameras.length : undefined);
+
+      console.log("[Supabase] Saving camera:", dbPayload);
+
+      const { data, error } = await supabase
+        .from('cameras')
+        .upsert(dbPayload, { onConflict: 'id' })
+        .select()
+        .single();
+
       if (error) throw error;
-      
-      await fetchUserData();
-      setSaveStatus({ type: 'success', message: 'Camera salvata con successo!' });
+
+      let savedCam = mapDbCamera(data as Record<string, unknown>, subnet);
+      const savedTriggers = parseEnabledTriggers((data as Record<string, unknown>).enabled_triggers);
+
+      if (savedTriggers.length === 0 && finalized.enabledTriggers.length > 0) {
+        savedCam = { ...savedCam, enabledTriggers: [...finalized.enabledTriggers] };
+        const { error: triggerError } = await supabase
+          .from('cameras')
+          .update({ enabled_triggers: finalized.enabledTriggers })
+          .eq('id', savedCam.id);
+        if (triggerError) {
+          console.warn("[Supabase] Update trigger separato fallito:", triggerError.message);
+        }
+      }
+
+      persistLocalCameraSettings(savedCam.id, {
+        enabledTriggers: savedCam.enabledTriggers,
+      });
+
+      setCameras(prev => {
+        const idx = prev.findIndex(c => c.id === savedCam.id);
+        if (idx >= 0) {
+          const next = [...prev];
+          next[idx] = savedCam;
+          return next;
+        }
+        return [...prev, savedCam];
+      });
+      setActiveCameraId(savedCam.id);
+      setActiveCamStatuses(prev => ({ ...prev, [savedCam.id]: true }));
+
+      setSaveStatus({
+        type: 'success',
+        message: streamOk
+          ? `Camera salvata (${savedCam.enabledTriggers.length} trigger attivi).`
+          : `Salvato (${savedCam.enabledTriggers.length} trigger). Configura IP in Sorgente per lo stream.`,
+      });
       
       // Close modal after a short delay to show success
       setTimeout(() => {
         setShowCameraModal(false);
         setEditingCamera(null);
+        setEditingCameraNumber(null);
         setSaveStatus(null);
       }, 1500);
 
@@ -2166,14 +2750,38 @@ export default function App() {
     }
   };
 
-  const openCameraConfig = (cam?: Camera) => {
-    setEditingCamera(cam || {
+  const openCameraConfig = (cam?: Camera, displayNumber?: number) => {
+    const subnet = getPrimaryNetworkIp();
+    if (cam) {
+      const { ip, url } = prepareCameraNetworkFields(
+        {
+          ip: cam.ip,
+          url: cam.url,
+          type: cam.type,
+          port: cam.port,
+          username: cam.username,
+          password: cam.password,
+          rtspPath: cam.rtspPath,
+        },
+        subnet
+      );
+      const editIp = sanitizeCameraIpForEdit(ip, subnet);
+      const editUrl =
+        editIp !== ip && subnet && parseIpFromRtspUrl(url) === subnet ? '' : url;
+      setEditingCameraNumber(displayNumber ?? getCameraOrderNumber(cameras, cam.id));
+      setEditingCamera({ ...cam, ip: editIp, url: editUrl });
+      setActiveCameraTab('info');
+      setShowCameraModal(true);
+      return;
+    }
+    setEditingCameraNumber(displayNumber ?? cameras.length + 1);
+    setEditingCamera({
       id: `cam-${Date.now()}`,
       name: "Tapo C220",
       location: "Ingresso",
       type: "onvif",
       url: "",
-      ip: "192.168.1.",
+      ip: getDefaultCameraIpPrefix(subnet),
       port: 554,
       username: "Testcamera",
       password: "12345678",
@@ -2185,16 +2793,198 @@ export default function App() {
     setShowCameraModal(true);
   };
 
+  const openActiveCameraConfig = () => {
+    const cam = cameras.find(c => c.id === activeCameraId);
+    if (!cam) {
+      setGlobalModal({
+        type: 'error',
+        title: 'Nessuna camera selezionata',
+        message: 'Seleziona prima una camera (tocca o scorri fino al numero desiderato).',
+      });
+      return;
+    }
+    openCameraConfig(cam, getCameraOrderNumber(cameras, cam.id) ?? undefined);
+  };
+
+  const scrollCameraModalContent = useCallback((direction: 'up' | 'down') => {
+    const el = cameraModalScrollRef.current;
+    if (!el) return;
+    const step = Math.max(72, Math.round(el.clientHeight * 0.45));
+    el.scrollBy({ top: direction === 'up' ? -step : step, behavior: 'smooth' });
+  }, []);
+
+  useEffect(() => {
+    editingCameraRef.current = editingCamera;
+  }, [editingCamera]);
+
+  useEffect(() => {
+    if (showCameraModal && cameraModalScrollRef.current) {
+      cameraModalScrollRef.current.scrollTop = 0;
+    }
+  }, [activeCameraTab, showCameraModal]);
+
+  useEffect(() => {
+    if (!showCameraModal || !editingCamera || editingCamera.type !== 'onvif') return;
+    const rawIp = (editingCamera.ip || '').trim();
+    if (isPartialIpEntry(rawIp)) return;
+
+    const { ip, url } = prepareCameraNetworkFields(
+      {
+        ip: editingCamera.ip,
+        url: editingCamera.url,
+        type: editingCamera.type,
+        port: editingCamera.port,
+        username: editingCamera.username,
+        password: editingCamera.password,
+        rtspPath: editingCamera.rtspPath,
+      },
+      getPrimaryNetworkIp()
+    );
+    if (!isCompleteCameraIp(ip)) return;
+    if (ip === (editingCamera.ip || '') && url === (editingCamera.url || '')) return;
+    setEditingCamera(prev => (prev ? { ...prev, ip, url } : null));
+  }, [
+    showCameraModal,
+    editingCamera?.ip,
+    editingCamera?.port,
+    editingCamera?.username,
+    editingCamera?.password,
+    editingCamera?.rtspPath,
+    editingCamera?.type,
+    editingCamera?.url,
+    getPrimaryNetworkIp,
+  ]);
+
   const renderWifiScreen35 = (embedded = false) => {
-    const perPage = embedded ? 2 : WIFI_NETWORKS_PER_PAGE_35;
+    const isKeyboardOpen = keyboardTarget?.id === 'wifiPassword';
+    const primaryIp = getPrimaryNetworkIp();
+    const currentNetwork = wifiNetworks[wifiSelectedIndex] ?? null;
+    const btnSm = "h-7 flex-1 min-w-0 flex items-center justify-center gap-1 rounded-lg border text-[8px] font-black uppercase tracking-wide active:scale-95 px-1";
+
+    if (embedded) {
+      return (
+        <div className="w-full flex flex-col gap-1 overflow-hidden touch-manipulation flex-1 min-h-0">
+          {!isKeyboardOpen && (
+            <>
+              {/* Riga 3: stato connessione + cerca reti (compatti, stessa riga) */}
+              <div className="shrink-0 flex gap-1 items-stretch">
+                <div
+                  className={`${btnSm} flex-[1.2] ${
+                    networkStatus.online
+                      ? "bg-green-600/90 border-green-400/60 text-white"
+                      : "bg-amber-600 border-amber-400/60 text-white"
+                  }`}
+                  title={networkStatus.online ? "Connesso" : "Non connesso"}
+                >
+                  {networkStatus.online ? <Wifi size={11} /> : <WifiOff size={11} className="animate-pulse" />}
+                  <span className="truncate max-w-[5rem]">
+                    {networkStatus.online ? (primaryIp ? primaryIp.split(".").slice(-1)[0] : "OK") : "OFF"}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={scanWifiNetworks}
+                  disabled={wifiScanning}
+                  className={`${btnSm} flex-[1.8] bg-blue-600 border-blue-400 text-white disabled:opacity-60`}
+                >
+                  <RefreshCw size={11} className={wifiScanning ? "animate-spin shrink-0" : "shrink-0"} />
+                  {wifiScanning ? "..." : "Cerca Reti"}
+                </button>
+              </div>
+
+              {/* Riga 4: selettore rete — una alla volta, frecce su/giù a sinistra */}
+              <div className="shrink-0 flex gap-1 items-stretch h-9">
+                <div className="flex flex-col gap-0.5 shrink-0 w-8">
+                  <button
+                    type="button"
+                    disabled={wifiNetworks.length === 0}
+                    onClick={() => cycleWifiNetwork(-1)}
+                    className="flex-1 flex items-center justify-center bg-white/5 border border-white/10 rounded-md text-slate-300 active:scale-95 disabled:opacity-30 min-h-[14px]"
+                    title="Rete precedente"
+                  >
+                    <ChevronUp size={12} />
+                  </button>
+                  <button
+                    type="button"
+                    disabled={wifiNetworks.length === 0}
+                    onClick={() => cycleWifiNetwork(1)}
+                    className="flex-1 flex items-center justify-center bg-white/5 border border-white/10 rounded-md text-slate-300 active:scale-95 disabled:opacity-30 min-h-[14px]"
+                    title="Rete successiva"
+                  >
+                    <ChevronDown size={12} />
+                  </button>
+                </div>
+                <div className="flex-1 flex items-center gap-1.5 px-2 bg-black/40 border border-white/10 rounded-lg min-w-0">
+                  {currentNetwork ? (
+                    <>
+                      <Wifi size={11} className="text-blue-400 shrink-0" />
+                      <span className="text-[9px] font-bold text-white truncate flex-1">{currentNetwork.ssid}</span>
+                      <span className="text-[7px] text-slate-500 font-mono shrink-0">{currentNetwork.signal}%</span>
+                      {wifiNetworks.length > 1 && (
+                        <span className="text-[7px] text-slate-600 shrink-0">{wifiSelectedIndex + 1}/{wifiNetworks.length}</span>
+                      )}
+                    </>
+                  ) : (
+                    <span className="text-[8px] text-slate-500 font-bold uppercase">Premi Cerca Reti</span>
+                  )}
+                </div>
+              </div>
+
+              {wifiStatusMessage && (
+                <p className={`shrink-0 text-[7px] font-bold uppercase px-1 truncate ${
+                  wifiStatusMessage.type === "error" ? "text-red-400" : wifiStatusMessage.type === "success" ? "text-green-400" : "text-amber-400"
+                }`}>
+                  {wifiStatusMessage.message}
+                </p>
+              )}
+            </>
+          )}
+
+          {isKeyboardOpen && selectedWifiSsid && (
+            <div className="shrink-0 px-1 py-0.5">
+              <span className="text-[8px] text-blue-400 font-black uppercase tracking-widest">Rete: {selectedWifiSsid}</span>
+            </div>
+          )}
+
+          {/* Password Wi-Fi */}
+          <div className={`shrink-0 relative ${isKeyboardOpen ? "mb-[210px]" : ""}`}>
+            <input
+              type={showWifiPassword ? "text" : "password"}
+              value={wifiPassword}
+              onChange={(e) => setWifiPassword(e.target.value)}
+              onFocus={() => { if (useVirtualKeyboard) setKeyboardTarget({ id: 'wifiPassword', title: 'Password Wi-Fi' }); }}
+              placeholder={selectedWifiSsid ? `Password ${selectedWifiSsid}` : 'Password Wi-Fi'}
+              autoComplete="off"
+              className="w-full h-8 bg-white/5 border border-white/10 pl-2 pr-[4.5rem] rounded-lg text-[10px] text-white outline-none focus:border-blue-500 transition-colors"
+            />
+            <button
+              type="button"
+              onClick={() => setShowWifiPassword(!showWifiPassword)}
+              className="absolute right-9 top-1/2 -translate-y-1/2 w-7 h-6 flex items-center justify-center rounded active:scale-95 text-slate-400 hover:text-white"
+            >
+              {showWifiPassword ? <EyeOff size={13} /> : <Eye size={13} />}
+            </button>
+            <button
+              type="button"
+              onClick={() => setKeyboardTarget({ id: 'wifiPassword', title: 'Password Wi-Fi' })}
+              className={`absolute right-1 top-1/2 -translate-y-1/2 w-7 h-6 flex items-center justify-center rounded active:scale-95 ${
+                keyboardTarget?.id === 'wifiPassword' ? 'bg-blue-600 text-white' : 'bg-white/10 text-slate-400'
+              }`}
+            >
+              <Keyboard size={14} />
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    const perPage = WIFI_NETWORKS_PER_PAGE_35;
     const totalPages = Math.max(1, Math.ceil(wifiNetworks.length / perPage));
     const pageNetworks = wifiNetworks.slice(
       wifiNetworkPage * perPage,
       wifiNetworkPage * perPage + perPage
     );
     const emptySlots = pageNetworks.length > 0 ? perPage - pageNetworks.length : 0;
-    const isKeyboardOpen = keyboardTarget?.id === 'wifiPassword';
-    const primaryIp = getPrimaryNetworkIp();
 
     return (
       <div className={`w-full flex flex-col gap-1 overflow-hidden touch-manipulation ${embedded ? 'flex-1 min-h-0' : 'h-full bg-[#050810] p-1.5'}`}>
@@ -2583,23 +3373,33 @@ export default function App() {
                       exit={{ width: 0, opacity: 0 }}
                       className="overflow-hidden flex items-center gap-2 bg-slate-900/90 border border-white/10 rounded-xl px-2 py-1"
                     >
-                      <input
-                        type="password"
-                        value={appSettings.geminiKey}
-                        onChange={(e) => {
-                          const val = e.target.value;
-                          setAppSettings(prev => ({ ...prev, geminiKey: val }));
-                          localStorage.setItem("vigilai_gemini_key", val);
-                        }}
-                        onFocus={() => {
-                          if (useVirtualKeyboard) {
-                            setKeyboardTarget({ id: 'settingsGeminiKey', title: 'Chiave API Gemini' });
-                          }
-                        }}
-                        onBlur={() => backupApiKeyToSupabase(appSettings.geminiKey)}
-                        placeholder="API Key Gemini"
-                        className="bg-transparent text-xs text-white outline-none w-full px-1 py-1 font-mono"
-                      />
+                      <div className="flex-1 min-w-0 relative">
+                        <input
+                          type={showGeminiKey ? "text" : "password"}
+                          value={appSettings.geminiKey}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setAppSettings(prev => ({ ...prev, geminiKey: val }));
+                            localStorage.setItem("vigilai_gemini_key", val);
+                          }}
+                          onFocus={() => {
+                            if (useVirtualKeyboard) {
+                              setKeyboardTarget({ id: 'settingsGeminiKey', title: 'Chiave API Gemini' });
+                            }
+                          }}
+                          onBlur={() => backupApiKeyToSupabase(appSettings.geminiKey)}
+                          placeholder="API Key Gemini"
+                          className="bg-transparent text-xs text-white outline-none w-full px-1 py-1 pr-7 font-mono"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowGeminiKey(!showGeminiKey)}
+                          className="absolute right-0 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white transition-colors"
+                          title={showGeminiKey ? 'Nascondi API Key' : 'Mostra API Key'}
+                        >
+                          {showGeminiKey ? <EyeOff size={14} /> : <Eye size={14} />}
+                        </button>
+                      </div>
                       {!appSettings.geminiKey && (
                         <button
                           type="button"
@@ -2646,11 +3446,11 @@ export default function App() {
               </button>
 
               <button 
-                onClick={() => openCameraConfig()}
-                className="p-2 sm:p-3 glass border-white/5 text-slate-500 hover:text-white rounded-lg sm:rounded-xl lg:rounded-2xl transition-all"
-                title="Aggiungi Camera"
+                onClick={openActiveCameraConfig}
+                className="p-2 sm:p-3 glass border-blue-500/20 text-blue-400 hover:text-white rounded-lg sm:rounded-xl lg:rounded-2xl transition-all"
+                title={`Setup Camera #${getCameraOrderNumber(cameras, activeCameraId) ?? '?'}`}
               >
-                <Plus size={14} className="sm:w-[18px] sm:h-[18px]" />
+                <Monitor size={14} className="sm:w-[18px] sm:h-[18px]" />
               </button>
 
               <button 
@@ -2785,10 +3585,19 @@ export default function App() {
                           <ChevronLeft size={16} />
                         </button>
                         
-                        <div className="flex items-center gap-1.5 px-2">
+                        <button
+                          type="button"
+                          onClick={openActiveCameraConfig}
+                          className="flex items-center gap-1.5 px-2 py-1 rounded-lg hover:bg-white/5 active:scale-95 cursor-pointer"
+                          title="Setup di questa camera"
+                        >
+                          <span className="text-[9px] font-black text-blue-400 uppercase tracking-widest">
+                            #{getCameraOrderNumber(cameras, activeCamera.id) ?? 1}
+                          </span>
                           <span className={`w-1.5 h-1.5 rounded-full ${isMonitoring ? 'bg-red-500 animate-pulse' : 'bg-slate-500'}`} />
                           <span className="text-[10px] font-black text-white uppercase tracking-wider">{activeCamera.name}</span>
-                        </div>
+                          <Settings size={12} className="text-slate-400" />
+                        </button>
 
                         <button
                           type="button"
@@ -3012,15 +3821,17 @@ export default function App() {
                     {/* Right Section: Fixed Toolbar Sidebar */}
                     <div className="w-14 h-full flex flex-col justify-between items-center bg-[#0d101e]/90 border border-white/10 rounded-xl p-1 shrink-0 gap-1.5">
                       <div className="flex flex-col gap-1.5 w-full items-center">
-                        {/* Aggiungi Camera button */}
+                        {/* Setup camera attiva */}
                         <button
                           type="button"
-                          onClick={() => openCameraConfig()}
-                          className="w-10 h-[34px] rounded-lg bg-blue-600/20 border border-blue-500/30 flex flex-col items-center justify-center text-blue-400 hover:text-white active:scale-95 cursor-pointer"
-                          title="Aggiungi Camera"
+                          onClick={openActiveCameraConfig}
+                          className="w-10 h-[34px] rounded-lg bg-white/5 border border-white/10 flex flex-col items-center justify-center text-slate-300 hover:text-white active:scale-95 cursor-pointer"
+                          title={`Setup Camera #${getCameraOrderNumber(cameras, activeCameraId) ?? '?'}`}
                         >
-                          <Plus size={14} />
-                          <span className="text-[6px] font-black uppercase tracking-widest mt-0.5">Cam +</span>
+                          <Settings size={14} />
+                          <span className="text-[6px] font-black uppercase tracking-widest mt-0.5">
+                            #{getCameraOrderNumber(cameras, activeCameraId) ?? '?'}
+                          </span>
                         </button>
 
                         {/* Options button */}
@@ -3306,6 +4117,7 @@ export default function App() {
                         <div className="flex justify-between items-start">
                           <div className="flex flex-col gap-2">
                             <div className="glass px-3 py-1.5 lg:px-4 lg:py-2 rounded-xl bg-slate-950/40 border-white/20 backdrop-blur-md flex items-center gap-2 lg:gap-3">
+                              <span className="text-[9px] lg:text-[10px] font-black text-blue-400 uppercase tracking-widest">#{index + 1}</span>
                               <div className={`w-1.5 h-1.5 lg:w-2 lg:h-2 rounded-full ${isMonitoring ? 'bg-red-500 animate-pulse' : 'bg-slate-500'}`} />
                               <span className="text-[9px] lg:text-[10px] font-black text-white uppercase tracking-widest">{cam.name}</span>
                             </div>
@@ -3347,7 +4159,7 @@ export default function App() {
                             <button 
                               onClick={(e) => {
                                 e.stopPropagation();
-                                openCameraConfig(cam);
+                                openCameraConfig(cam, index + 1);
                               }}
                               className="p-2.5 lg:p-3.5 glass rounded-xl lg:rounded-2xl bg-white/5 hover:bg-white/10 text-white transition-all shadow-xl border-white/5"
                               title="Impostazioni Camera"
@@ -3679,63 +4491,97 @@ export default function App() {
           >
             <motion.div 
               initial={{ scale: 0.9, y: 20, opacity: 0 }} animate={{ scale: 1, y: 0, opacity: 1 }} exit={{ scale: 0.9, y: 20, opacity: 0 }}
-              className="glass bg-slate-900/95 lg:bg-slate-900/60 rounded-none sm:rounded-[32px] lg:rounded-[40px] w-full h-full sm:h-auto sm:max-h-[90vh] max-w-lg overflow-y-auto custom-scrollbar shadow-2xl border-white/5"
+              className="glass bg-slate-900/95 lg:bg-slate-900/60 rounded-none sm:rounded-[32px] lg:rounded-[40px] w-full h-full sm:h-auto sm:max-h-[90vh] max-w-lg flex flex-col overflow-hidden shadow-2xl border-white/5"
             >
-              <div className="p-4 sm:p-6 lg:p-10 space-y-4 sm:space-y-6 lg:space-y-8">
-                <div className="flex justify-between items-center pb-2 border-b border-white/5">
-                  <div>
+              <div className="flex-shrink-0 px-4 sm:px-6 lg:px-10 pt-4 sm:pt-6 lg:pt-10 pb-3 border-b border-white/5">
+                <div>
+                  <div className="flex items-center gap-2 flex-wrap">
                     <h2 className="text-xl font-black text-white uppercase tracking-tight">Setup Camera</h2>
-                    <p className="text-[9px] font-black uppercase tracking-[0.3em] text-blue-500 mt-1">Configura parametri e profilo AI</p>
+                    <span className="px-2.5 py-1 rounded-lg bg-blue-600/20 border border-blue-500/30 text-blue-400 text-[10px] font-black uppercase tracking-widest">
+                      #{editingCameraNumber ?? '?'}
+                    </span>
                   </div>
-                  {isMobile35 && (
-                    <div className="flex gap-1.5">
-                      <button
-                        type="button"
-                        onClick={() => setActiveCameraTab('info')}
-                        className={`p-2 rounded-lg border text-xs font-black transition-all active:scale-95 cursor-pointer ${
-                          activeCameraTab === 'info' ? 'bg-blue-600 border-blue-400 text-white shadow-lg' : 'bg-white/5 border-white/5 text-slate-400'
-                        }`}
-                        title="Info Generale"
-                      >
-                        <Monitor size={14} />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setActiveCameraTab('source')}
-                        className={`p-2 rounded-lg border text-xs font-black transition-all active:scale-95 cursor-pointer ${
-                          activeCameraTab === 'source' ? 'bg-blue-600 border-blue-400 text-white shadow-lg' : 'bg-white/5 border-white/5 text-slate-400'
-                        }`}
-                        title="Configura Sorgente"
-                      >
-                        <Video size={14} />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setActiveCameraTab('triggers')}
-                        className={`p-2 rounded-lg border text-xs font-black transition-all active:scale-95 cursor-pointer ${
-                          activeCameraTab === 'triggers' ? 'bg-blue-600 border-blue-400 text-white shadow-lg' : 'bg-white/5 border-white/5 text-slate-400'
-                        }`}
-                        title="Trigger AI"
-                      >
-                        <Cpu size={14} />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setActiveCameraTab('client')}
-                        className={`p-2 rounded-lg border text-xs font-black transition-all active:scale-95 cursor-pointer ${
-                          activeCameraTab === 'client' ? 'bg-blue-600 border-blue-400 text-white shadow-lg' : 'bg-white/5 border-white/5 text-slate-400'
-                        }`}
-                        title="Connessione Tablet"
-                      >
-                        <Scan size={14} />
-                      </button>
-                    </div>
-                  )}
+                  <p className="text-[9px] font-black uppercase tracking-[0.3em] text-blue-500 mt-1">
+                    {editingCamera.name} — {editingCamera.location || 'Posizione non impostata'}
+                  </p>
+                  <p className="text-[8px] font-bold uppercase tracking-widest text-slate-500 mt-0.5">
+                    Impostazioni solo per questa camera
+                  </p>
+                </div>
+                <div className="grid grid-cols-4 gap-1.5 mt-3">
+                  <button
+                    type="button"
+                    onClick={() => setActiveCameraTab('info')}
+                    className={`flex flex-row items-center justify-center gap-1 py-1.5 px-1 rounded-xl border text-[8px] font-black uppercase tracking-tight transition-all active:scale-95 cursor-pointer min-w-0 ${
+                      activeCameraTab === 'info' ? 'bg-blue-600 border-blue-400 text-white shadow-lg' : 'bg-white/5 border-white/5 text-slate-400 hover:border-white/20'
+                    }`}
+                    title="Info Generale"
+                  >
+                    <Monitor size={12} className="shrink-0" />
+                    <span className="truncate">Info</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setActiveCameraTab('source')}
+                    className={`flex flex-row items-center justify-center gap-1 py-1.5 px-1 rounded-xl border text-[8px] font-black uppercase tracking-tight transition-all active:scale-95 cursor-pointer min-w-0 ${
+                      activeCameraTab === 'source' ? 'bg-blue-600 border-blue-400 text-white shadow-lg' : 'bg-white/5 border-white/5 text-slate-400 hover:border-white/20'
+                    }`}
+                    title="Configura Sorgente"
+                  >
+                    <Video size={12} className="shrink-0" />
+                    <span className="truncate">Sorgente</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setActiveCameraTab('triggers')}
+                    className={`flex flex-row items-center justify-center gap-1 py-1.5 px-1 rounded-xl border text-[8px] font-black uppercase tracking-tight transition-all active:scale-95 cursor-pointer min-w-0 ${
+                      activeCameraTab === 'triggers' ? 'bg-blue-600 border-blue-400 text-white shadow-lg' : 'bg-white/5 border-white/5 text-slate-400 hover:border-white/20'
+                    }`}
+                    title="Trigger AI"
+                  >
+                    <Cpu size={12} className="shrink-0" />
+                    <span className="truncate">Trigger</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setActiveCameraTab('client')}
+                    className={`flex flex-row items-center justify-center gap-1 py-1.5 px-1 rounded-xl border text-[8px] font-black uppercase tracking-tight transition-all active:scale-95 cursor-pointer min-w-0 ${
+                      activeCameraTab === 'client' ? 'bg-blue-600 border-blue-400 text-white shadow-lg' : 'bg-white/5 border-white/5 text-slate-400 hover:border-white/20'
+                    }`}
+                    title="Connessione Tablet"
+                  >
+                    <Scan size={12} className="shrink-0" />
+                    <span className="truncate">Client</span>
+                  </button>
+                </div>
+              </div>
+
+              <div
+                ref={cameraModalScrollRef}
+                className="flex-1 min-h-0 px-4 sm:px-6 lg:px-10 py-2 sm:py-3 custom-scrollbar overflow-y-auto relative"
+              >
+                <div className="sticky top-0 z-10 flex justify-end gap-1 mb-2">
+                  <button
+                    type="button"
+                    onClick={() => scrollCameraModalContent('up')}
+                    className="p-1.5 text-slate-400 hover:text-white active:scale-95 transition-all"
+                    title="Scorri su"
+                  >
+                    <ChevronUp size={14} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => scrollCameraModalContent('down')}
+                    className="p-1.5 text-slate-400 hover:text-white active:scale-95 transition-all"
+                    title="Scorri giù"
+                  >
+                    <ChevronDown size={14} />
+                  </button>
                 </div>
 
                 <div className="space-y-4">
                   {/* GENERAL INFO FIELDS */}
-                  {(!isMobile35 || activeCameraTab === 'info') && (
+                  {activeCameraTab === 'info' && (
                     <>
                       <div className="space-y-1">
                         <div className="flex justify-between items-center">
@@ -3753,39 +4599,50 @@ export default function App() {
                         />
                       </div>
 
-                      <div className="space-y-1">
-                        <div className="flex justify-between items-center">
-                          <label className="text-[9px] font-black uppercase tracking-widest text-slate-500 px-1">Posizione Fisica</label>
-                          {keyboardTarget?.id === 'cameraLocation' && (
-                            <Keyboard size={12} className="text-blue-400 animate-pulse" />
-                          )}
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="flex flex-col gap-1 min-w-0">
+                          <div className="flex items-center justify-between h-[14px] px-1">
+                            <label className="text-[9px] font-black uppercase tracking-widest text-slate-500 leading-none truncate">
+                              Posizione Fisica
+                            </label>
+                            {keyboardTarget?.id === 'cameraLocation' ? (
+                              <Keyboard size={12} className="text-blue-400 animate-pulse shrink-0" />
+                            ) : (
+                              <span className="w-3 h-3 shrink-0" aria-hidden="true" />
+                            )}
+                          </div>
+                          <input 
+                            type="text" value={editingCamera.location}
+                            onChange={(e) => setEditingCamera({...editingCamera, location: e.target.value})}
+                            onFocus={() => { if (useVirtualKeyboard) setKeyboardTarget({ id: 'cameraLocation', title: 'Posizione Fisica' }); }}
+                            placeholder="es. Primo Piano"
+                            className="w-full h-11 bg-white/5 border border-white/10 px-4 text-xs rounded-xl focus:border-white/30 outline-none transition-all text-white font-bold"
+                          />
                         </div>
-                        <input 
-                          type="text" value={editingCamera.location}
-                          onChange={(e) => setEditingCamera({...editingCamera, location: e.target.value})}
-                          onFocus={() => { if (useVirtualKeyboard) setKeyboardTarget({ id: 'cameraLocation', title: 'Posizione Fisica' }); }}
-                          placeholder="es. Primo Piano, Ala Est"
-                          className="w-full bg-white/5 border border-white/10 px-4 py-3 text-xs rounded-xl focus:border-white/30 outline-none transition-all text-white font-bold"
-                        />
-                      </div>
 
-                      <div className="space-y-1">
-                        <label className="text-[9px] font-black uppercase tracking-widest text-slate-500 px-1">Tipo Segnale</label>
-                        <select 
-                          value={editingCamera.type}
-                          onChange={(e) => setEditingCamera({...editingCamera, type: e.target.value as any})}
-                          className="w-full bg-white/5 border border-white/10 px-4 py-3 text-xs rounded-xl outline-none transition-all text-white font-bold appearance-none animate-fade-in"
-                        >
-                          <option value="webcam" className="bg-[#0f172a]">Webcam Locale</option>
-                          <option value="onvif" className="bg-[#0f172a]">ONVIF / Tapo / IP Cam</option>
-                          <option value="ip" className="bg-[#0f172a]">Stream (URL Diretto)</option>
-                        </select>
+                        <div className="flex flex-col gap-1 min-w-0">
+                          <div className="flex items-center justify-between h-[14px] px-1">
+                            <label className="text-[9px] font-black uppercase tracking-widest text-slate-500 leading-none truncate">
+                              Tipo Segnale
+                            </label>
+                            <span className="w-3 h-3 shrink-0" aria-hidden="true" />
+                          </div>
+                          <select 
+                            value={editingCamera.type}
+                            onChange={(e) => setEditingCamera({...editingCamera, type: e.target.value as any})}
+                            className="w-full h-11 bg-white/5 border border-white/10 px-4 text-xs rounded-xl outline-none transition-all text-white font-bold appearance-none animate-fade-in"
+                          >
+                            <option value="webcam" className="bg-[#0f172a]">Webcam Locale</option>
+                            <option value="onvif" className="bg-[#0f172a]">ONVIF / Tapo / IP Cam</option>
+                            <option value="ip" className="bg-[#0f172a]">Stream (URL Diretto)</option>
+                          </select>
+                        </div>
                       </div>
                     </>
                   )}
 
                   {/* SOURCE CONFIGURATION FIELDS */}
-                  {(!isMobile35 || activeCameraTab === 'source') && (
+                  {activeCameraTab === 'source' && (
                     <>
                       {editingCamera.type !== 'onvif' && (
                         <div className="space-y-1">
@@ -3808,71 +4665,119 @@ export default function App() {
                       )}
 
                       {editingCamera.type === 'onvif' && (
-                        <div className="p-3 bg-blue-500/5 rounded-2xl border border-blue-500/10 space-y-3 mt-1 animate-fade-in">
-                          <div className="flex items-center gap-2 mb-1">
-                            <Zap size={14} className="text-blue-400" />
+                        <div className="p-4 bg-blue-500/5 rounded-2xl border border-blue-500/10 space-y-3 animate-fade-in">
+                          <div className="flex items-center gap-2">
+                            <Zap size={14} className="text-blue-400 shrink-0" />
                             <h4 className="text-[10px] font-black text-blue-400 uppercase tracking-widest">Configurazione ONVIF</h4>
                           </div>
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                            <div className="space-y-1">
-                              <div className="flex justify-between items-center">
-                                <label className="text-[8px] font-black uppercase tracking-widest text-slate-500 px-1">Indirizzo IP</label>
-                                {keyboardTarget?.id === 'cameraIp' && <Keyboard size={10} className="text-blue-400 animate-pulse" />}
+                          <div className="grid grid-cols-2 gap-3">
+                            <div className="flex flex-col gap-1 min-w-0 col-span-2">
+                              <div className="flex items-center justify-between h-[14px] px-1">
+                                <label className="text-[9px] font-black uppercase tracking-widest text-slate-500 leading-none truncate">Indirizzo IP Camera</label>
+                                {keyboardTarget?.id === 'cameraIp' ? (
+                                  <Keyboard size={12} className="text-blue-400 animate-pulse shrink-0" />
+                                ) : (
+                                  <span className="w-3 h-3 shrink-0" aria-hidden="true" />
+                                )}
                               </div>
-                              <input 
-                                type="text" value={editingCamera.ip || ''}
-                                onChange={(e) => setEditingCamera({...editingCamera, ip: e.target.value})}
-                                onFocus={() => { if (useVirtualKeyboard) setKeyboardTarget({ id: 'cameraIp', title: 'Indirizzo IP ONVIF' }); }}
-                                placeholder="es. 192.168.1.17"
-                                className="w-full bg-slate-900/50 border border-white/10 px-3 py-2.5 text-xs rounded-xl outline-none text-white font-mono"
-                              />
+                              <div className="flex gap-2 items-stretch">
+                                <input
+                                  type="text"
+                                  readOnly
+                                  value={getDefaultCameraIpPrefix(getPrimaryNetworkIp())}
+                                  className="flex-[2] min-w-0 h-11 bg-white/5 border border-white/10 px-3 text-xs rounded-xl outline-none text-slate-400 font-mono"
+                                  title="Rete locale (prefisso fisso)"
+                                />
+                                <input
+                                  type="text"
+                                  inputMode="numeric"
+                                  value={getIpLastOctet(editingCamera.ip || '')}
+                                  onChange={(e) => {
+                                    const oct = e.target.value.replace(/\D/g, '').slice(0, 3);
+                                    setEditingCamera({
+                                      ...editingCamera,
+                                      ip: buildIpFromPrefixAndOctet(
+                                        getDefaultCameraIpPrefix(getPrimaryNetworkIp()),
+                                        oct
+                                      ),
+                                    });
+                                  }}
+                                  onFocus={() => {
+                                    if (useVirtualKeyboard) {
+                                      setKeyboardTarget({ id: 'cameraIp', title: 'Ultimo numero IP camera (es. 8)' });
+                                    }
+                                  }}
+                                  placeholder="8"
+                                  className="flex-1 min-w-[4rem] h-11 bg-white/5 border border-blue-500/30 px-3 text-xs rounded-xl outline-none text-white font-mono text-center focus:border-blue-400 transition-all"
+                                />
+                              </div>
+                              <p className="text-[7px] text-slate-500 font-bold uppercase tracking-wide px-1">
+                                Inserisci solo l&apos;ultimo numero — es. Tapo C220 su .8 (non usare l&apos;IP del Raspberry)
+                              </p>
                             </div>
-                            <div className="space-y-1">
-                              <div className="flex justify-between items-center">
-                                <label className="text-[8px] font-black uppercase tracking-widest text-slate-500 px-1">Porta RTSP</label>
-                                {keyboardTarget?.id === 'cameraPort' && <Keyboard size={10} className="text-blue-400 animate-pulse" />}
+                            <div className="flex flex-col gap-1 min-w-0">
+                              <div className="flex items-center justify-between h-[14px] px-1">
+                                <label className="text-[9px] font-black uppercase tracking-widest text-slate-500 leading-none truncate">Porta RTSP</label>
+                                {keyboardTarget?.id === 'cameraPort' ? (
+                                  <Keyboard size={12} className="text-blue-400 animate-pulse shrink-0" />
+                                ) : (
+                                  <span className="w-3 h-3 shrink-0" aria-hidden="true" />
+                                )}
                               </div>
                               <input 
                                 type="number" value={editingCamera.port || 554}
                                 onChange={(e) => setEditingCamera({...editingCamera, port: Number(e.target.value)})}
                                 onFocus={() => { if (useVirtualKeyboard) setKeyboardTarget({ id: 'cameraPort', title: 'Porta RTSP' }); }}
-                                className="w-full bg-slate-900/50 border border-white/10 px-3 py-2.5 text-xs rounded-xl outline-none text-white font-mono"
+                                className="w-full h-11 bg-white/5 border border-white/10 px-4 text-xs rounded-xl outline-none text-white font-mono focus:border-white/30 transition-all"
                               />
                             </div>
-                            <div className="space-y-1">
-                              <div className="flex justify-between items-center">
-                                <label className="text-[8px] font-black uppercase tracking-widest text-slate-500 px-1">Username</label>
-                                {keyboardTarget?.id === 'cameraUser' && <Keyboard size={10} className="text-blue-400 animate-pulse" />}
+                            <div className="flex flex-col gap-1 min-w-0">
+                              <div className="flex items-center justify-between h-[14px] px-1">
+                                <label className="text-[9px] font-black uppercase tracking-widest text-slate-500 leading-none truncate">Username</label>
+                                {keyboardTarget?.id === 'cameraUser' ? (
+                                  <Keyboard size={12} className="text-blue-400 animate-pulse shrink-0" />
+                                ) : (
+                                  <span className="w-3 h-3 shrink-0" aria-hidden="true" />
+                                )}
                               </div>
                               <input 
                                 type="text" value={editingCamera.username || ''}
                                 onChange={(e) => setEditingCamera({...editingCamera, username: e.target.value})}
                                 onFocus={() => { if (useVirtualKeyboard) setKeyboardTarget({ id: 'cameraUser', title: 'Username ONVIF' }); }}
-                                className="w-full bg-slate-900/50 border border-white/10 px-3 py-2.5 text-xs rounded-xl outline-none text-white font-mono"
+                                className="w-full h-11 bg-white/5 border border-white/10 px-4 text-xs rounded-xl outline-none text-white font-mono focus:border-white/30 transition-all"
                               />
                             </div>
-                            <div className="space-y-1">
-                              <div className="flex justify-between items-center">
-                                <label className="text-[8px] font-black uppercase tracking-widest text-slate-500 px-1">Password</label>
-                                {keyboardTarget?.id === 'cameraPass' && <Keyboard size={10} className="text-blue-400 animate-pulse" />}
+                            <div className="flex flex-col gap-1 min-w-0">
+                              <div className="flex items-center justify-between h-[14px] px-1">
+                                <label className="text-[9px] font-black uppercase tracking-widest text-slate-500 leading-none truncate">Password</label>
+                                {keyboardTarget?.id === 'cameraPass' ? (
+                                  <Keyboard size={12} className="text-blue-400 animate-pulse shrink-0" />
+                                ) : (
+                                  <span className="w-3 h-3 shrink-0" aria-hidden="true" />
+                                )}
                               </div>
                               <input 
                                 type="password" value={editingCamera.password || ''}
                                 onChange={(e) => setEditingCamera({...editingCamera, password: e.target.value})}
                                 onFocus={() => { if (useVirtualKeyboard) setKeyboardTarget({ id: 'cameraPass', title: 'Password ONVIF' }); }}
-                                className="w-full bg-slate-900/50 border border-white/10 px-3 py-2.5 text-xs rounded-xl outline-none text-white font-mono"
+                                className="w-full h-11 bg-white/5 border border-white/10 px-4 text-xs rounded-xl outline-none text-white font-mono focus:border-white/30 transition-all"
                               />
                             </div>
-                            <div className="space-y-1 col-span-1 sm:col-span-2">
-                              <div className="flex justify-between items-center">
-                                <label className="text-[8px] font-black uppercase tracking-widest text-slate-500 px-1">Percorso (Path)</label>
-                                {keyboardTarget?.id === 'cameraRtsp' && <Keyboard size={10} className="text-blue-400 animate-pulse" />}
+                            <div className="flex flex-col gap-1 min-w-0 col-span-2">
+                              <div className="flex items-center justify-between h-[14px] px-1">
+                                <label className="text-[9px] font-black uppercase tracking-widest text-slate-500 leading-none truncate">Percorso (Path)</label>
+                                {keyboardTarget?.id === 'cameraRtsp' ? (
+                                  <Keyboard size={12} className="text-blue-400 animate-pulse shrink-0" />
+                                ) : (
+                                  <span className="w-3 h-3 shrink-0" aria-hidden="true" />
+                                )}
                               </div>
                               <input 
                                 type="text" value={editingCamera.rtspPath || '/stream1'}
                                 onChange={(e) => setEditingCamera({...editingCamera, rtspPath: e.target.value})}
                                 onFocus={() => { if (useVirtualKeyboard) setKeyboardTarget({ id: 'cameraRtsp', title: 'Percorso RTSP (Path)' }); }}
-                                className="w-full bg-slate-900/50 border border-white/10 px-3 py-2.5 text-xs rounded-xl outline-none text-white font-mono"
+                                placeholder="/stream1"
+                                className="w-full h-11 bg-white/5 border border-white/10 px-4 text-xs rounded-xl outline-none text-white font-mono focus:border-white/30 transition-all"
                               />
                             </div>
                           </div>
@@ -3882,25 +4787,61 @@ export default function App() {
                   )}
 
                   {/* AI TRIGGERS CONFIGURATION */}
-                  {(!isMobile35 || activeCameraTab === 'triggers') && (
-                    <div className="space-y-3 animate-fade-in">
-                      <label className="text-[9px] font-black uppercase tracking-widest text-slate-500 px-1">Trigger Allarmi AI Attivi</label>
-                      <div className="grid grid-cols-2 gap-2">
+                  {activeCameraTab === 'triggers' && (
+                    <div className="animate-fade-in">
+                      <label className="text-[9px] font-black uppercase tracking-widest text-slate-500 px-1 block mb-2">
+                        Trigger Allarmi AI — Camera #{editingCameraNumber ?? '?'}
+                        {' '}({editingCamera.enabledTriggers.length} attivi)
+                      </label>
+                      <div className="grid grid-cols-4 gap-x-5 gap-y-3 w-full place-items-center px-0.5">
                         {availableTriggers.map(trigger => {
                           const isActive = editingCamera.enabledTriggers.includes(trigger.id as AlertTrigger);
                           const LucideIcon = (Lucide as any)[trigger.icon_name] || Lucide.AlertTriangle;
+                          const iconGradient = TRIGGER_ICON_GRADIENTS[trigger.color_class] || 'from-slate-500 to-slate-700';
                           return (
                             <button
                               key={trigger.id}
+                              type="button"
+                              title={trigger.description}
                               onClick={() => {
-                                const current = editingCamera.enabledTriggers;
-                                const updated = isActive ? current.filter(t => t !== trigger.id) : [...current, trigger.id as AlertTrigger];
-                                setEditingCamera({...editingCamera, enabledTriggers: updated});
+                                setEditingCamera(prev => {
+                                  if (!prev) return null;
+                                  const current = prev.enabledTriggers || [];
+                                  const updated = isActive
+                                    ? current.filter(t => t !== trigger.id)
+                                    : [...current, trigger.id as AlertTrigger];
+                                  return { ...prev, enabledTriggers: updated };
+                                });
                               }}
-                              className={`flex items-center gap-2 px-3 py-2.5 rounded-xl text-[9px] font-black uppercase tracking-tight transition-all border ${isActive ? 'bg-white/10 border-white/30 text-white shadow-lg' : 'bg-transparent border-white/5 text-slate-500 hover:border-white/20'}`}
+                              className={`flex flex-col items-center gap-1.5 w-full min-w-0 transition-all active:scale-95 cursor-pointer ${
+                                isActive ? 'opacity-100' : 'opacity-55 hover:opacity-85'
+                              }`}
                             >
-                              <span className={isActive ? trigger.color_class : 'opacity-40'}><LucideIcon size={12} /></span>
-                              {trigger.label}
+                              <div
+                                className={`relative w-[58px] h-[58px] shrink-0 rounded-[13px] flex items-center justify-center bg-gradient-to-br shadow-md transition-all ${
+                                  isActive
+                                    ? `${iconGradient} ring-2 ring-white/25`
+                                    : 'from-white/10 to-white/5 border border-white/10'
+                                }`}
+                              >
+                                <LucideIcon
+                                  size={24}
+                                  strokeWidth={2}
+                                  className={isActive ? 'text-white drop-shadow-sm' : 'text-slate-400'}
+                                />
+                                {isActive && (
+                                  <span className="absolute -top-1 -right-1 w-4 h-4 bg-blue-500 rounded-full flex items-center justify-center border-2 border-slate-900 shadow-md">
+                                    <Check size={9} strokeWidth={3} className="text-white" />
+                                  </span>
+                                )}
+                              </div>
+                              <span
+                                className={`text-[8px] font-bold uppercase tracking-tight text-center leading-tight line-clamp-2 w-full max-w-[72px] ${
+                                  isActive ? 'text-white' : 'text-slate-500'
+                                }`}
+                              >
+                                {trigger.label}
+                              </span>
                             </button>
                           );
                         })}
@@ -3908,46 +4849,71 @@ export default function App() {
                     </div>
                   )}
 
-                  {/* CLIENT CONNECTION (New Tab) */}
-                  {(!isMobile35 || activeCameraTab === 'client') && serverInfo && (
-                    <div className="space-y-3 animate-fade-in">
-                      <div className="p-4 bg-green-500/5 border border-green-500/10 rounded-2xl space-y-4">
-                        <div className="flex items-center gap-2 text-green-400">
-                          <Monitor size={16} />
-                          <span className="text-[10px] font-black uppercase tracking-widest">Connessione Smartphone / Tablet</span>
-                        </div>
-                        <p className="text-[9px] text-slate-400 uppercase font-bold leading-relaxed">
-                          Inquadra il QR code o inserisci l'indirizzo nel browser dello smartphone/tablet:
-                        </p>
-                        
-                        <div className="flex flex-col sm:flex-row gap-4 items-center sm:items-start">
-                          <div className="space-y-2 flex-1 w-full">
-                            {serverInfo.ips.map(ip => (
-                              <div key={ip} className="flex items-center justify-between bg-black/20 p-3 rounded-xl border border-white/5">
-                                <code className="text-[10px] sm:text-xs text-blue-400 font-mono break-all">http://{ip}:{serverInfo.port}</code>
-                                <span className="text-[8px] font-black text-slate-600 uppercase ml-2">WiFi Locale</span>
-                              </div>
-                            ))}
+                  {/* CLIENT CONNECTION */}
+                  {activeCameraTab === 'client' && (
+                    <div className="animate-fade-in space-y-2">
+                      <label className="text-[9px] font-black uppercase tracking-widest text-slate-500 px-1 block">
+                        Connessione Smartphone / Tablet
+                      </label>
+                      {serverInfo ? (
+                        <div className="p-4 bg-blue-500/5 rounded-2xl border border-blue-500/10 space-y-3">
+                          <div className="flex items-start gap-2">
+                            <Scan size={14} className="text-blue-400 shrink-0 mt-0.5" />
+                            <p className="text-[9px] text-slate-400 uppercase font-bold leading-relaxed">
+                              Inquadra il QR code o apri uno degli indirizzi nel browser dello smartphone o tablet.
+                            </p>
                           </div>
-                          
-                          {serverInfo.ips.length > 0 && (
-                            <div className="bg-white p-2 rounded-xl shrink-0">
-                              <QRCodeCanvas
-                                value={`http://${serverInfo.ips.find(ip => (ip.startsWith('192.168.') || ip.startsWith('10.')) && ip !== '10.42.0.1') || serverInfo.ips.find(ip => !ip.startsWith('100.') && ip !== '127.0.0.1') || serverInfo.ips[0]}:${serverInfo.port}`}
-                                size={90}
-                                level="M"
-                                includeMargin={false}
-                              />
-                            </div>
-                          )}
-                        </div>
 
-                        <div className="p-2 bg-blue-600/10 rounded-xl border border-blue-500/20 mt-2">
-                          <p className="text-[8px] text-blue-400 font-black uppercase tracking-widest text-center">
-                            💡 Tocca "Aggiungi a Home" sul tablet per installarla come App
-                          </p>
+                          <div className="flex flex-row gap-3 items-start">
+                            {serverInfo.ips.length > 0 && (
+                              <div className="shrink-0 bg-white p-2 rounded-xl shadow-md ring-1 ring-white/10">
+                                <QRCodeCanvas
+                                  value={`http://${serverInfo.ips.find(ip => (ip.startsWith('192.168.') || ip.startsWith('10.')) && ip !== '10.42.0.1') || serverInfo.ips.find(ip => !ip.startsWith('100.') && ip !== '127.0.0.1') || serverInfo.ips[0]}:${serverInfo.port}`}
+                                  size={76}
+                                  level="M"
+                                  includeMargin={false}
+                                />
+                              </div>
+                            )}
+
+                            <div className="flex-1 min-w-0 space-y-2">
+                              <label className="text-[9px] font-black uppercase tracking-widest text-slate-500 px-1 block">
+                                Indirizzi Rete Locale
+                              </label>
+                              {serverInfo.ips.length > 0 ? (
+                                <div className="space-y-2">
+                                  {serverInfo.ips.map(ip => (
+                                    <div key={ip} className="grid grid-cols-[1fr_auto] gap-1.5 items-center min-w-0">
+                                      <div className="h-11 bg-white/5 border border-white/10 px-2.5 rounded-xl flex items-center min-w-0">
+                                        <code className="text-[9px] text-blue-400 font-mono truncate w-full">
+                                          http://{ip}:{serverInfo.port}
+                                        </code>
+                                      </div>
+                                      <span className="text-[7px] font-black text-slate-500 uppercase tracking-widest shrink-0">
+                                        Wi-Fi
+                                      </span>
+                                    </div>
+                                  ))}
+                                </div>
+                              ) : (
+                                <div className="h-11 bg-white/5 border border-white/10 px-3 rounded-xl flex items-center">
+                                  <span className="text-[9px] text-slate-500 uppercase font-bold">Nessun indirizzo rilevato</span>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+
+                          <div className="p-2.5 bg-blue-600/10 rounded-xl border border-blue-500/20">
+                            <p className="text-[8px] text-blue-400 font-black uppercase tracking-widest text-center leading-relaxed">
+                              Tocca &quot;Aggiungi a Home&quot; sul tablet per installarla come app
+                            </p>
+                          </div>
                         </div>
-                      </div>
+                      ) : (
+                        <div className="h-11 bg-white/5 border border-white/10 px-4 rounded-xl flex items-center justify-center">
+                          <span className="text-[9px] text-slate-500 uppercase font-bold">Caricamento indirizzi rete...</span>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
@@ -3963,26 +4929,41 @@ export default function App() {
                     {saveStatus.message}
                   </motion.div>
                 )}
+              </div>
 
-                <div className="flex flex-col sm:flex-row gap-3 pt-4">
+              <div className="flex-shrink-0 border-t border-white/10 bg-slate-900/95 px-4 sm:px-6 lg:px-10 py-4 sm:py-5">
+                <div className="flex gap-3">
                   <button 
+                    type="button"
                     disabled={isSaving}
                     onClick={() => setShowCameraModal(false)} 
-                    className="flex-1 py-4 glass rounded-2xl text-[10px] font-black uppercase tracking-widest text-slate-500 hover:text-white transition-all order-2 sm:order-1 disabled:opacity-30"
+                    className="flex-1 py-3 bg-white/5 hover:bg-white/10 text-slate-400 rounded-xl text-[10px] sm:text-xs font-black uppercase tracking-widest transition-all disabled:opacity-30"
                   >
                     Annulla
                   </button>
                   <button 
+                    type="button"
                     disabled={isSaving}
-                    onClick={() => saveCamera(editingCamera)} 
-                    className="flex-[2] py-4 bg-blue-600 rounded-2xl text-[10px] font-black uppercase tracking-widest text-white shadow-xl hover:bg-blue-500 order-1 sm:order-2 disabled:opacity-50 flex items-center justify-center gap-3"
+                    onClick={() => {
+                      const latest = editingCameraRef.current;
+                      if (!latest) return;
+                      const persisted = cameras.find(
+                        c => c.id === latest.id && !latest.id.startsWith('cam-')
+                      );
+                      const toSave = finalizeCameraForSave(
+                        latest,
+                        persisted,
+                        getPrimaryNetworkIp()
+                      );
+                      setEditingCamera(toSave);
+                      saveCamera(toSave);
+                    }} 
+                    className="flex-1 py-3 bg-blue-600 hover:bg-blue-500 rounded-xl text-[10px] sm:text-xs font-black uppercase tracking-widest text-white shadow-lg shadow-blue-500/25 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
                   >
                     {isSaving && <div className="w-3 h-3 border-2 border-white/20 border-t-white rounded-full animate-spin" />}
-                    {isSaving ? 'Salvataggio...' : 'Salva Configurazione'}
+                    {isSaving ? 'Salvataggio...' : 'Salva Impostazioni'}
                   </button>
                 </div>
-
-
               </div>
             </motion.div>
           </motion.div>
@@ -4128,16 +5109,16 @@ export default function App() {
               initial={{ scale: 0.9, y: 20 }} animate={{ scale: 1, y: 0 }}
               className={`glass bg-slate-900/95 lg:bg-slate-900/60 w-full h-full sm:h-auto sm:max-h-[90vh] max-w-lg rounded-none sm:rounded-[32px] lg:rounded-[40px] shadow-2xl border-white/5 ${
                 isMobile35
-                  ? 'overflow-hidden flex flex-col p-2 gap-1'
+                  ? 'vigil-settings-35 overflow-hidden flex flex-col'
                   : 'p-4 sm:p-6 lg:p-10 space-y-3 sm:space-y-6 lg:space-y-8 overflow-y-auto custom-scrollbar'
               }`}
             >
-              <div className="flex justify-between items-center shrink-0">
+              <div className={isMobile35 ? 'vigil-settings-35-header' : 'flex justify-between items-center shrink-0'}>
                 {!isMobile35 && (
                   <h2 className="text-lg sm:text-2xl font-black text-white uppercase">Impostazioni Sistema</h2>
                 )}
                 {isMobile35 && (
-                  <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Impostazioni</span>
+                  <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Impostazioni Sistema</span>
                 )}
                 <button
                   type="button"
@@ -4149,71 +5130,39 @@ export default function App() {
                 </button>
               </div>
               
-              {/* Tab menu 3.5" */}
+              {/* Tab menu 3.5" — 2 righe, tutte le sezioni */}
               {isMobile35 ? (
-                <div className="flex justify-between gap-1 mb-1">
-                  <button
-                    type="button"
-                    onClick={() => { setActiveSettingsTab("network"); scanWifiNetworks(); }}
-                    className={`flex-1 flex items-center justify-center p-2 rounded-xl border transition-all active:scale-95 cursor-pointer ${
-                      activeSettingsTab === "network"
-                        ? "bg-amber-600 border-amber-400 text-white shadow-lg shadow-amber-500/25"
-                        : !networkStatus.online
-                          ? "bg-amber-600/20 border-amber-500/50 text-amber-400 animate-pulse"
-                          : "bg-white/5 border-white/5 text-slate-400 hover:bg-white/10 hover:text-white"
-                    }`}
-                    title="Rete Wi-Fi / Internet"
-                  >
-                    <Wifi size={16} />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setActiveSettingsTab("ai")}
-                    className={`flex-1 flex items-center justify-center p-2 rounded-xl border transition-all active:scale-95 cursor-pointer ${
-                      activeSettingsTab === "ai"
-                        ? "bg-blue-600 border-blue-400 text-white shadow-lg shadow-blue-500/25"
-                        : "bg-white/5 border-white/5 text-slate-400 hover:bg-white/10 hover:text-white"
-                    }`}
-                    title="AI APIKEY"
-                  >
-                    <Cpu size={16} />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setActiveSettingsTab("email")}
-                    className={`flex-1 flex items-center justify-center p-2 rounded-xl border transition-all active:scale-95 cursor-pointer ${
-                      activeSettingsTab === "email"
-                        ? "bg-blue-600 border-blue-400 text-white shadow-lg shadow-blue-500/25"
-                        : "bg-white/5 border-white/5 text-slate-400 hover:bg-white/10 hover:text-white"
-                    }`}
-                    title="EMAIL Destinatari"
-                  >
-                    <Mail size={16} />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => { setActiveSettingsTab("log"); setLogStartIndex(0); }}
-                    className={`flex-1 flex items-center justify-center p-2 rounded-xl border transition-all active:scale-95 cursor-pointer ${
-                      activeSettingsTab === "log"
-                        ? "bg-blue-600 border-blue-400 text-white shadow-lg shadow-blue-500/25"
-                        : "bg-white/5 border-white/5 text-slate-400 hover:bg-white/10 hover:text-white"
-                    }`}
-                    title="Log Allarmi"
-                  >
-                    <History size={16} />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setActiveSettingsTab("test")}
-                    className={`flex-1 flex items-center justify-center p-2 rounded-xl border transition-all active:scale-95 cursor-pointer ${
-                      activeSettingsTab === "test"
-                        ? "bg-blue-600 border-blue-400 text-white shadow-lg shadow-blue-500/25"
-                        : "bg-white/5 border-white/5 text-slate-400 hover:bg-white/10 hover:text-white"
-                    }`}
-                    title="Test alarm"
-                  >
-                    <Activity size={16} />
-                  </button>
+                <div className="vigil-settings-35-tabs">
+                  <div className="vigil-settings-35-tabs-row">
+                    <button type="button" onClick={() => { setActiveSettingsTab("network"); scanWifiNetworks(); }}
+                      className={`flex items-center justify-center rounded-xl border transition-all active:scale-95 ${
+                        activeSettingsTab === "network"
+                          ? "bg-amber-600 border-amber-400 text-white"
+                          : !networkStatus.online ? "bg-amber-600/20 border-amber-500/50 text-amber-400 animate-pulse" : "bg-white/5 border-white/5 text-slate-400"
+                      }`} title="Rete"><Wifi size={15} /></button>
+                    <button type="button" onClick={() => setActiveSettingsTab("ai")}
+                      className={`flex items-center justify-center rounded-xl border transition-all active:scale-95 ${
+                        activeSettingsTab === "ai" ? "bg-blue-600 border-blue-400 text-white" : "bg-white/5 border-white/5 text-slate-400"
+                      }`} title="AI"><Cpu size={15} /></button>
+                    <button type="button" onClick={() => setActiveSettingsTab("email")}
+                      className={`flex items-center justify-center rounded-xl border transition-all active:scale-95 ${
+                        activeSettingsTab === "email" ? "bg-blue-600 border-blue-400 text-white" : "bg-white/5 border-white/5 text-slate-400"
+                      }`} title="Email"><Mail size={15} /></button>
+                    <button type="button" onClick={() => setActiveSettingsTab("telegram")}
+                      className={`flex items-center justify-center rounded-xl border transition-all active:scale-95 ${
+                        activeSettingsTab === "telegram" ? "bg-blue-600 border-blue-400 text-white" : "bg-white/5 border-white/5 text-slate-400"
+                      }`} title="Telegram"><Send size={15} /></button>
+                  </div>
+                  <div className="vigil-settings-35-tabs-row">
+                    <button type="button" onClick={() => { setActiveSettingsTab("log"); setLogStartIndex(0); }}
+                      className={`flex items-center justify-center rounded-xl border transition-all active:scale-95 ${
+                        activeSettingsTab === "log" ? "bg-blue-600 border-blue-400 text-white" : "bg-white/5 border-white/5 text-slate-400"
+                      }`} title="Log"><History size={15} /></button>
+                    <button type="button" onClick={() => setActiveSettingsTab("test")}
+                      className={`flex items-center justify-center rounded-xl border transition-all active:scale-95 ${
+                        activeSettingsTab === "test" ? "bg-blue-600 border-blue-400 text-white" : "bg-white/5 border-white/5 text-slate-400"
+                      }`} title="Test"><Activity size={15} /></button>
+                  </div>
                 </div>
               ) : (
                 <div className="grid grid-cols-2 gap-2 sm:gap-3 mb-1 sm:mb-2">
@@ -4296,7 +5245,7 @@ export default function App() {
 
               <div className={`${
                 isMobile35
-                  ? `flex-1 min-h-0 flex flex-col ${activeSettingsTab === 'network' ? 'overflow-hidden' : 'overflow-y-auto custom-scrollbar'}`
+                  ? `vigil-settings-35-content ${activeSettingsTab === 'network' ? 'overflow-hidden flex flex-col' : ''}`
                   : 'space-y-6'
               }`}>
                 {/* Network / WiFi Configuration Tab */}
@@ -4318,6 +5267,49 @@ export default function App() {
 
                 {/* AI Configuration Tab */}
                 {activeSettingsTab === "ai" && (
+                  isMobile35 ? (
+                  <div className="flex flex-col gap-1 p-0.5 min-h-0 flex-1">
+                    {/* Riga superiore: selezione motore */}
+                    <select
+                      value={aiModel}
+                      onChange={(e) => setAiModel(e.target.value)}
+                      className="shrink-0 w-full h-8 bg-black/40 border border-white/10 px-2 rounded-lg text-[10px] text-white outline-none focus:border-blue-500/50 font-bold appearance-none cursor-pointer"
+                    >
+                      <option value="gemini-3-flash-preview" className="bg-[#0f172a]">Gemini 3.0 Flash</option>
+                    </select>
+
+                    {/* Chiave API */}
+                    <div className={`shrink-0 relative ${keyboardTarget?.id === 'settingsGeminiKey' ? "mb-[210px]" : ""}`}>
+                      <input
+                        type={showGeminiKey ? "text" : "password"}
+                        value={appSettings.geminiKey}
+                        onChange={(e) => setAppSettings({...appSettings, geminiKey: e.target.value})}
+                        onFocus={() => { if (useVirtualKeyboard) setKeyboardTarget({ id: 'settingsGeminiKey', title: 'Chiave API Gemini' }); }}
+                        onBlur={() => backupApiKeyToSupabase(appSettings.geminiKey)}
+                        placeholder={GEMINI_API_KEY_PLACEHOLDER}
+                        autoComplete="new-password"
+                        className="w-full h-8 bg-white/5 border border-white/10 pl-2 pr-[4.5rem] rounded-lg text-[10px] text-white outline-none focus:border-blue-500 transition-colors font-mono"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowGeminiKey(!showGeminiKey)}
+                        className="absolute right-9 top-1/2 -translate-y-1/2 w-7 h-6 flex items-center justify-center rounded active:scale-95 text-slate-400 hover:text-white"
+                        title={showGeminiKey ? 'Nascondi API Key' : 'Mostra API Key'}
+                      >
+                        {showGeminiKey ? <EyeOff size={13} /> : <Eye size={13} />}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setKeyboardTarget({ id: 'settingsGeminiKey', title: 'Chiave API Gemini' })}
+                        className={`absolute right-1 top-1/2 -translate-y-1/2 w-7 h-6 flex items-center justify-center rounded active:scale-95 ${
+                          keyboardTarget?.id === 'settingsGeminiKey' ? 'bg-blue-600 text-white' : 'bg-white/10 text-slate-400'
+                        }`}
+                      >
+                        <Keyboard size={14} />
+                      </button>
+                    </div>
+                  </div>
+                  ) : (
                   <div className="space-y-3">
                     <div className="flex justify-between items-end">
                       <label className="text-[9px] font-black uppercase tracking-widest text-slate-500">Motore AI (Gemini 1.5)</label>
@@ -4343,22 +5335,167 @@ export default function App() {
                         </div>
                       </div>
                       
-                      <input 
-                        type="password" 
-                        value={appSettings.geminiKey} 
-                        onChange={(e) => setAppSettings({...appSettings, geminiKey: e.target.value})}
-                        onFocus={() => { if (useVirtualKeyboard) setKeyboardTarget({ id: 'settingsGeminiKey', title: 'Chiave API Gemini' }); }}
-                        onBlur={() => backupApiKeyToSupabase(appSettings.geminiKey)}
-                        placeholder={GEMINI_API_KEY_PLACEHOLDER}
-                        autoComplete="new-password"
-                        className="w-full bg-black/20 border border-white/5 px-4 py-3 rounded-xl text-xs text-white outline-none focus:border-blue-500/50 transition-all font-mono"
-                      />
+                      <div className="relative">
+                        <input 
+                          type={showGeminiKey ? "text" : "password"} 
+                          value={appSettings.geminiKey} 
+                          onChange={(e) => setAppSettings({...appSettings, geminiKey: e.target.value})}
+                          onFocus={() => { if (useVirtualKeyboard) setKeyboardTarget({ id: 'settingsGeminiKey', title: 'Chiave API Gemini' }); }}
+                          onBlur={() => backupApiKeyToSupabase(appSettings.geminiKey)}
+                          placeholder={GEMINI_API_KEY_PLACEHOLDER}
+                          autoComplete="new-password"
+                          className="w-full bg-black/20 border border-white/5 pl-4 pr-10 py-3 rounded-xl text-xs text-white outline-none focus:border-blue-500/50 transition-all font-mono"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowGeminiKey(!showGeminiKey)}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white transition-colors"
+                          title={showGeminiKey ? 'Nascondi API Key' : 'Mostra API Key'}
+                        >
+                          {showGeminiKey ? <EyeOff size={16} /> : <Eye size={16} />}
+                        </button>
+                      </div>
                     </div>
                   </div>
+                  )
                 )}
 
                 {/* Email Destinatari Tab */}
                 {activeSettingsTab === "email" && (
+                  isMobile35 ? (
+                  <div className="flex flex-col gap-1 p-0.5 min-h-0 flex-1">
+                    {/* Riga 1: aggiungi destinatario */}
+                    <div className={`shrink-0 flex gap-1 ${keyboardTarget?.id === 'settingsNewEmail' ? "mb-[210px]" : ""}`}>
+                      <div className="relative flex-1">
+                        <input
+                          type="email"
+                          value={newEmail}
+                          onChange={(e) => setNewEmail(e.target.value)}
+                          onFocus={() => { if (useVirtualKeyboard) setKeyboardTarget({ id: 'settingsNewEmail', title: editingEmailIndex !== null ? 'Modifica Destinatario' : 'Aggiungi Destinatario Email' }); }}
+                          placeholder={editingEmailIndex !== null ? "Modifica destinatario..." : "Nuovo destinatario email..."}
+                          className="w-full h-8 bg-white/5 border border-white/10 pl-2 pr-9 rounded-lg text-[10px] text-white outline-none focus:border-blue-500 transition-colors"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setKeyboardTarget({ id: 'settingsNewEmail', title: editingEmailIndex !== null ? 'Modifica Destinatario' : 'Aggiungi Destinatario Email' })}
+                          className={`absolute right-1 top-1/2 -translate-y-1/2 w-7 h-6 flex items-center justify-center rounded active:scale-95 ${
+                            keyboardTarget?.id === 'settingsNewEmail' ? 'bg-blue-600 text-white' : 'bg-white/10 text-slate-400'
+                          }`}
+                        >
+                          <Keyboard size={14} />
+                        </button>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleAddOrUpdateEmail}
+                        disabled={!newEmail.trim()}
+                        className="shrink-0 w-8 h-8 flex items-center justify-center bg-blue-600 border border-blue-400 rounded-lg text-white active:scale-95 disabled:opacity-40"
+                      >
+                        <Plus size={16} />
+                      </button>
+                    </div>
+
+                    {/* Riga 2: scroll destinatari + modifica + elimina */}
+                    <div className="shrink-0 flex gap-1 items-stretch">
+                      <button
+                        type="button"
+                        onClick={() => cycleEmailRecipient(-1)}
+                        disabled={notificationEmails.length === 0}
+                        className="w-7 h-8 flex items-center justify-center bg-white/5 border border-white/10 rounded-lg text-slate-300 active:scale-95 disabled:opacity-30"
+                      >
+                        <ChevronUp size={12} />
+                      </button>
+                      <div className="flex-1 min-w-0 h-8 flex items-center gap-1 bg-white/5 border border-white/10 rounded-lg px-2">
+                        {notificationEmails.length > 0 ? (
+                          <>
+                            <Mail size={11} className="text-blue-400 shrink-0" />
+                            <span className="flex-1 truncate text-[9px] text-white font-medium">{notificationEmails[emailSelectedIndex]}</span>
+                            <span className="text-[7px] text-slate-600 shrink-0">{emailSelectedIndex + 1}/{notificationEmails.length}</span>
+                          </>
+                        ) : (
+                          <span className="text-[9px] text-slate-500 italic">Nessun destinatario</span>
+                        )}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleEditSelectedEmail}
+                        disabled={notificationEmails.length === 0}
+                        className="h-8 px-1.5 flex items-center justify-center gap-0.5 bg-amber-600/90 border border-amber-400/60 rounded-lg text-white text-[7px] font-black uppercase tracking-wide active:scale-95 disabled:opacity-30"
+                      >
+                        <Pencil size={10} className="shrink-0" />
+                        Modifica
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleDeleteSelectedEmail}
+                        disabled={notificationEmails.length === 0}
+                        className="w-8 h-8 flex items-center justify-center bg-red-600/80 border border-red-400/60 rounded-lg text-white active:scale-95 disabled:opacity-30"
+                      >
+                        <Trash2 size={12} />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => cycleEmailRecipient(1)}
+                        disabled={notificationEmails.length === 0}
+                        className="w-7 h-8 flex items-center justify-center bg-white/5 border border-white/10 rounded-lg text-slate-300 active:scale-95 disabled:opacity-30"
+                      >
+                        <ChevronDown size={12} />
+                      </button>
+                    </div>
+
+                    {/* Riga 3: mittente + password (stesso rigo) */}
+                    <div className={`shrink-0 flex gap-1 ${(keyboardTarget?.id === 'settingsEmailUser' || keyboardTarget?.id === 'settingsEmailPass') ? "mb-[210px]" : ""}`}>
+                      <div className="relative flex-[1.1] min-w-0">
+                        <input
+                          type="email"
+                          value={appSettings.emailUser}
+                          onChange={(e) => setAppSettings({...appSettings, emailUser: e.target.value})}
+                          onFocus={() => { if (useVirtualKeyboard) setKeyboardTarget({ id: 'settingsEmailUser', title: 'Email SMTP Mittente' }); }}
+                          placeholder="Mittente email"
+                          autoComplete="new-password"
+                          className="w-full h-8 bg-white/5 border border-white/10 pl-2 pr-8 rounded-lg text-[10px] text-white outline-none focus:border-blue-500 transition-colors"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setKeyboardTarget({ id: 'settingsEmailUser', title: 'Email SMTP Mittente' })}
+                          className={`absolute right-1 top-1/2 -translate-y-1/2 w-6 h-6 flex items-center justify-center rounded active:scale-95 ${
+                            keyboardTarget?.id === 'settingsEmailUser' ? 'bg-blue-600 text-white' : 'bg-white/10 text-slate-400'
+                          }`}
+                        >
+                          <Keyboard size={12} />
+                        </button>
+                      </div>
+                      <div className="relative flex-1 min-w-0">
+                        <input
+                          type={showEmailPass ? "text" : "password"}
+                          value={appSettings.emailPass}
+                          onChange={(e) => setAppSettings({...appSettings, emailPass: e.target.value})}
+                          onFocus={() => { if (useVirtualKeyboard) setKeyboardTarget({ id: 'settingsEmailPass', title: 'Password App SMTP' }); }}
+                          placeholder="Password App"
+                          autoComplete="new-password"
+                          className="w-full h-8 bg-white/5 border border-white/10 pl-2 pr-[3.25rem] rounded-lg text-[10px] text-white outline-none focus:border-blue-500 transition-colors"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowEmailPass(!showEmailPass)}
+                          className="absolute right-7 top-1/2 -translate-y-1/2 w-6 h-6 flex items-center justify-center rounded active:scale-95 text-slate-400 hover:text-white"
+                        >
+                          {showEmailPass ? <EyeOff size={12} /> : <Eye size={12} />}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setKeyboardTarget({ id: 'settingsEmailPass', title: 'Password App SMTP' })}
+                          className={`absolute right-1 top-1/2 -translate-y-1/2 w-6 h-6 flex items-center justify-center rounded active:scale-95 ${
+                            keyboardTarget?.id === 'settingsEmailPass' ? 'bg-blue-600 text-white' : 'bg-white/10 text-slate-400'
+                          }`}
+                        >
+                          <Keyboard size={12} />
+                        </button>
+                      </div>
+                    </div>
+
+                  </div>
+                  ) : (
                   <div className="space-y-4">
                     {/* Email Sender Configuration */}
                     <div className="space-y-3">
@@ -4427,10 +5564,53 @@ export default function App() {
                       </div>
                     </div>
                   </div>
+                  )
                 )}
 
                 {/* ID Telegram Tab */}
                 {activeSettingsTab === "telegram" && (
+                  isMobile35 ? (
+                  <div className="flex flex-col gap-1 p-0.5 min-h-0 flex-1">
+                    <div className={`shrink-0 relative ${keyboardTarget?.id === 'settingsTelegramToken' ? "mb-[210px]" : ""}`}>
+                      <input
+                        type="password"
+                        value={appSettings.telegramToken}
+                        onChange={(e) => setAppSettings({...appSettings, telegramToken: e.target.value})}
+                        onFocus={() => { if (useVirtualKeyboard) setKeyboardTarget({ id: 'settingsTelegramToken', title: 'Telegram Bot Token' }); }}
+                        placeholder="Bot Token (123456789:ABC...)"
+                        className="w-full h-8 bg-white/5 border border-white/10 pl-2 pr-9 rounded-lg text-[10px] text-white outline-none focus:border-blue-500 transition-colors font-mono"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setKeyboardTarget({ id: 'settingsTelegramToken', title: 'Telegram Bot Token' })}
+                        className={`absolute right-1 top-1/2 -translate-y-1/2 w-7 h-6 flex items-center justify-center rounded active:scale-95 ${
+                          keyboardTarget?.id === 'settingsTelegramToken' ? 'bg-blue-600 text-white' : 'bg-white/10 text-slate-400'
+                        }`}
+                      >
+                        <Keyboard size={14} />
+                      </button>
+                    </div>
+                    <div className={`shrink-0 relative ${keyboardTarget?.id === 'settingsTelegramChatId' ? "mb-[210px]" : ""}`}>
+                      <input
+                        type="text"
+                        value={appSettings.telegramChatId}
+                        onChange={(e) => setAppSettings({...appSettings, telegramChatId: e.target.value})}
+                        onFocus={() => { if (useVirtualKeyboard) setKeyboardTarget({ id: 'settingsTelegramChatId', title: 'Telegram Chat ID' }); }}
+                        placeholder="Chat ID (Es: 123456789)"
+                        className="w-full h-8 bg-white/5 border border-white/10 pl-2 pr-9 rounded-lg text-[10px] text-white outline-none focus:border-blue-500 transition-colors"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setKeyboardTarget({ id: 'settingsTelegramChatId', title: 'Telegram Chat ID' })}
+                        className={`absolute right-1 top-1/2 -translate-y-1/2 w-7 h-6 flex items-center justify-center rounded active:scale-95 ${
+                          keyboardTarget?.id === 'settingsTelegramChatId' ? 'bg-blue-600 text-white' : 'bg-white/10 text-slate-400'
+                        }`}
+                      >
+                        <Keyboard size={14} />
+                      </button>
+                    </div>
+                  </div>
+                  ) : (
                   <div className="space-y-4">
                     <div className="space-y-2">
                       <div className="flex justify-between items-end">
@@ -4462,7 +5642,7 @@ export default function App() {
                       />
                     </div>
                     
-                    {/* Visual Guide & QR Code */}
+                    {/* Visual Guide & QR Code — nascosto su 3.5" per risparmiare spazio */}
                     <div className="p-4 bg-white/5 rounded-2xl border border-white/5 space-y-3 mt-2 flex flex-col sm:flex-row items-center gap-4">
                       <div className="bg-white p-2 rounded-xl shrink-0">
                         <svg width="80" height="80" viewBox="0 0 29 29" fill="none" xmlns="http://www.w3.org/2000/svg" shapeRendering="crispEdges">
@@ -4481,11 +5661,13 @@ export default function App() {
                       </div>
                     </div>
                   </div>
+                  )
                 )}
 
-                {/* MODE Anti-sleep Tab */}
-                {(!isMobile35 && activeSettingsTab === "sleep") && (
-                  <div className="flex items-center justify-between p-4 glass bg-white/5 rounded-2xl border border-white/5">
+                {/* MODE Anti-sleep Tab — solo desktop/mobile (non 3.5") */}
+                {activeSettingsTab === "sleep" && !isMobile35 && (
+                  <div className={isMobile35 ? "p-1" : ""}>
+                  <div className="flex items-center justify-between p-3 sm:p-4 glass bg-white/5 rounded-2xl border border-white/5">
                     <div className="flex items-center gap-3">
                       <Lock size={16} className="text-blue-400" />
                       <span className="text-[10px] font-black uppercase text-white tracking-widest">Anti-Sleep Mode</span>
@@ -4494,11 +5676,41 @@ export default function App() {
                       <div className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-all ${preventSleep ? 'right-1' : 'left-1'}`} />
                     </button>
                   </div>
+                  </div>
                 )}
 
                 {/* Test alarm Tab */}
                 {activeSettingsTab === "test" && (
                   <div className="space-y-2">
+                    <div className={`p-2.5 bg-blue-500/10 border border-blue-500/30 rounded-xl space-y-2 ${isMobile35 ? "" : "mb-1"}`}>
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-1.5">
+                          <Download size={12} className="text-blue-400 shrink-0" />
+                          <span className={`font-black uppercase tracking-widest text-blue-400 ${isMobile35 ? "text-[8px]" : "text-[10px]"}`}>
+                            Software Vigil.AI
+                          </span>
+                        </div>
+                        <span className={`font-mono font-bold text-white ${isMobile35 ? "text-[10px]" : "text-sm"}`}>
+                          v{appVersion}
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => checkForUpdates(false)}
+                        className={`w-full py-2.5 bg-blue-600/20 border border-blue-500/30 rounded-xl font-black uppercase tracking-widest text-blue-400 hover:bg-blue-600 hover:text-white transition-all flex items-center justify-center gap-2 ${isMobile35 ? "text-[9px]" : "text-[10px]"}`}
+                      >
+                        <RefreshCw size={12} />
+                        Controlla aggiornamenti
+                      </button>
+                      <button
+                        type="button"
+                        onClick={simulateUpdateCheck}
+                        className={`w-full py-2.5 bg-amber-600/15 border border-amber-500/30 rounded-xl font-black uppercase tracking-widest text-amber-400 hover:bg-amber-600 hover:text-white transition-all flex items-center justify-center gap-2 ${isMobile35 ? "text-[9px]" : "text-[10px]"}`}
+                      >
+                        <Activity size={12} />
+                        Simula upgrade OTA
+                      </button>
+                    </div>
                     {isMobile35 && (
                       <div className="p-2.5 bg-green-500/10 border border-green-500/30 rounded-xl space-y-1">
                         <div className="flex items-center gap-1.5">
@@ -4668,7 +5880,66 @@ export default function App() {
                 )}
               </div>
 
-              <div className="pt-4 border-t border-white/5 flex gap-3 shrink-0">
+              <div className={isMobile35 ? 'vigil-settings-35-footer' : 'pt-4 border-t border-white/5 flex gap-3 shrink-0'}>
+                {isMobile35 && activeSettingsTab === 'network' && (
+                  <button
+                    type="button"
+                    onClick={connectToWifi}
+                    disabled={!selectedWifiSsid || wifiConnecting}
+                    className="flex-1 py-3 bg-green-600 hover:bg-green-500 disabled:opacity-40 text-white rounded-xl text-[9px] font-black uppercase tracking-widest transition-all flex items-center justify-center gap-1.5"
+                  >
+                    {wifiConnecting ? (
+                      <div className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    ) : (
+                      <Wifi size={12} />
+                    )}
+                    Connetti
+                  </button>
+                )}
+                {isMobile35 && activeSettingsTab === 'ai' && (
+                  <button
+                    type="button"
+                    onClick={() => setShowApiKeyModal(true)}
+                    className="flex-1 py-3 bg-amber-600/90 hover:bg-amber-500 text-white rounded-xl text-[9px] font-black uppercase tracking-widest transition-all flex items-center justify-center gap-1.5"
+                  >
+                    <Key size={12} />
+                    Ottieni API Key
+                  </button>
+                )}
+                {isMobile35 && activeSettingsTab === 'email' && (
+                  <a
+                    href="https://myaccount.google.com/apppasswords"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="flex-1 py-3 bg-amber-600/90 hover:bg-amber-500 text-white rounded-xl text-[9px] font-black uppercase tracking-widest transition-all flex items-center justify-center gap-1.5 no-underline"
+                  >
+                    <ExternalLink size={12} />
+                    Password App Gmail
+                  </a>
+                )}
+                {isMobile35 && activeSettingsTab === 'telegram' && (
+                  <>
+                    <a
+                      href="https://t.me/BotFather"
+                      target="_blank"
+                      rel="noreferrer"
+                      className="flex-1 py-3 bg-amber-600/90 hover:bg-amber-500 text-white rounded-xl text-[9px] font-black uppercase tracking-widest transition-all flex items-center justify-center gap-1.5 no-underline"
+                    >
+                      <Send size={12} />
+                      Crea Bot
+                    </a>
+                    <a
+                      href="https://t.me/userinfobot"
+                      target="_blank"
+                      rel="noreferrer"
+                      className="flex-1 py-3 bg-white/10 hover:bg-white/20 text-white rounded-xl text-[9px] font-black uppercase tracking-widest transition-all flex items-center justify-center gap-1.5 no-underline"
+                    >
+                      <ExternalLink size={12} />
+                      Trova Chat ID
+                    </a>
+                  </>
+                )}
+                {!isMobile35 && (
                 <button
                   type="button"
                   onClick={() => setShowSettings(false)}
@@ -4676,57 +5947,19 @@ export default function App() {
                 >
                   Annulla
                 </button>
+                )}
+                {isMobile35 && (
                 <button
                   type="button"
-                  onClick={() => {
-                    const normalizedGeminiKey = normalizeGeminiApiKey(appSettings.geminiKey);
-                    localStorage.setItem("vigilai_gemini_key", normalizedGeminiKey);
-                    localStorage.setItem("vigilai_gemini_key_updated_at", new Date().toISOString());
-                    localStorage.setItem("vigilai_email_user", appSettings.emailUser);
-                    localStorage.setItem("vigilai_email_pass", appSettings.emailPass);
-                    localStorage.setItem("vigilai_telegram_chat_id", appSettings.telegramChatId);
-                    localStorage.setItem("vigilai_telegram_token", appSettings.telegramToken);
-                    localStorage.setItem("vigilai_model", aiModel);
-                    localStorage.setItem("vigilai_notification_emails", JSON.stringify(notificationEmails));
-                    
-                    fetch("/api/settings", {
-                      method: "POST",
-                      headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({
-                        geminiKey: normalizedGeminiKey,
-                        emailUser: appSettings.emailUser,
-                        emailPass: appSettings.emailPass,
-                        telegramChatId: appSettings.telegramChatId,
-                        telegramToken: appSettings.telegramToken,
-                        notificationEmails: notificationEmails
-                      })
-                    }).then(res => res.json()).then(resData => {
-                      if (resData.success) {
-                        console.log("[Settings] Impostazioni salvate con successo.");
-                        setGlobalModal({
-                          type: 'success',
-                          title: 'Impostazioni Salvate',
-                          message: 'Le impostazioni sono state applicate e sincronizzate con successo!'
-                        });
-                      }
-                    }).catch(err => console.error("[Settings] Errore salvataggio:", err));
-
-                    backupApiKeyToSupabase(normalizedGeminiKey);
-                    if (user) {
-                      supabase.auth.updateUser({
-                        data: {
-                          gemini_key: normalizedGeminiKey,
-                          email_user: appSettings.emailUser,
-                          email_pass: appSettings.emailPass,
-                          telegram_chat_id: appSettings.telegramChatId,
-                          telegram_token: appSettings.telegramToken,
-                          notification_emails: notificationEmails
-                        }
-                      }).catch((err: any) => console.warn("[Settings] Errore backup cloud:", err));
-                    }
-
-                    setShowSettings(false);
-                  }}
+                  onClick={() => setShowSettings(false)}
+                  className="flex-1 py-3 bg-white/5 hover:bg-white/10 text-slate-400 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all cursor-pointer"
+                >
+                  Annulla
+                </button>
+                )}
+                <button
+                  type="button"
+                  onClick={handleSaveSettings}
                   className="flex-1 py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-black uppercase tracking-widest transition-all shadow-lg shadow-blue-500/25 cursor-pointer"
                 >
                   Salva Impostazioni
@@ -5310,6 +6543,132 @@ export default function App() {
         )}
       </AnimatePresence>
 
+      <AnimatePresence>
+        {updateUi.open && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[2100] bg-slate-950/85 backdrop-blur-xl flex items-center justify-center p-4 sm:p-6"
+          >
+            <motion.div
+              initial={{ scale: 0.92, y: 16 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.92, y: 16 }}
+              className="glass max-w-sm w-full p-6 sm:p-8 rounded-[32px] border-white/10 shadow-2xl space-y-5"
+            >
+              {updateUi.phase === "prompt" && (
+                <>
+                  <div className="text-center space-y-3">
+                    <div className="w-14 h-14 rounded-2xl bg-blue-500/10 border border-blue-500/20 text-blue-400 flex items-center justify-center mx-auto">
+                      <Download size={28} />
+                    </div>
+                    <h3 className="text-lg font-black text-white uppercase tracking-tight">Aggiornamento disponibile</h3>
+                    {isSimulatedUpdateUi(updateUi) && (
+                      <p className="text-amber-400 text-[8px] font-black uppercase tracking-[0.25em]">
+                        Modalità simulazione — nessun file modificato
+                      </p>
+                    )}
+                    <p className="text-slate-400 text-[10px] font-bold uppercase tracking-wide">
+                      v{updateUi.currentVersion || appVersion} → v{updateUi.availableVersion}
+                    </p>
+                    {updateUi.critical && (
+                      <p className="text-amber-400 text-[9px] font-black uppercase tracking-widest">
+                        Aggiornamento consigliato
+                      </p>
+                    )}
+                    {updateUi.changelog && (
+                      <p className="text-slate-300 text-[10px] font-medium leading-relaxed normal-case text-left bg-white/5 rounded-xl p-3 border border-white/5">
+                        {updateUi.changelog}
+                      </p>
+                    )}
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setUpdateUi((prev) => ({ ...prev, open: false }))}
+                      className="flex-1 py-3 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-[9px] font-black uppercase tracking-widest text-slate-300"
+                    >
+                      Più tardi
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleUpdateConfirm}
+                      className="flex-1 py-3 bg-blue-600 hover:bg-blue-500 rounded-xl text-[9px] font-black uppercase tracking-widest text-white"
+                    >
+                      {isSimulatedUpdateUi(updateUi) ? "Avvia simulazione" : "Aggiorna ora"}
+                    </button>
+                  </div>
+                </>
+              )}
+
+              {updateUi.phase === "progress" && (
+                <div className="text-center space-y-4">
+                  <div className="w-14 h-14 rounded-2xl bg-blue-500/10 border border-blue-500/20 text-blue-400 flex items-center justify-center mx-auto">
+                    <RefreshCw size={28} className="animate-spin" />
+                  </div>
+                  <h3 className="text-lg font-black text-white uppercase tracking-tight">Aggiornamento in corso</h3>
+                  <p className="text-slate-400 text-[10px] font-bold uppercase tracking-wide">
+                    {updateUi.message || "Attendere, non spegnere la Raspberry..."}
+                  </p>
+                  <div className="w-full h-2 bg-slate-800 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-blue-500 transition-all duration-500"
+                      style={{ width: `${Math.min(100, updateUi.progress ?? 10)}%` }}
+                    />
+                  </div>
+                  <p className="text-[9px] text-slate-500 font-bold uppercase">
+                    {updateUi.progress ?? 0}% — v{updateUi.availableVersion}
+                  </p>
+                </div>
+              )}
+
+              {updateUi.phase === "done" && (
+                <>
+                  <div className="text-center space-y-3">
+                    <div className="w-14 h-14 rounded-2xl bg-green-500/10 border border-green-500/20 text-green-400 flex items-center justify-center mx-auto">
+                      <ShieldCheck size={28} />
+                    </div>
+                    <h3 className="text-lg font-black text-white uppercase tracking-tight">Aggiornamento completato</h3>
+                    <p className="text-slate-400 text-[10px] font-bold uppercase tracking-wide">
+                      {updateUi.message || "Riavvio del sistema in corso..."}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setUpdateUi((prev) => ({ ...prev, open: false }))}
+                    className="w-full py-3 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-[9px] font-black uppercase tracking-widest text-white"
+                  >
+                    Chiudi
+                  </button>
+                </>
+              )}
+
+              {updateUi.phase === "error" && (
+                <>
+                  <div className="text-center space-y-3">
+                    <div className="w-14 h-14 rounded-2xl bg-red-500/10 border border-red-500/20 text-red-400 flex items-center justify-center mx-auto">
+                      <AlertCircle size={28} />
+                    </div>
+                    <h3 className="text-lg font-black text-white uppercase tracking-tight">Aggiornamento fallito</h3>
+                    <p className="text-slate-400 text-[10px] font-bold uppercase tracking-wide leading-relaxed">
+                      {updateUi.error || updateUi.message || "Errore sconosciuto. La versione precedente è stata ripristinata."}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setUpdateUi((prev) => ({ ...prev, open: false, phase: "prompt" }))}
+                    className="w-full py-3 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-[9px] font-black uppercase tracking-widest text-white"
+                  >
+                    Chiudi
+                  </button>
+                </>
+              )}
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Gemini API Key Helper Modal */}
       <AnimatePresence>
         {showApiKeyModal && (
@@ -5419,18 +6778,28 @@ export default function App() {
                       <Keyboard size={12} className="text-blue-400 animate-pulse" />
                     )}
                   </div>
-                  <input
-                    type="text"
-                    value={modalGeminiKey}
-                    onChange={(e) => setModalGeminiKey(e.target.value)}
-                    onFocus={() => {
-                      if (useVirtualKeyboard) {
-                        setKeyboardTarget({ id: 'modalGeminiKey', title: 'Nuova API Key Gemini' });
-                      }
-                    }}
-                    placeholder={GEMINI_API_KEY_MODAL_PLACEHOLDER}
-                    className="w-full bg-black/40 border border-white/10 px-4 py-3 rounded-xl text-xs text-white outline-none focus:border-blue-500 transition-colors font-mono"
-                  />
+                  <div className="relative">
+                    <input
+                      type={showGeminiKey ? "text" : "password"}
+                      value={modalGeminiKey}
+                      onChange={(e) => setModalGeminiKey(e.target.value)}
+                      onFocus={() => {
+                        if (useVirtualKeyboard) {
+                          setKeyboardTarget({ id: 'modalGeminiKey', title: 'Nuova API Key Gemini' });
+                        }
+                      }}
+                      placeholder={GEMINI_API_KEY_MODAL_PLACEHOLDER}
+                      className="w-full bg-black/40 border border-white/10 pl-4 pr-10 py-3 rounded-xl text-xs text-white outline-none focus:border-blue-500 transition-colors font-mono"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowGeminiKey(!showGeminiKey)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white transition-colors"
+                      title={showGeminiKey ? 'Nascondi API Key' : 'Mostra API Key'}
+                    >
+                      {showGeminiKey ? <EyeOff size={16} /> : <Eye size={16} />}
+                    </button>
+                  </div>
                 </div>
               </div>
 

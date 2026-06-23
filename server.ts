@@ -14,6 +14,15 @@ import os from "os";
 import dns from "dns";
 import { WebSocket } from "ws";
 import { isValidGeminiApiKey, normalizeGeminiApiKey } from "./src/utils/geminiApiKey.ts";
+import {
+  checkForUpdate,
+  getCurrentVersion,
+  prepareSimulatedUpdateCheck,
+  readUpdateStatus,
+  startSimulatedUpdateApply,
+  startUpdateApply,
+  getSimulatedUpdateManifest,
+} from "./updateManager.ts";
 
 // Polyfill WebSocket per ambienti Node.js < 22 (richiesto da Supabase Realtime)
 (global as any).WebSocket = WebSocket;
@@ -167,6 +176,53 @@ async function startServer() {
     return false;
   };
 
+  const ENV_PATH = path.join(process.cwd(), ".env");
+
+  const normalizeEnvText = (content: string) => content.replace(/\r\n/g, "\n").trimEnd();
+
+  const buildEnvContent = () => {
+    let nodeEnv = process.env.NODE_ENV || "production";
+    try {
+      if (fs.existsSync(ENV_PATH)) {
+        const match = fs.readFileSync(ENV_PATH, "utf-8").match(/^NODE_ENV=(.*)$/m);
+        if (match?.[1]?.trim()) nodeEnv = match[1].trim();
+      }
+    } catch { /* ignore */ }
+
+    return [
+      `GEMINI_API_KEY=${process.env.GEMINI_API_KEY || ""}`,
+      `VITE_GEMINI_API_KEY=${process.env.VITE_GEMINI_API_KEY || ""}`,
+      `EMAIL_USER=${process.env.EMAIL_USER || ""}`,
+      `EMAIL_PASS=${process.env.EMAIL_PASS || ""}`,
+      `TELEGRAM_CHAT_ID=${process.env.TELEGRAM_CHAT_ID || ""}`,
+      `TELEGRAM_BOT_TOKEN=${process.env.TELEGRAM_BOT_TOKEN || ""}`,
+      `NOTIFICATION_EMAILS=${process.env.NOTIFICATION_EMAILS || ""}`,
+      `VITE_SUPABASE_URL=${process.env.VITE_SUPABASE_URL || ""}`,
+      `VITE_SUPABASE_ANON_KEY=${process.env.VITE_SUPABASE_ANON_KEY || ""}`,
+      `NODE_ENV=${nodeEnv}`,
+    ].join("\n");
+  };
+
+  const writeEnvIfChanged = () => {
+    const envContent = buildEnvContent();
+    const normalizedNewEnv = normalizeEnvText(envContent);
+    let existingEnv = "";
+    try {
+      if (fs.existsSync(ENV_PATH)) {
+        existingEnv = normalizeEnvText(fs.readFileSync(ENV_PATH, "utf-8"));
+      }
+    } catch { /* ignore */ }
+
+    if (existingEnv !== normalizedNewEnv) {
+      fs.writeFileSync(ENV_PATH, `${envContent}\n`, "utf-8");
+      console.log("[Settings] Impostazioni aggiornate e salvate in .env");
+      return true;
+    }
+
+    console.log("[Settings] Nessun cambiamento rilevato nelle impostazioni, .env non sovrascritto");
+    return false;
+  };
+
   const syncSettingsFromCloud = async () => {
     console.log("[Sync Cloud] Controllo impostazioni globali da Supabase...");
     const supabaseUrl = process.env.VITE_SUPABASE_URL;
@@ -247,20 +303,7 @@ async function startServer() {
 
       if (changed) {
         console.log("[Sync Cloud] Rilevate nuove configurazioni dal Cloud. Aggiornamento file .env locale in corso...");
-        const envContent = [
-          `GEMINI_API_KEY=${process.env.GEMINI_API_KEY || ""}`,
-          `VITE_GEMINI_API_KEY=${process.env.VITE_GEMINI_API_KEY || ""}`,
-          `EMAIL_USER=${process.env.EMAIL_USER || ""}`,
-          `EMAIL_PASS=${process.env.EMAIL_PASS || ""}`,
-          `TELEGRAM_CHAT_ID=${process.env.TELEGRAM_CHAT_ID || ""}`,
-          `TELEGRAM_BOT_TOKEN=${process.env.TELEGRAM_BOT_TOKEN || ""}`,
-          `NOTIFICATION_EMAILS=${process.env.NOTIFICATION_EMAILS || ""}`,
-          `VITE_SUPABASE_URL=${process.env.VITE_SUPABASE_URL || ""}`,
-          `VITE_SUPABASE_ANON_KEY=${process.env.VITE_SUPABASE_ANON_KEY || ""}`,
-          `NODE_ENV=${process.env.NODE_ENV || "production"}`
-        ].join("\n");
-        
-        fs.writeFileSync(path.join(process.cwd(), ".env"), envContent, "utf-8");
+        writeEnvIfChanged();
         console.log("[Sync Cloud] Sincronizzazione completata con successo. Credenziali aggiornate.");
       } else {
         console.log("[Sync Cloud] Le impostazioni locali sono già sincronizzate con il Cloud.");
@@ -663,7 +706,17 @@ async function startServer() {
   // API per salvare le impostazioni dal pannello di controllo dell'app
   app.post("/api/settings", async (req, res) => {
     try {
-      const { geminiKey, emailUser, emailPass, telegramChatId, telegramToken, notificationEmails, supabaseUrl, supabaseAnonKey } = req.body;
+      const {
+        geminiKey,
+        emailUser,
+        emailPass,
+        telegramChatId,
+        telegramToken,
+        notificationEmails,
+        supabaseUrl,
+        supabaseAnonKey,
+        skipCloudSync,
+      } = req.body;
 
       if (geminiKey !== undefined && geminiKey.trim() !== "") {
         const normalizedKey = normalizeGeminiApiKey(geminiKey);
@@ -682,77 +735,83 @@ async function startServer() {
       if (supabaseUrl !== undefined && supabaseUrl.trim() !== "") process.env.VITE_SUPABASE_URL = supabaseUrl;
       if (supabaseAnonKey !== undefined && supabaseAnonKey.trim() !== "") process.env.VITE_SUPABASE_ANON_KEY = supabaseAnonKey;
 
-      const envContent = [
-        `GEMINI_API_KEY=${process.env.GEMINI_API_KEY || ""}`,
-        `VITE_GEMINI_API_KEY=${process.env.VITE_GEMINI_API_KEY || ""}`,
-        `EMAIL_USER=${process.env.EMAIL_USER || ""}`,
-        `EMAIL_PASS=${process.env.EMAIL_PASS || ""}`,
-        `TELEGRAM_CHAT_ID=${process.env.TELEGRAM_CHAT_ID || ""}`,
-        `TELEGRAM_BOT_TOKEN=${process.env.TELEGRAM_BOT_TOKEN || ""}`,
-        `NOTIFICATION_EMAILS=${process.env.NOTIFICATION_EMAILS || ""}`,
-        `VITE_SUPABASE_URL=${process.env.VITE_SUPABASE_URL || ""}`,
-        `VITE_SUPABASE_ANON_KEY=${process.env.VITE_SUPABASE_ANON_KEY || ""}`,
-        `NODE_ENV=${process.env.NODE_ENV || "production"}`
-      ].join("\n");
+      const envChanged = writeEnvIfChanged();
 
-      const envPath = path.join(process.cwd(), ".env");
-      let existingEnv = "";
-      try {
-        if (fs.existsSync(envPath)) {
-          existingEnv = fs.readFileSync(envPath, "utf-8").replace(/\r\n/g, "\n");
-        }
-      } catch (readErr) {}
-
-      const normalizedNewEnv = envContent.replace(/\r\n/g, "\n");
-      if (existingEnv !== normalizedNewEnv) {
-        fs.writeFileSync(envPath, envContent, "utf-8");
-        console.log("[Settings] Impostazioni aggiornate e salvate in .env");
-      } else {
-        console.log("[Settings] Nessun cambiamento rilevato nelle impostazioni, .env non sovrascritto");
-      }
-
-      // Supabase Global Sync (SMTP, Telegram, Notification Emails)
       const currentSupabaseUrl = process.env.VITE_SUPABASE_URL;
       const currentSupabaseKey = process.env.VITE_SUPABASE_ANON_KEY;
-      if (currentSupabaseUrl && currentSupabaseKey) {
+      if (!skipCloudSync && currentSupabaseUrl && currentSupabaseKey) {
         try {
           const { createClient } = await import("@supabase/supabase-js");
           const supabase = createClient(currentSupabaseUrl, currentSupabaseKey);
-          
-          const { error } = await supabase.from('global_settings').upsert({
-            id: 'master',
-            smtp_user: process.env.EMAIL_USER,
-            smtp_pass: process.env.EMAIL_PASS,
-            telegram_chat_id: process.env.TELEGRAM_CHAT_ID,
-            telegram_bot_token: process.env.TELEGRAM_BOT_TOKEN,
-            notification_emails: process.env.NOTIFICATION_EMAILS,
-            updated_at: new Date().toISOString()
-          });
-          
-          if (error) {
-            console.error("[Settings] Errore sincronizzazione globale su Supabase:", error.message);
-          } else {
-            console.log("[Settings] Credenziali sincronizzate globalmente su Supabase (global_settings)");
+
+          const nextGlobal = {
+            smtp_user: process.env.EMAIL_USER || "",
+            smtp_pass: process.env.EMAIL_PASS || "",
+            telegram_chat_id: process.env.TELEGRAM_CHAT_ID || "",
+            telegram_bot_token: process.env.TELEGRAM_BOT_TOKEN || "",
+            notification_emails: process.env.NOTIFICATION_EMAILS || "",
+          };
+
+          const { data: existingGlobal } = await supabase
+            .from("global_settings")
+            .select("smtp_user, smtp_pass, telegram_chat_id, telegram_bot_token, notification_emails")
+            .eq("id", "master")
+            .maybeSingle();
+
+          const globalChanged =
+            envChanged ||
+            !existingGlobal ||
+            existingGlobal.smtp_user !== nextGlobal.smtp_user ||
+            existingGlobal.smtp_pass !== nextGlobal.smtp_pass ||
+            existingGlobal.telegram_chat_id !== nextGlobal.telegram_chat_id ||
+            existingGlobal.telegram_bot_token !== nextGlobal.telegram_bot_token ||
+            existingGlobal.notification_emails !== nextGlobal.notification_emails;
+
+          if (globalChanged) {
+            const { error } = await supabase.from("global_settings").upsert({
+              id: "master",
+              ...nextGlobal,
+              updated_at: new Date().toISOString(),
+            });
+
+            if (error) {
+              console.error("[Settings] Errore sincronizzazione globale su Supabase:", error.message);
+            } else {
+              console.log("[Settings] Credenziali sincronizzate globalmente su Supabase (global_settings)");
+            }
           }
 
-          // Salva anche API Key Gemini separata in due parti per sicurezza se presente
           if (process.env.GEMINI_API_KEY && isValidGeminiApiKey(process.env.GEMINI_API_KEY)) {
             const keyLen = process.env.GEMINI_API_KEY.length;
             const half = Math.floor(keyLen / 2);
             const part1 = process.env.GEMINI_API_KEY.substring(0, half);
             const part2 = process.env.GEMINI_API_KEY.substring(half);
-            await supabase.from('settings').upsert({
-              id: 'gemini_key_backup',
-              gemini_part1: part1,
-              gemini_part2: part2,
-              updated_at: new Date().toISOString()
-            });
-            console.log("[Settings] API Key Gemini di backup sincronizzata su Supabase (settings)");
-          }
+            const { data: existingGemini } = await supabase
+              .from("settings")
+              .select("gemini_part1, gemini_part2")
+              .eq("id", "gemini_key_backup")
+              .maybeSingle();
 
+            if (
+              envChanged ||
+              !existingGemini ||
+              existingGemini.gemini_part1 !== part1 ||
+              existingGemini.gemini_part2 !== part2
+            ) {
+              await supabase.from("settings").upsert({
+                id: "gemini_key_backup",
+                gemini_part1: part1,
+                gemini_part2: part2,
+                updated_at: new Date().toISOString(),
+              });
+              console.log("[Settings] API Key Gemini di backup sincronizzata su Supabase (settings)");
+            }
+          }
         } catch (supabaseErr: any) {
           console.error("[Settings] Eccezione durante la sincronizzazione Supabase:", supabaseErr.message);
         }
+      } else if (skipCloudSync) {
+        console.log("[Settings] Sync cloud saltato (applicazione da remoto/realtime).");
       }
 
       res.json({ success: true });
@@ -915,6 +974,99 @@ async function startServer() {
         process.exit(0);
       }
     }, 1000);
+  });
+
+  // ─── OTA Update API ───────────────────────────────────────────────────────
+  app.get("/api/update/status", (_req, res) => {
+    res.json({ success: true, ...readUpdateStatus() });
+  });
+
+  app.get("/api/update/check", async (_req, res) => {
+    try {
+      const result = await checkForUpdate();
+      res.json({
+        success: true,
+        updateAvailable: result.updateAvailable,
+        currentVersion: result.currentVersion,
+        availableVersion: result.manifest?.version,
+        changelog: result.manifest?.changelog,
+        critical: result.manifest?.critical ?? false,
+        status: result.status,
+      });
+    } catch (err: any) {
+      res.status(500).json({
+        success: false,
+        error: err.message || "Errore controllo aggiornamenti",
+        ...readUpdateStatus(),
+      });
+    }
+  });
+
+  app.post("/api/update/apply", async (req, res) => {
+    try {
+      const result = await checkForUpdate();
+      if (!result.updateAvailable || !result.manifest) {
+        return res.status(400).json({
+          success: false,
+          error: "Nessun aggiornamento disponibile",
+          currentVersion: result.currentVersion,
+        });
+      }
+
+      const started = startUpdateApply(result.manifest);
+      if (!started.started) {
+        return res.status(409).json({ success: false, error: started.error });
+      }
+
+      res.json({
+        success: true,
+        message: `Aggiornamento v${result.manifest.version} avviato`,
+        availableVersion: result.manifest.version,
+      });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message || "Impossibile avviare aggiornamento" });
+    }
+  });
+
+  app.post("/api/update/simulate/check", (_req, res) => {
+    try {
+      const result = prepareSimulatedUpdateCheck();
+      res.json({
+        success: true,
+        simulated: true,
+        updateAvailable: result.updateAvailable,
+        currentVersion: result.currentVersion,
+        availableVersion: result.manifest.version,
+        changelog: result.manifest.changelog,
+        critical: result.manifest.critical ?? false,
+        status: result.status,
+      });
+    } catch (err: any) {
+      res.status(500).json({
+        success: false,
+        error: err.message || "Errore simulazione aggiornamento",
+        ...readUpdateStatus(),
+      });
+    }
+  });
+
+  app.post("/api/update/simulate/apply", (_req, res) => {
+    try {
+      const started = startSimulatedUpdateApply();
+      if (!started.started) {
+        return res.status(409).json({ success: false, error: started.error });
+      }
+
+      const manifest = getSimulatedUpdateManifest();
+      res.json({
+        success: true,
+        simulated: true,
+        message: `Simulazione aggiornamento v${manifest.version} avviata`,
+        availableVersion: manifest.version,
+      });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message || "Impossibile avviare simulazione" });
+    }
   });
 
   // API di diagnostica di rete per risolvere errori ENETUNREACH
@@ -1237,12 +1389,19 @@ async function startServer() {
   const EOI = Buffer.from([0xFF, 0xD9]);
 
   async function startStream(rtspUrl: string) {
-    console.log(`[Camera Manager] Starting FFmpeg for: ${rtspUrl.split('@')[1] || rtspUrl}`); // Hide credentials in logs
+    const existing = activeStreams.get(rtspUrl);
+    if (existing?.process && !existing.process.killed) {
+      existing.lastAccessed = Date.now();
+      return;
+    }
+
+    console.log(`[Camera Manager] Starting FFmpeg for: ${rtspUrl.split('@')[1] || rtspUrl}`);
     const args = [
       '-loglevel', 'error',
       '-rtsp_transport', 'tcp',
       '-timeout', '10000000',
       '-i', rtspUrl,
+      '-an',
       '-vf', 'fps=5,scale=1280:720',
       '-q:v', '4',
       '-f', 'mjpeg',
@@ -1354,6 +1513,66 @@ async function startServer() {
     res.end(stream.latestFrame);
   });
 
+  app.get("/api/mjpeg", async (req, res) => {
+    const rtsp = req.query.rtsp as string;
+    if (!rtsp) return res.status(400).end("Missing rtsp parameter");
+
+    if (!activeStreams.has(rtsp)) {
+      console.log(`[API] MJPEG init for ${rtsp.split("@")[1] || rtsp}`);
+      startStream(rtsp);
+    }
+
+    const deadline = Date.now() + 25000;
+    while (Date.now() < deadline) {
+      if (req.socket.destroyed) return;
+      const stream = activeStreams.get(rtsp);
+      if (stream?.latestFrame && stream.latestFrame.length > 0) break;
+      await new Promise((resolve) => setTimeout(resolve, 250));
+    }
+
+    const initial = activeStreams.get(rtsp);
+    if (!initial?.latestFrame?.length) {
+      return res.status(504).end("Stream timeout — camera non raggiungibile");
+    }
+
+    res.writeHead(200, {
+      "Content-Type": "multipart/x-mixed-replace; boundary=frame",
+      "Cache-Control": "no-cache, no-store, must-revalidate",
+      Pragma: "no-cache",
+      Connection: "keep-alive",
+    });
+
+    let closed = false;
+    const pushFrame = () => {
+      if (closed) return;
+      const stream = activeStreams.get(rtsp);
+      if (!stream) {
+        startStream(rtsp);
+        return;
+      }
+      stream.lastAccessed = Date.now();
+      const frame = stream.latestFrame;
+      if (!frame || frame.length === 0) return;
+      try {
+        res.write(
+          `--frame\r\nContent-Type: image/jpeg\r\nContent-Length: ${frame.length}\r\n\r\n`
+        );
+        res.write(frame);
+        res.write("\r\n");
+      } catch {
+        closed = true;
+      }
+    };
+
+    pushFrame();
+    const interval = setInterval(pushFrame, 400);
+
+    req.on("close", () => {
+      closed = true;
+      clearInterval(interval);
+    });
+  });
+
   // Route to simulate and test the setup wizard locally
   app.get("/setup", (req, res) => {
     res.sendFile(path.join(process.cwd(), "setup_simulator.html"));
@@ -1408,6 +1627,7 @@ async function startServer() {
 
   app.listen(PORT, "0.0.0.0", () => {
     console.log(`Vigil.AI Server running on http://localhost:${PORT}`);
+    console.log(`[Update] Versione installata: v${getCurrentVersion()}`);
     console.log("[Setup Diagnostic] Stato configurazione all'avvio:");
     console.log(`  - GEMINI_API_KEY: ${process.env.GEMINI_API_KEY ? "Presente" : "Mancante"}`);
     console.log(`  - VITE_SUPABASE_URL: ${process.env.VITE_SUPABASE_URL ? "Presente" : "Mancante"}`);
