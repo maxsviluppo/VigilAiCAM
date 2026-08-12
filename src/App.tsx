@@ -6443,7 +6443,16 @@ export default function App() {
                 <div className="pt-10 flex flex-col items-center justify-center gap-2 opacity-30 hover:opacity-100 transition-opacity">
                   <div className="h-px w-20 bg-gradient-to-r from-transparent via-blue-500 to-transparent mb-4" />
                   <p className="text-[10px] font-black uppercase tracking-[0.4em] text-slate-500 text-center">
-                    Sviluppo e creazione <span className="text-white">Castro Massimo</span> by <span className="text-blue-500">DEVTOOLS</span>
+                    Sviluppo e creazione <span className="text-white">Castro Massimo</span> by{' '}
+                    <a
+                      href="https://www.codecafe.it"
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-blue-500 hover:text-blue-300 transition-colors"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      CODECAFE
+                    </a>
                   </p>
                   <a 
                     href="mailto:castromassimo@gmail.com" 

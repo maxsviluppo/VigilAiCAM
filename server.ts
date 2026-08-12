@@ -13,6 +13,8 @@ import net from "net";
 import os from "os";
 import dns from "dns";
 import { WebSocket } from "ws";
+import pg from "pg";
+const { Pool } = pg;
 import { isValidGeminiApiKey, normalizeGeminiApiKey } from "./src/utils/geminiApiKey.ts";
 import {
   checkForUpdate,
@@ -1586,8 +1588,110 @@ async function startServer() {
     res.sendFile(path.join(process.cwd(), "app_simulator.html"));
   });
 
+  // ─── ADMIN API ENDPOINTS (REST API Supabase via Service Role Key) ──────────────
+  const ADMIN_TOKEN = 'vigilai-admin-Max1974-123Max456';
+
+  function checkAdminToken(req: any, res: any): boolean {
+    const token = req.headers['x-admin-token'];
+    if (token !== ADMIN_TOKEN) {
+      res.status(403).json({ success: false, error: 'Accesso non autorizzato' });
+      return false;
+    }
+    return true;
+  }
+
+  // Helper per inviare richieste autenticate a Supabase Management/Auth API
+  async function supabaseAdminFetch(path: string, options: RequestInit = {}) {
+    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    const supabaseUrl = process.env.VITE_SUPABASE_URL;
+    if (!serviceKey || !supabaseUrl) {
+      throw new Error('SUPABASE_SERVICE_ROLE_KEY o VITE_SUPABASE_URL non configurati nel file .env');
+    }
+    const url = `${supabaseUrl}/auth/v1/${path}`;
+    const res = await fetch(url, {
+      ...options,
+      headers: {
+        'apikey': serviceKey,
+        'Authorization': `Bearer ${serviceKey}`,
+        'Content-Type': 'application/json',
+        ...(options.headers || {})
+      }
+    });
+    return res;
+  }
+
+  // GET /api/admin/users — ottiene la lista degli utenti
+  app.get('/api/admin/users', async (req, res) => {
+    if (!checkAdminToken(req, res)) return;
+    try {
+      const response = await supabaseAdminFetch('admin/users?per_page=200');
+      if (!response.ok) {
+        const errText = await response.text();
+        return res.json({ success: false, error: `Errore Supabase REST API: ${response.status} ${errText.slice(0, 200)}` });
+      }
+      const data = await response.json() as any;
+      const users = (data.users || []).map((u: any) => ({
+        id: u.id,
+        email: u.email,
+        created_at: u.created_at,
+        last_sign_in_at: u.last_sign_in_at,
+        banned_until: u.banned_until || null,
+        confirmed_at: u.confirmed_at,
+        role: u.role,
+      }));
+      res.json({ success: true, users });
+    } catch (err: any) {
+      console.error('[Admin] Errore listUsers REST API:', err.message);
+      res.json({ success: false, error: err.message || 'Errore interno' });
+    }
+  });
+
+  // POST /api/admin/user/:id/toggle-block — blocca/sblocca utente
+  app.post('/api/admin/user/:id/toggle-block', async (req, res) => {
+    if (!checkAdminToken(req, res)) return;
+    const { id } = req.params;
+    const { blocked } = req.body;
+    try {
+      const banDuration = blocked ? '876000h' : 'none'; // 100 anni o sblocco
+      const response = await supabaseAdminFetch(`admin/users/${id}`, {
+        method: 'PUT',
+        body: JSON.stringify({ ban_duration: banDuration })
+      });
+      if (!response.ok) {
+        const errText = await response.text();
+        return res.json({ success: false, error: `Errore Supabase REST API: ${response.status} ${errText.slice(0, 200)}` });
+      }
+      res.json({ success: true });
+    } catch (err: any) {
+      console.error('[Admin] Errore toggle-block REST API:', err.message);
+      res.json({ success: false, error: err.message || 'Errore interno' });
+    }
+  });
+
+  // DELETE /api/admin/user/:id — elimina utente
+  app.delete('/api/admin/user/:id', async (req, res) => {
+    if (!checkAdminToken(req, res)) return;
+    const { id } = req.params;
+    try {
+      const response = await supabaseAdminFetch(`admin/users/${id}`, {
+        method: 'DELETE'
+      });
+      if (!response.ok) {
+        const errText = await response.text();
+        return res.json({ success: false, error: `Errore Supabase REST API: ${response.status} ${errText.slice(0, 200)}` });
+      }
+      res.json({ success: true });
+    } catch (err: any) {
+      console.error('[Admin] Errore deleteUser REST API:', err.message);
+      res.json({ success: false, error: err.message || 'Errore interno' });
+    }
+  });
+
+
   // Vite middleware
+
   if (process.env.NODE_ENV !== "production") {
+
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: "spa",
