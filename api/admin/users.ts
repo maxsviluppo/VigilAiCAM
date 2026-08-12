@@ -1,4 +1,4 @@
-import { checkAdminToken, supabaseAdminFetch } from '../lib/supabaseAdmin';
+import { checkAdminToken, supabaseAdminFetch } from '../../lib/supabaseAdmin';
 
 export default async function handler(req: any, res: any) {
   if (req.method !== 'GET') {
