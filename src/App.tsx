@@ -3414,22 +3414,15 @@ export default function App() {
             </div>
 
             {/* Mobile/Tablet badge - Always visible on small screens */}
-            <div className="flex md:hidden flex-col items-end gap-1">
-              <div className="flex items-center gap-1.5 sm:gap-3 bg-white/5 px-3 py-1.5 rounded-full border border-white/5">
-                <div className="flex items-center gap-1.5 text-[8px] sm:text-[9px] font-black text-slate-300 uppercase tracking-widest">
-                  <span className={`w-1.5 h-1.5 rounded-full ${isMonitoring ? 'bg-green-500 shadow-[0_0_8px_#22c55e]' : 'bg-slate-700'}`} />
-                  {isMonitoring ? 'Attivo' : 'Attesa'}
-                </div>
-                <div className="w-px h-3 bg-white/10" />
-                <div className="flex items-center gap-1 text-[8px] sm:text-[9px] font-black text-blue-400 uppercase tracking-widest">
-                  {cameras.length} CAM
-                </div>
+            <div className="flex md:hidden items-center gap-1.5 sm:gap-3 bg-white/5 px-3 py-1.5 rounded-full border border-white/5">
+              <div className="flex items-center gap-1.5 text-[8px] sm:text-[9px] font-black text-slate-300 uppercase tracking-widest">
+                <span className={`w-1.5 h-1.5 rounded-full ${isMonitoring ? 'bg-green-500 shadow-[0_0_8px_#22c55e]' : 'bg-slate-700'}`} />
+                {isMonitoring ? 'Attivo' : 'Attesa'}
               </div>
-              {displayAccountEmail && (
-                <span className="text-[10px] text-blue-400 font-semibold normal-case tracking-normal truncate max-w-[160px] pr-1">
-                  {displayAccountEmail}
-                </span>
-              )}
+              <div className="w-px h-3 bg-white/10" />
+              <div className="flex items-center gap-1 text-[8px] sm:text-[9px] font-black text-blue-400 uppercase tracking-widest">
+                {cameras.length} CAM
+              </div>
             </div>
           </div>
 
