@@ -1646,6 +1646,52 @@ async function startServer() {
     }
   });
 
+  const handleAdminToggleBlock = async (req: any, res: any, id: string, blocked: boolean) => {
+    if (!checkAdminToken(req, res)) return;
+    try {
+      const banDuration = blocked ? '876000h' : 'none';
+      const response = await supabaseAdminFetch(`admin/users/${id}`, {
+        method: 'PUT',
+        body: JSON.stringify({ ban_duration: banDuration })
+      });
+      if (!response.ok) {
+        const errText = await response.text();
+        return res.json({ success: false, error: `Errore Supabase REST API: ${response.status} ${errText.slice(0, 200)}` });
+      }
+      res.json({ success: true });
+    } catch (err: any) {
+      console.error('[Admin] Errore toggle-block REST API:', err.message);
+      res.json({ success: false, error: err.message || 'Errore interno' });
+    }
+  };
+
+  const handleAdminDeleteUser = async (req: any, res: any, id: string) => {
+    if (!checkAdminToken(req, res)) return;
+    try {
+      const response = await supabaseAdminFetch(`admin/users/${id}`, {
+        method: 'DELETE'
+      });
+      if (!response.ok) {
+        const errText = await response.text();
+        return res.json({ success: false, error: `Errore Supabase REST API: ${response.status} ${errText.slice(0, 200)}` });
+      }
+      res.json({ success: true });
+    } catch (err: any) {
+      console.error('[Admin] Errore deleteUser REST API:', err.message);
+      res.json({ success: false, error: err.message || 'Errore interno' });
+    }
+  };
+
+  app.post('/api/admin/toggle-block', async (req, res) => {
+    if (!req.body?.id) return res.status(400).json({ success: false, error: 'ID utente mancante' });
+    await handleAdminToggleBlock(req, res, req.body.id, !!req.body?.blocked);
+  });
+
+  app.post('/api/admin/delete-user', async (req, res) => {
+    if (!req.body?.id) return res.status(400).json({ success: false, error: 'ID utente mancante' });
+    await handleAdminDeleteUser(req, res, req.body.id);
+  });
+
   // POST /api/admin/user/:id/toggle-block — blocca/sblocca utente
   app.post('/api/admin/user/:id/toggle-block', async (req, res) => {
     if (!checkAdminToken(req, res)) return;

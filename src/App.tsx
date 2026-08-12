@@ -712,6 +712,12 @@ export default function App() {
   const [adminUsers, setAdminUsers] = useState<any[]>([]);
   const [adminLoading, setAdminLoading] = useState(false);
   const [adminError, setAdminError] = useState('');
+  const [adminConfirm, setAdminConfirm] = useState<{
+    type: 'block' | 'unblock' | 'delete';
+    id: string;
+    email: string;
+  } | null>(null);
+  const [adminConfirmBusy, setAdminConfirmBusy] = useState(false);
 
   const [appVersion, setAppVersion] = useState("…");
   const [updateUi, setUpdateUi] = useState<{
@@ -7201,7 +7207,7 @@ export default function App() {
                   </button>
                   <button
                     type="button"
-                    onClick={() => { setShowAdminPanel(false); setAdminUsers([]); setAdminError(''); }}
+                    onClick={() => { setShowAdminPanel(false); setAdminUsers([]); setAdminError(''); setAdminConfirm(null); }}
                     className="p-2 bg-red-600/20 text-red-400 rounded-xl hover:bg-red-600 hover:text-white transition-all border border-red-500/30"
                     title="Chiudi"
                   >
@@ -7307,30 +7313,11 @@ export default function App() {
                               {/* Block/Unblock */}
                               <button
                                 type="button"
-                                onClick={async () => {
-                                  try {
-                                    const res = await fetch(`/api/admin/user/${u.id}/toggle-block`, {
-                                      method: 'POST',
-                                      headers: {
-                                        'Content-Type': 'application/json',
-                                        'x-admin-token': 'vigilai-admin-Max1974-123Max456'
-                                      },
-                                      body: JSON.stringify({ blocked: !isBlocked })
-                                    });
-                                    const data = await res.json();
-                                    if (data.success) {
-                                      setAdminUsers(prev => prev.map(usr =>
-                                        usr.id === u.id
-                                          ? { ...usr, banned_until: !isBlocked ? '9999-12-31T23:59:59Z' : null }
-                                          : usr
-                                      ));
-                                    } else {
-                                      setAdminError(data.error || 'Errore nel blocco utente');
-                                    }
-                                  } catch {
-                                    setAdminError('Errore di connessione');
-                                  }
-                                }}
+                                onClick={() => setAdminConfirm({
+                                  type: isBlocked ? 'unblock' : 'block',
+                                  id: u.id,
+                                  email: u.email || 'questo utente',
+                                })}
                                 className={`p-2 rounded-xl border transition-all ${isBlocked
                                   ? 'bg-green-500/10 border-green-500/20 text-green-400 hover:bg-green-500/20'
                                   : 'bg-red-500/10 border-red-500/20 text-red-400 hover:bg-red-500/20'
@@ -7343,23 +7330,11 @@ export default function App() {
                               {/* Delete */}
                               <button
                                 type="button"
-                                onClick={async () => {
-                                  if (!confirm(`Eliminare definitivamente l'utente ${u.email}? Questa azione è irreversibile.`)) return;
-                                  try {
-                                    const res = await fetch(`/api/admin/user/${u.id}`, {
-                                      method: 'DELETE',
-                                      headers: { 'x-admin-token': 'vigilai-admin-Max1974-123Max456' }
-                                    });
-                                    const data = await res.json();
-                                    if (data.success) {
-                                      setAdminUsers(prev => prev.filter(usr => usr.id !== u.id));
-                                    } else {
-                                      setAdminError(data.error || 'Errore eliminazione utente');
-                                    }
-                                  } catch {
-                                    setAdminError('Errore di connessione');
-                                  }
-                                }}
+                                onClick={() => setAdminConfirm({
+                                  type: 'delete',
+                                  id: u.id,
+                                  email: u.email || 'questo utente',
+                                })}
                                 className="p-2 bg-red-600/10 border border-red-500/20 text-red-500 hover:bg-red-600/30 rounded-xl transition-all"
                                 title="Elimina Utente"
                               >
@@ -7389,7 +7364,7 @@ export default function App() {
                 </p>
                 <button
                   type="button"
-                  onClick={() => { setShowAdminPanel(false); setAdminUsers([]); setAdminError(''); }}
+                  onClick={() => { setShowAdminPanel(false); setAdminUsers([]); setAdminError(''); setAdminConfirm(null); }}
                   className="px-6 py-2 bg-white/5 hover:bg-white/10 border border-white/5 rounded-xl text-[10px] font-black uppercase tracking-widest text-slate-400 transition-all"
                 >
                   Chiudi
@@ -7397,6 +7372,133 @@ export default function App() {
               </div>
             </motion.div>
           </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Admin user confirm modal */}
+      <AnimatePresence>
+        {adminConfirm && (
+          <div className="fixed inset-0 z-[220] flex items-center justify-center p-6 backdrop-blur-2xl bg-slate-950/80">
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className={`glass max-w-md w-full p-6 lg:p-10 rounded-[32px] lg:rounded-[48px] border-white/10 text-center space-y-6 lg:space-y-8 ${
+                adminConfirm.type === 'unblock'
+                  ? 'shadow-[0_0_100px_rgba(34,197,94,0.18)]'
+                  : 'shadow-[0_0_100px_rgba(239,68,68,0.2)]'
+              }`}
+            >
+              <div className={`w-16 h-16 lg:w-24 lg:h-24 rounded-full flex items-center justify-center mx-auto border ${
+                adminConfirm.type === 'unblock'
+                  ? 'bg-green-600/20 border-green-500/30'
+                  : 'bg-red-600/20 border-red-500/30'
+              }`}>
+                {adminConfirm.type === 'delete' ? (
+                  <Trash2 size={32} className="text-red-500 lg:size-[40px]" />
+                ) : adminConfirm.type === 'block' ? (
+                  <Lock size={32} className="text-red-500 lg:size-[40px]" />
+                ) : (
+                  <Check size={32} className="text-green-400 lg:size-[40px]" />
+                )}
+              </div>
+              <div className="space-y-3">
+                <h3 className="text-xl lg:text-2xl font-black text-white uppercase tracking-tighter">
+                  {adminConfirm.type === 'delete' ? 'Conferma Eliminazione' : adminConfirm.type === 'block' ? 'Conferma Blocco' : 'Conferma Sblocco'}
+                </h3>
+                <p className="text-slate-400 text-xs lg:text-sm leading-relaxed">
+                  {adminConfirm.type === 'delete' && (
+                    <>Stai per eliminare definitivamente l'account <span className="text-white font-bold">{adminConfirm.email}</span>. L'azione è irreversibile e l'utente non potrà più accedere.</>
+                  )}
+                  {adminConfirm.type === 'block' && (
+                    <>Stai per bloccare l'accesso di <span className="text-white font-bold">{adminConfirm.email}</span>. L'utente non potrà più entrare in VigilAI finché non verrà sbloccato.</>
+                  )}
+                  {adminConfirm.type === 'unblock' && (
+                    <>Stai per riattivare l'accesso di <span className="text-white font-bold">{adminConfirm.email}</span>. L'utente potrà di nuovo accedere a VigilAI.</>
+                  )}
+                </p>
+              </div>
+              <div className="flex gap-4">
+                <button
+                  type="button"
+                  disabled={adminConfirmBusy}
+                  onClick={() => { if (!adminConfirmBusy) setAdminConfirm(null); }}
+                  className="flex-1 py-4 lg:py-5 rounded-2xl lg:rounded-3xl text-[9px] lg:text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-white transition-all bg-white/5 disabled:opacity-50"
+                >
+                  Annulla
+                </button>
+                <button
+                  type="button"
+                  disabled={adminConfirmBusy}
+                  onClick={async () => {
+                    if (!adminConfirm) return;
+                    setAdminConfirmBusy(true);
+                    setAdminError('');
+                    try {
+                      if (adminConfirm.type === 'delete') {
+                        const res = await fetch('/api/admin/delete-user', {
+                          method: 'POST',
+                          headers: {
+                            'Content-Type': 'application/json',
+                            'x-admin-token': 'vigilai-admin-Max1974-123Max456'
+                          },
+                          body: JSON.stringify({ id: adminConfirm.id })
+                        });
+                        const data = await res.json().catch(() => null);
+                        if (data?.success) {
+                          setAdminUsers(prev => prev.filter(usr => usr.id !== adminConfirm.id));
+                          setAdminConfirm(null);
+                        } else {
+                          setAdminError(data?.error || 'Errore eliminazione utente');
+                          setAdminConfirm(null);
+                        }
+                      } else {
+                        const blocked = adminConfirm.type === 'block';
+                        const res = await fetch('/api/admin/toggle-block', {
+                          method: 'POST',
+                          headers: {
+                            'Content-Type': 'application/json',
+                            'x-admin-token': 'vigilai-admin-Max1974-123Max456'
+                          },
+                          body: JSON.stringify({ id: adminConfirm.id, blocked })
+                        });
+                        const data = await res.json().catch(() => null);
+                        if (data?.success) {
+                          setAdminUsers(prev => prev.map(usr =>
+                            usr.id === adminConfirm.id
+                              ? { ...usr, banned_until: blocked ? '9999-12-31T23:59:59Z' : null }
+                              : usr
+                          ));
+                          setAdminConfirm(null);
+                        } else {
+                          setAdminError(data?.error || 'Errore nel blocco utente');
+                          setAdminConfirm(null);
+                        }
+                      }
+                    } catch {
+                      setAdminError('Errore di connessione');
+                      setAdminConfirm(null);
+                    } finally {
+                      setAdminConfirmBusy(false);
+                    }
+                  }}
+                  className={`flex-1 py-4 lg:py-5 rounded-2xl lg:rounded-3xl text-[9px] lg:text-[10px] font-black uppercase tracking-widest text-white transition-all disabled:opacity-50 ${
+                    adminConfirm.type === 'unblock'
+                      ? 'bg-green-600 shadow-xl shadow-green-500/20 hover:bg-green-500'
+                      : 'bg-red-600 shadow-xl shadow-red-500/20 hover:bg-red-500'
+                  }`}
+                >
+                  {adminConfirmBusy
+                    ? 'Attendere...'
+                    : adminConfirm.type === 'delete'
+                      ? 'Elimina Ora'
+                      : adminConfirm.type === 'block'
+                        ? 'Blocca Accesso'
+                        : 'Sblocca Accesso'}
+                </button>
+              </div>
+            </motion.div>
+          </div>
         )}
       </AnimatePresence>
 
