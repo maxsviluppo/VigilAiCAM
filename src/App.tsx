@@ -7084,12 +7084,13 @@ export default function App() {
                     fetch('/api/admin/users', {
                       headers: { 'x-admin-token': 'vigilai-admin-Max1974-123Max456' }
                     })
-                      .then(r => r.json())
-                      .then(d => {
+                      .then(async (r) => {
+                        const d = await r.json().catch(() => null);
+                        if (!d) throw new Error('Risposta non valida dal server');
                         if (d.success) setAdminUsers(d.users || []);
-                        else setAdminError(d.error || 'Errore nel caricamento utenti');
+                        else setAdminError(d.error || `Errore server (${r.status})`);
                       })
-                      .catch(() => setAdminError('Impossibile connettersi al server'))
+                      .catch((err) => setAdminError(err?.message || 'Impossibile connettersi al server'))
                       .finally(() => setAdminLoading(false));
                   } else {
                     setAdminLoginError('Credenziali non valide. Riprova.');
@@ -7184,12 +7185,13 @@ export default function App() {
                       fetch('/api/admin/users', {
                         headers: { 'x-admin-token': 'vigilai-admin-Max1974-123Max456' }
                       })
-                        .then(r => r.json())
-                        .then(d => {
+                        .then(async (r) => {
+                          const d = await r.json().catch(() => null);
+                          if (!d) throw new Error('Risposta non valida dal server');
                           if (d.success) setAdminUsers(d.users || []);
-                          else setAdminError(d.error || 'Errore nel caricamento utenti');
+                          else setAdminError(d.error || `Errore server (${r.status})`);
                         })
-                        .catch(() => setAdminError('Impossibile connettersi al server'))
+                        .catch((err) => setAdminError(err?.message || 'Impossibile connettersi al server'))
                         .finally(() => setAdminLoading(false));
                     }}
                     className="p-2 glass border-white/5 text-slate-400 hover:text-white rounded-xl transition-all"
