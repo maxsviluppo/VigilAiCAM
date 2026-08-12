@@ -74,6 +74,24 @@ import {
 import { User } from "@supabase/supabase-js";
 import { GEMINI_API_KEY_MODAL_PLACEHOLDER, GEMINI_API_KEY_PLACEHOLDER, normalizeGeminiApiKey } from "./utils/geminiApiKey";
 
+const LOGGED_IN_EMAIL_KEY = "vigilai_logged_in_email";
+
+const extractAccountEmail = (authUser: User | null | undefined): string => {
+  if (!authUser) return "";
+  const direct = authUser.email?.trim() || authUser.user_metadata?.email?.trim() || "";
+  if (direct) return direct;
+  const identityEmail = authUser.identities
+    ?.map((identity) => identity.identity_data?.email?.trim())
+    .find(Boolean);
+  return identityEmail || "";
+};
+
+const AccountEmailLine = ({ email }: { email: string }) => (
+  <span className="text-[11px] sm:text-xs text-blue-400 font-semibold normal-case tracking-normal truncate max-w-[180px] sm:max-w-[260px] lg:max-w-[360px] mt-0.5 drop-shadow-[0_0_8px_rgba(96,165,250,0.45)]">
+    {email}
+  </span>
+);
+
 const RaspberryIcon = ({ size = 16, className = "" }: { size?: number; className?: string }) => (
   <svg 
     viewBox="0 0 24 24" 
@@ -442,8 +460,12 @@ const Auth = () => {
     setStatus(null);
     try {
       if (mode === 'login') {
-        const { error } = await supabase.auth.signInWithPassword({ email, password });
+        const { data, error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;
+        const resolvedEmail = extractAccountEmail(data.user) || email.trim();
+        if (resolvedEmail) {
+          localStorage.setItem(LOGGED_IN_EMAIL_KEY, resolvedEmail);
+        }
       } else {
         const { error } = await supabase.auth.signUp({ email, password });
         if (error) throw error;
@@ -628,6 +650,9 @@ export default function App() {
   const [availableTriggers, setAvailableTriggers] = useState<AlertTriggerItem[]>(DEFAULT_TRIGGERS);
   
   const [user, setUser] = useState<any>(null);
+  const [displayAccountEmail, setDisplayAccountEmail] = useState(
+    () => localStorage.getItem(LOGGED_IN_EMAIL_KEY) || ""
+  );
   const [authLoading, setAuthLoading] = useState(true);
   const [cameras, setCameras] = useState<Camera[]>([]);
   const [activeCameraId, setActiveCameraId] = useState<string | null>(null);
@@ -677,6 +702,16 @@ export default function App() {
   const [showDiagnosticModal, setShowDiagnosticModal] = useState(false);
   const [diagnosticResult, setDiagnosticResult] = useState<any>(null);
   const [loadingDiagnostic, setLoadingDiagnostic] = useState(false);
+
+  // Admin Panel State
+  const [showAdminLogin, setShowAdminLogin] = useState(false);
+  const [showAdminPanel, setShowAdminPanel] = useState(false);
+  const [adminLoginUser, setAdminLoginUser] = useState('');
+  const [adminLoginPass, setAdminLoginPass] = useState('');
+  const [adminLoginError, setAdminLoginError] = useState('');
+  const [adminUsers, setAdminUsers] = useState<any[]>([]);
+  const [adminLoading, setAdminLoading] = useState(false);
+  const [adminError, setAdminError] = useState('');
 
   const [appVersion, setAppVersion] = useState("…");
   const [updateUi, setUpdateUi] = useState<{
@@ -963,6 +998,8 @@ export default function App() {
   }, [serverInfo]);
 
   const handleLogout = async () => {
+    localStorage.removeItem(LOGGED_IN_EMAIL_KEY);
+    setDisplayAccountEmail("");
     const { error } = await supabase.auth.signOut();
     if (error) {
       setGlobalModal({
@@ -982,6 +1019,15 @@ export default function App() {
   
   // Settings State
   const [aiModel, setAiModel] = useState(() => localStorage.getItem("vigilai_model") || "gemini-3-flash-preview");
+  const [analysisInterval, setAnalysisInterval] = useState<number>(() => {
+    const stored = localStorage.getItem("vigilai_analysis_interval");
+    return stored ? Math.max(5, Math.min(120, parseInt(stored, 10))) : 15;
+  });
+  const updateAnalysisInterval = (val: number) => {
+    const newVal = Math.max(5, Math.min(120, val));
+    setAnalysisInterval(newVal);
+    localStorage.setItem("vigilai_analysis_interval", newVal.toString());
+  };
   const [showEmailPass, setShowEmailPass] = useState(false);
   const [showGeminiKey, setShowGeminiKey] = useState(false);
   const [appSettings, setAppSettings] = useState({
@@ -1665,13 +1711,52 @@ export default function App() {
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user ?? null);
+      if (session?.user) {
+        const resolved = extractAccountEmail(session.user) || localStorage.getItem(LOGGED_IN_EMAIL_KEY) || "";
+        if (resolved) {
+          setDisplayAccountEmail(resolved);
+          localStorage.setItem(LOGGED_IN_EMAIL_KEY, resolved);
+        }
+      }
       setAuthLoading(false);
     });
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user ?? null);
+      if (session?.user) {
+        const resolved = extractAccountEmail(session.user) || localStorage.getItem(LOGGED_IN_EMAIL_KEY) || "";
+        if (resolved) {
+          localStorage.setItem(LOGGED_IN_EMAIL_KEY, resolved);
+          setDisplayAccountEmail(resolved);
+        }
+      } else {
+        localStorage.removeItem(LOGGED_IN_EMAIL_KEY);
+        setDisplayAccountEmail("");
+      }
     });
     return () => subscription.unsubscribe();
   }, []);
+
+  useEffect(() => {
+    if (!user) {
+      setDisplayAccountEmail("");
+      return;
+    }
+
+    const immediate = extractAccountEmail(user) || localStorage.getItem(LOGGED_IN_EMAIL_KEY) || "";
+    if (immediate) {
+      setDisplayAccountEmail(immediate);
+      localStorage.setItem(LOGGED_IN_EMAIL_KEY, immediate);
+      return;
+    }
+
+    supabase.auth.getUser().then(({ data: { user: freshUser } }) => {
+      const resolved = extractAccountEmail(freshUser) || localStorage.getItem(LOGGED_IN_EMAIL_KEY) || "";
+      if (resolved) {
+        setDisplayAccountEmail(resolved);
+        localStorage.setItem(LOGGED_IN_EMAIL_KEY, resolved);
+      }
+    });
+  }, [user]);
 
   // Caricamento dei trigger AI dinamici da Supabase
   useEffect(() => {
@@ -2520,17 +2605,17 @@ export default function App() {
 
   useEffect(() => {
     if (isMonitoring) {
-      // 15s interval ensures we stay within the 5 RPM limit of Gemini Free Tier
+      if (analysisIntervalRef.current) clearInterval(analysisIntervalRef.current);
       analysisIntervalRef.current = setInterval(() => {
         analysisFnRef.current();
-      }, 15000); 
+      }, analysisInterval * 1000); 
     } else {
       if (analysisIntervalRef.current) clearInterval(analysisIntervalRef.current);
     }
     return () => {
       if (analysisIntervalRef.current) clearInterval(analysisIntervalRef.current);
     };
-  }, [isMonitoring]);
+  }, [isMonitoring, analysisInterval]);
 
   // ── SMART ZONE DRAWING HANDLERS ──────────────────────────────────────────
 
@@ -3296,7 +3381,6 @@ export default function App() {
 
   if (!user) return <Auth />;
 
-
   return (
     <div className={`min-h-screen bg-[#050810] text-slate-300 font-sans selection:bg-blue-500/30 flex flex-col ${isMobile35 ? 'h-screen w-screen overflow-hidden' : 'overflow-hidden'}`}>
       
@@ -3313,33 +3397,39 @@ export default function App() {
               <div className="w-8 h-8 sm:w-10 sm:h-10 lg:w-14 lg:h-14 glass rounded-xl sm:rounded-2xl lg:rounded-3xl flex items-center justify-center bg-blue-600/10 border-blue-500/20 group hover:scale-110 transition-all duration-500 shrink-0">
                 <ShieldCheck size={20} className="text-blue-400 drop-shadow-[0_0_8px_rgba(96,165,250,0.5)] sm:w-6 sm:h-6" />
               </div>
-              <div className="flex flex-col">
+              <div className="flex flex-col min-w-0">
                 <h2 className="text-sm sm:text-xl lg:text-2xl font-black text-white uppercase tracking-tighter flex items-center gap-1">
                   VIGIL.<span className="text-blue-400 drop-shadow-[0_0_10px_rgba(96,165,250,0.8)]">AI</span>
                 </h2>
-                <div className="hidden md:flex items-center gap-3 lg:gap-4 mt-0.5">
-                  <div className="flex items-center gap-2 text-[8px] lg:text-[9px] font-bold text-slate-500 uppercase tracking-widest">
-                    <span className={`w-1.5 h-1.5 rounded-full ${isMonitoring ? 'bg-green-500 shadow-[0_0_10px_#22c55e]' : 'bg-slate-700'}`} />
-                    {isMonitoring ? 'Sistema Attivo' : 'In Attesa'}
-                  </div>
-                  <div className="w-px h-2.5 bg-white/10" />
-                  <div className="flex items-center gap-2 text-[8px] lg:text-[9px] font-bold text-slate-500 uppercase tracking-widest">
+                <div className="flex items-center gap-2 mt-0.5 text-[9px] lg:text-[10px] font-bold text-slate-500 uppercase tracking-widest">
+                  <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${isMonitoring ? 'bg-green-500 shadow-[0_0_10px_#22c55e]' : 'bg-slate-700'}`} />
+                  {isMonitoring ? 'Sistema Attivo' : 'In Attesa'}
+                  <span className="hidden md:inline w-px h-2.5 bg-white/10" />
+                  <span className="hidden md:inline-flex items-center gap-1">
                     <LayoutGrid size={10} /> {cameras.length} Camere
-                  </div>
+                  </span>
                 </div>
+                {displayAccountEmail && <AccountEmailLine email={displayAccountEmail} />}
               </div>
             </div>
 
             {/* Mobile/Tablet badge - Always visible on small screens */}
-            <div className="flex md:hidden items-center gap-1.5 sm:gap-3 bg-white/5 px-3 py-1.5 rounded-full border border-white/5">
-              <div className="flex items-center gap-1.5 text-[8px] sm:text-[9px] font-black text-slate-300 uppercase tracking-widest">
-                <span className={`w-1.5 h-1.5 rounded-full ${isMonitoring ? 'bg-green-500 shadow-[0_0_8px_#22c55e]' : 'bg-slate-700'}`} />
-                {isMonitoring ? 'Attivo' : 'Attesa'}
+            <div className="flex md:hidden flex-col items-end gap-1">
+              <div className="flex items-center gap-1.5 sm:gap-3 bg-white/5 px-3 py-1.5 rounded-full border border-white/5">
+                <div className="flex items-center gap-1.5 text-[8px] sm:text-[9px] font-black text-slate-300 uppercase tracking-widest">
+                  <span className={`w-1.5 h-1.5 rounded-full ${isMonitoring ? 'bg-green-500 shadow-[0_0_8px_#22c55e]' : 'bg-slate-700'}`} />
+                  {isMonitoring ? 'Attivo' : 'Attesa'}
+                </div>
+                <div className="w-px h-3 bg-white/10" />
+                <div className="flex items-center gap-1 text-[8px] sm:text-[9px] font-black text-blue-400 uppercase tracking-widest">
+                  {cameras.length} CAM
+                </div>
               </div>
-              <div className="w-px h-3 bg-white/10" />
-              <div className="flex items-center gap-1 text-[8px] sm:text-[9px] font-black text-blue-400 uppercase tracking-widest">
-                {cameras.length} CAM
-              </div>
+              {displayAccountEmail && (
+                <span className="text-[10px] text-blue-400 font-semibold normal-case tracking-normal truncate max-w-[160px] pr-1">
+                  {displayAccountEmail}
+                </span>
+              )}
             </div>
           </div>
 
@@ -3567,7 +3657,23 @@ export default function App() {
 
         {/* Content Scrolling Area */}
         {isMobile35 ? (
-          <div className="w-full h-full flex flex-row bg-black p-1 gap-1 text-slate-300">
+          <div className="w-full h-full flex flex-col bg-black p-1 gap-0.5 text-slate-300">
+            <div className="flex items-center gap-2 shrink-0 bg-slate-900/90 border border-white/10 rounded-xl px-2 py-1">
+              <div className="w-7 h-7 glass rounded-lg flex items-center justify-center bg-blue-600/10 border border-blue-500/20 shrink-0">
+                <ShieldCheck size={14} className="text-blue-400" />
+              </div>
+              <div className="flex flex-col min-w-0 leading-tight">
+                <span className="text-[9px] font-black text-white uppercase tracking-tighter">
+                  VIGIL.<span className="text-blue-400">AI</span>
+                </span>
+                <div className="flex items-center gap-1.5 text-[8px] font-bold text-slate-500 uppercase tracking-widest">
+                  <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${isMonitoring ? 'bg-green-500 shadow-[0_0_8px_#22c55e]' : 'bg-slate-700'}`} />
+                  {isMonitoring ? 'Sistema Attivo' : 'In Attesa'}
+                </div>
+                {displayAccountEmail && <AccountEmailLine email={displayAccountEmail} />}
+              </div>
+            </div>
+            <div className="flex flex-row flex-1 min-h-0 gap-1">
             {cameras.length > 0 && activeCameraId ? (
               (() => {
                 const activeCamera = cameras.find(c => c.id === activeCameraId) || cameras[0];
@@ -3944,6 +4050,7 @@ export default function App() {
                 </button>
               </div>
             )}
+            </div>
           </div>
         ) : (
           <div className="flex-1 overflow-y-auto p-1 sm:p-4 lg:p-10 custom-scrollbar relative">
@@ -4464,8 +4571,27 @@ export default function App() {
             {/* Developer Credit Footer */}
             <div className="mt-20 pb-10 flex flex-col items-center justify-center gap-2 opacity-40 hover:opacity-100 transition-opacity">
               <div className="h-px w-20 bg-gradient-to-r from-transparent via-blue-500 to-transparent mb-4" />
-              <p className="text-[10px] font-black uppercase tracking-[0.4em] text-slate-500">
-                Sviluppo e creazione <span className="text-white">Castro Massimo</span> by <span className="text-blue-500">DEVTOOLS</span>
+              <p className="text-[10px] font-black uppercase tracking-[0.4em] text-slate-500 flex items-center gap-3">
+                Sviluppo e creazione <span className="text-white">Castro Massimo</span> by{' '}
+                <a
+                  href="https://www.codecafe.it"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-blue-500 hover:text-blue-300 transition-colors"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  CODECAFE
+                </a>
+                {!isMobile35 && (
+                  <button
+                    type="button"
+                    onClick={() => setShowAdminLogin(true)}
+                    className="ml-1 px-2 py-0.5 bg-amber-600/20 border border-amber-500/30 text-amber-400 rounded-md text-[8px] font-black uppercase tracking-widest hover:bg-amber-600/40 hover:text-amber-200 transition-all flex items-center gap-1"
+                    title="Accesso Amministratore"
+                  >
+                    🛡️ ADMIN
+                  </button>
+                )}
               </p>
               <a 
                 href="mailto:castromassimo@gmail.com" 
@@ -5308,6 +5434,30 @@ export default function App() {
                         <Keyboard size={14} />
                       </button>
                     </div>
+
+                    {/* Frequenza Analisi (Mobile 3.5") */}
+                    <div className="shrink-0 flex items-center justify-between bg-white/5 border border-white/10 px-2 h-8 rounded-lg text-[10px] text-slate-300">
+                      <span className="font-bold uppercase tracking-wider text-[8px] text-slate-400">Analisi scena</span>
+                      <div className="flex items-center gap-2">
+                        <button 
+                          type="button"
+                          onClick={() => updateAnalysisInterval(analysisInterval - 5)}
+                          disabled={analysisInterval <= 5}
+                          className="w-5 h-5 flex items-center justify-center bg-white/10 active:bg-white/20 disabled:opacity-40 rounded text-white"
+                        >
+                          <ChevronDown size={12} />
+                        </button>
+                        <span className="font-mono font-bold text-white text-[9px]">{analysisInterval}s</span>
+                        <button 
+                          type="button"
+                          onClick={() => updateAnalysisInterval(analysisInterval + 5)}
+                          disabled={analysisInterval >= 120}
+                          className="w-5 h-5 flex items-center justify-center bg-white/10 active:bg-white/20 disabled:opacity-40 rounded text-white"
+                        >
+                          <ChevronUp size={12} />
+                        </button>
+                      </div>
+                    </div>
                   </div>
                   ) : (
                   <div className="space-y-3">
@@ -5354,6 +5504,35 @@ export default function App() {
                         >
                           {showGeminiKey ? <EyeOff size={16} /> : <Eye size={16} />}
                         </button>
+                      </div>
+
+                      {/* Controllo Frequenza Analisi (Desktop) */}
+                      <div className="border-t border-white/5 pt-4 space-y-2">
+                        <div className="flex justify-between items-center">
+                          <div>
+                            <span className="text-[10px] font-black text-white uppercase tracking-widest block">Frequenza Analisi Scena</span>
+                            <span className="text-[9px] text-slate-500 block">Tempo di attesa tra un'analisi e l'altra (default 15s)</span>
+                          </div>
+                          <div className="flex items-center gap-3 bg-black/40 border border-white/10 px-3 py-1.5 rounded-xl">
+                            <button
+                              type="button"
+                              onClick={() => updateAnalysisInterval(analysisInterval - 5)}
+                              disabled={analysisInterval <= 5}
+                              className="w-6 h-6 flex items-center justify-center bg-white/5 hover:bg-white/10 disabled:opacity-30 rounded-lg text-white active:scale-95 transition-all"
+                            >
+                              <ChevronDown size={14} />
+                            </button>
+                            <span className="text-xs font-mono font-bold text-white w-8 text-center">{analysisInterval}s</span>
+                            <button
+                              type="button"
+                              onClick={() => updateAnalysisInterval(analysisInterval + 5)}
+                              disabled={analysisInterval >= 120}
+                              className="w-6 h-6 flex items-center justify-center bg-white/5 hover:bg-white/10 disabled:opacity-30 rounded-lg text-white active:scale-95 transition-all"
+                            >
+                              <ChevronUp size={14} />
+                            </button>
+                          </div>
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -6854,7 +7033,369 @@ export default function App() {
       </AnimatePresence>
 
 
+
       <canvas ref={canvasRef} className="hidden" />
+
+      {/* ═══════════════════════════════════════════════════════════ */}
+      {/* ADMIN LOGIN MODAL                                          */}
+      {/* ═══════════════════════════════════════════════════════════ */}
+      <AnimatePresence>
+        {showAdminLogin && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[200] bg-slate-950/90 backdrop-blur-3xl flex items-center justify-center p-6"
+            onClick={() => { setShowAdminLogin(false); setAdminLoginError(''); setAdminLoginUser(''); setAdminLoginPass(''); }}
+          >
+            <motion.div
+              initial={{ scale: 0.9, y: 20 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.9, y: 20 }}
+              onClick={(e) => e.stopPropagation()}
+              className="glass bg-slate-900/98 rounded-[32px] w-full max-w-sm p-8 border border-amber-500/20 shadow-[0_0_80px_rgba(245,158,11,0.15)] relative"
+            >
+              {/* Header */}
+              <div className="flex flex-col items-center gap-4 mb-8">
+                <div className="w-16 h-16 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center shadow-[0_0_30px_rgba(245,158,11,0.2)]">
+                  <span className="text-3xl">🛡️</span>
+                </div>
+                <div className="text-center">
+                  <h2 className="text-xl font-black text-white uppercase tracking-tight">Accesso Admin</h2>
+                  <p className="text-[10px] font-black uppercase tracking-[0.2em] text-amber-500/70 mt-1">Pannello Amministratore VigilAI</p>
+                </div>
+              </div>
+
+              {/* Form */}
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  if (adminLoginUser === 'Max1974' && adminLoginPass === '123Max456') {
+                    setAdminLoginError('');
+                    setShowAdminLogin(false);
+                    setShowAdminPanel(true);
+                    setAdminLoginUser('');
+                    setAdminLoginPass('');
+                    // Load users
+                    setAdminLoading(true);
+                    setAdminError('');
+                    fetch('/api/admin/users', {
+                      headers: { 'x-admin-token': 'vigilai-admin-Max1974-123Max456' }
+                    })
+                      .then(r => r.json())
+                      .then(d => {
+                        if (d.success) setAdminUsers(d.users || []);
+                        else setAdminError(d.error || 'Errore nel caricamento utenti');
+                      })
+                      .catch(() => setAdminError('Impossibile connettersi al server'))
+                      .finally(() => setAdminLoading(false));
+                  } else {
+                    setAdminLoginError('Credenziali non valide. Riprova.');
+                  }
+                }}
+                className="space-y-4"
+              >
+                <div className="space-y-1">
+                  <label className="text-[9px] font-black uppercase tracking-widest text-slate-500 px-1">Username</label>
+                  <input
+                    type="text"
+                    value={adminLoginUser}
+                    onChange={(e) => setAdminLoginUser(e.target.value)}
+                    placeholder="Username"
+                    autoComplete="off"
+                    className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-amber-500/50 transition-all"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[9px] font-black uppercase tracking-widest text-slate-500 px-1">Password</label>
+                  <input
+                    type="password"
+                    value={adminLoginPass}
+                    onChange={(e) => setAdminLoginPass(e.target.value)}
+                    placeholder="Password"
+                    autoComplete="off"
+                    className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-amber-500/50 transition-all"
+                  />
+                </div>
+
+                {adminLoginError && (
+                  <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-[10px] font-bold text-red-400 uppercase tracking-wide text-center">
+                    {adminLoginError}
+                  </div>
+                )}
+
+                <div className="flex gap-3 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => { setShowAdminLogin(false); setAdminLoginError(''); setAdminLoginUser(''); setAdminLoginPass(''); }}
+                    className="flex-1 py-3 bg-white/5 hover:bg-white/10 border border-white/5 rounded-xl text-[10px] font-black uppercase tracking-widest text-slate-400 transition-all"
+                  >
+                    Annulla
+                  </button>
+                  <button
+                    type="submit"
+                    className="flex-1 py-3 bg-amber-600 hover:bg-amber-500 rounded-xl text-[10px] font-black uppercase tracking-widest text-white shadow-lg shadow-amber-500/25 transition-all"
+                  >
+                    Accedi
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ═══════════════════════════════════════════════════════════ */}
+      {/* ADMIN PANEL MODAL                                          */}
+      {/* ═══════════════════════════════════════════════════════════ */}
+      <AnimatePresence>
+        {showAdminPanel && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[200] bg-slate-950/90 backdrop-blur-3xl flex items-center justify-center p-4 sm:p-6"
+          >
+            <motion.div
+              initial={{ scale: 0.95, y: 20 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.95, y: 20 }}
+              className="glass bg-slate-900/98 rounded-[32px] w-full max-w-4xl max-h-[90vh] flex flex-col border border-amber-500/20 shadow-[0_0_80px_rgba(245,158,11,0.1)] overflow-hidden"
+            >
+              {/* Panel Header */}
+              <div className="flex items-center justify-between px-6 py-5 border-b border-white/5 shrink-0">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center">
+                    <span className="text-xl">🛡️</span>
+                  </div>
+                  <div>
+                    <h2 className="text-lg font-black text-white uppercase tracking-tight">Pannello Admin</h2>
+                    <p className="text-[9px] font-black uppercase tracking-widest text-amber-500/60">Gestione Utenti VigilAI</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAdminLoading(true);
+                      setAdminError('');
+                      fetch('/api/admin/users', {
+                        headers: { 'x-admin-token': 'vigilai-admin-Max1974-123Max456' }
+                      })
+                        .then(r => r.json())
+                        .then(d => {
+                          if (d.success) setAdminUsers(d.users || []);
+                          else setAdminError(d.error || 'Errore nel caricamento utenti');
+                        })
+                        .catch(() => setAdminError('Impossibile connettersi al server'))
+                        .finally(() => setAdminLoading(false));
+                    }}
+                    className="p-2 glass border-white/5 text-slate-400 hover:text-white rounded-xl transition-all"
+                    title="Aggiorna lista"
+                  >
+                    <RefreshCw size={16} className={adminLoading ? 'animate-spin' : ''} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setShowAdminPanel(false); setAdminUsers([]); setAdminError(''); }}
+                    className="p-2 bg-red-600/20 text-red-400 rounded-xl hover:bg-red-600 hover:text-white transition-all border border-red-500/30"
+                    title="Chiudi"
+                  >
+                    <X size={18} />
+                  </button>
+                </div>
+              </div>
+
+              {/* Panel Body */}
+              <div className="flex-1 overflow-y-auto custom-scrollbar p-6">
+                {/* Stats bar */}
+                <div className="grid grid-cols-3 gap-4 mb-6">
+                  <div className="glass bg-white/5 rounded-2xl p-4 border-white/5 text-center">
+                    <div className="text-2xl font-black text-white">{adminUsers.length}</div>
+                    <div className="text-[9px] font-black uppercase tracking-widest text-slate-500 mt-1">Utenti Totali</div>
+                  </div>
+                  <div className="glass bg-green-500/5 rounded-2xl p-4 border border-green-500/10 text-center">
+                    <div className="text-2xl font-black text-green-400">{adminUsers.filter(u => !u.banned_until).length}</div>
+                    <div className="text-[9px] font-black uppercase tracking-widest text-green-600 mt-1">Attivi</div>
+                  </div>
+                  <div className="glass bg-red-500/5 rounded-2xl p-4 border border-red-500/10 text-center">
+                    <div className="text-2xl font-black text-red-400">{adminUsers.filter(u => u.banned_until).length}</div>
+                    <div className="text-[9px] font-black uppercase tracking-widest text-red-600 mt-1">Bloccati</div>
+                  </div>
+                </div>
+
+                {/* Error display */}
+                {adminError && (
+                  <div className="mb-4 p-4 bg-red-500/10 border border-red-500/20 rounded-2xl text-[10px] font-bold text-red-400 uppercase tracking-wide">
+                    ⚠️ {adminError}
+                  </div>
+                )}
+
+                {/* Loading */}
+                {adminLoading && (
+                  <div className="flex flex-col items-center justify-center py-20 gap-4">
+                    <div className="w-10 h-10 border-2 border-amber-500/20 border-t-amber-500 rounded-full animate-spin" />
+                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">Caricamento utenti...</p>
+                  </div>
+                )}
+
+                {/* No service key warning */}
+                {!adminLoading && adminError && adminError.includes('Service Role') && (
+                  <div className="mb-4 p-5 bg-amber-500/10 border border-amber-500/20 rounded-2xl space-y-2">
+                    <p className="text-[10px] font-black uppercase tracking-widest text-amber-400">⚙️ Configurazione Richiesta</p>
+                    <p className="text-[10px] text-slate-400 font-bold leading-relaxed">
+                      Aggiungi la tua <span className="text-white">SUPABASE_SERVICE_ROLE_KEY</span> nel file <code className="text-amber-400 bg-black/30 px-1 rounded">.env</code> per abilitare la gestione utenti.
+                    </p>
+                    <p className="text-[9px] text-slate-500 font-mono">Supabase Dashboard → Project Settings → API → service_role</p>
+                  </div>
+                )}
+
+                {/* Users list */}
+                {!adminLoading && adminUsers.length > 0 && (
+                  <div className="space-y-3">
+                    <div className="text-[9px] font-black uppercase tracking-widest text-slate-500 px-1 mb-3">
+                      {adminUsers.length} Utenti Registrati
+                    </div>
+                    {adminUsers.map((u: any) => {
+                      const isBlocked = !!u.banned_until;
+                      const createdAt = u.created_at ? new Date(u.created_at).toLocaleDateString('it-IT') : '—';
+                      const lastSign = u.last_sign_in_at ? new Date(u.last_sign_in_at).toLocaleDateString('it-IT') : 'Mai';
+                      return (
+                        <div
+                          key={u.id}
+                          className={`glass rounded-2xl p-4 border transition-all ${isBlocked ? 'border-red-500/20 bg-red-500/5' : 'border-white/5'}`}
+                        >
+                          <div className="flex items-center justify-between gap-3 flex-wrap">
+                            <div className="flex items-center gap-3 min-w-0">
+                              <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${isBlocked ? 'bg-red-500/20 border border-red-500/30' : 'bg-blue-500/10 border border-blue-500/20'}`}>
+                                <span className="text-base">{isBlocked ? '🚫' : '👤'}</span>
+                              </div>
+                              <div className="min-w-0">
+                                <p className="text-sm font-black text-white truncate">{u.email || 'Email non disponibile'}</p>
+                                <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                                  <span className={`text-[8px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full ${isBlocked ? 'bg-red-500/20 text-red-400' : 'bg-green-500/20 text-green-400'}`}>
+                                    {isBlocked ? '🔒 BLOCCATO' : '✅ ATTIVO'}
+                                  </span>
+                                  <span className="text-[8px] text-slate-600 font-mono">Reg: {createdAt}</span>
+                                  <span className="text-[8px] text-slate-600 font-mono">Login: {lastSign}</span>
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Actions */}
+                            <div className="flex items-center gap-2 shrink-0">
+                              {/* Password field (hashed - show info) */}
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setGlobalModal({
+                                    type: 'info',
+                                    title: 'Password Utente',
+                                    message: `Le password sono protette con hash bcrypt e non sono recuperabili in chiaro per motivi di sicurezza.\n\nEmail: ${u.email}\nID: ${u.id}\n\nPer resettare la password dell'utente usa la funzione di reset via email Supabase.`
+                                  });
+                                }}
+                                className="p-2 glass border-white/5 text-slate-400 hover:text-blue-400 rounded-xl transition-all"
+                                title="Info Password"
+                              >
+                                <Eye size={14} />
+                              </button>
+
+                              {/* Block/Unblock */}
+                              <button
+                                type="button"
+                                onClick={async () => {
+                                  try {
+                                    const res = await fetch(`/api/admin/user/${u.id}/toggle-block`, {
+                                      method: 'POST',
+                                      headers: {
+                                        'Content-Type': 'application/json',
+                                        'x-admin-token': 'vigilai-admin-Max1974-123Max456'
+                                      },
+                                      body: JSON.stringify({ blocked: !isBlocked })
+                                    });
+                                    const data = await res.json();
+                                    if (data.success) {
+                                      setAdminUsers(prev => prev.map(usr =>
+                                        usr.id === u.id
+                                          ? { ...usr, banned_until: !isBlocked ? '9999-12-31T23:59:59Z' : null }
+                                          : usr
+                                      ));
+                                    } else {
+                                      setAdminError(data.error || 'Errore nel blocco utente');
+                                    }
+                                  } catch {
+                                    setAdminError('Errore di connessione');
+                                  }
+                                }}
+                                className={`p-2 rounded-xl border transition-all ${isBlocked
+                                  ? 'bg-green-500/10 border-green-500/20 text-green-400 hover:bg-green-500/20'
+                                  : 'bg-red-500/10 border-red-500/20 text-red-400 hover:bg-red-500/20'
+                                }`}
+                                title={isBlocked ? 'Sblocca Accesso' : 'Blocca Accesso'}
+                              >
+                                {isBlocked ? <Check size={14} /> : <Lock size={14} />}
+                              </button>
+
+                              {/* Delete */}
+                              <button
+                                type="button"
+                                onClick={async () => {
+                                  if (!confirm(`Eliminare definitivamente l'utente ${u.email}? Questa azione è irreversibile.`)) return;
+                                  try {
+                                    const res = await fetch(`/api/admin/user/${u.id}`, {
+                                      method: 'DELETE',
+                                      headers: { 'x-admin-token': 'vigilai-admin-Max1974-123Max456' }
+                                    });
+                                    const data = await res.json();
+                                    if (data.success) {
+                                      setAdminUsers(prev => prev.filter(usr => usr.id !== u.id));
+                                    } else {
+                                      setAdminError(data.error || 'Errore eliminazione utente');
+                                    }
+                                  } catch {
+                                    setAdminError('Errore di connessione');
+                                  }
+                                }}
+                                className="p-2 bg-red-600/10 border border-red-500/20 text-red-500 hover:bg-red-600/30 rounded-xl transition-all"
+                                title="Elimina Utente"
+                              >
+                                <Trash2 size={14} />
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {/* Empty state */}
+                {!adminLoading && !adminError && adminUsers.length === 0 && (
+                  <div className="flex flex-col items-center justify-center py-20 opacity-30 text-center">
+                    <span className="text-4xl mb-4">👥</span>
+                    <p className="text-xs font-black uppercase tracking-widest">Nessun utente trovato</p>
+                  </div>
+                )}
+              </div>
+
+              {/* Panel Footer */}
+              <div className="px-6 py-4 border-t border-white/5 flex items-center justify-between shrink-0">
+                <p className="text-[9px] font-black uppercase tracking-widest text-slate-600">
+                  Admin: Max1974 • VigilAI © 2025
+                </p>
+                <button
+                  type="button"
+                  onClick={() => { setShowAdminPanel(false); setAdminUsers([]); setAdminError(''); }}
+                  className="px-6 py-2 bg-white/5 hover:bg-white/10 border border-white/5 rounded-xl text-[10px] font-black uppercase tracking-widest text-slate-400 transition-all"
+                >
+                  Chiudi
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       <style>{`
         .glass { background: rgba(255, 255, 255, 0.03); backdrop-filter: blur(20px); border: 1px solid rgba(255, 255, 255, 0.05); }
         .custom-scrollbar::-webkit-scrollbar { width: 4px; height: 4px; }
