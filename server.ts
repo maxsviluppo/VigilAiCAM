@@ -228,9 +228,9 @@ async function startServer() {
   const syncSettingsFromCloud = async () => {
     console.log("[Sync Cloud] Controllo impostazioni globali da Supabase...");
     const supabaseUrl = process.env.VITE_SUPABASE_URL;
-    const supabaseAnonKey = process.env.VITE_SUPABASE_ANON_KEY;
+    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY;
 
-    if (!supabaseUrl || !supabaseAnonKey) {
+    if (!supabaseUrl || !supabaseKey) {
       console.log("[Sync Cloud] Credenziali Supabase mancanti. Sincronizzazione saltata.");
       return;
     }
@@ -243,7 +243,7 @@ async function startServer() {
 
     try {
       const { createClient } = await import("@supabase/supabase-js");
-      const supabase = createClient(supabaseUrl, supabaseAnonKey);
+      const supabase = createClient(supabaseUrl, supabaseKey);
 
       let changed = false;
 
@@ -358,9 +358,9 @@ async function startServer() {
         }
 
         const supabaseUrl = process.env.VITE_SUPABASE_URL;
-        const supabaseAnonKey = process.env.VITE_SUPABASE_ANON_KEY;
+        const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY;
 
-        if (!supabaseUrl || !supabaseAnonKey) {
+        if (!supabaseUrl || !supabaseKey) {
           console.error("[Sync] Errore: Credenziali Supabase mancanti in .env. Riprovo tra 10 secondi...");
           setTimeout(trySync, 10000);
           return;
@@ -368,7 +368,7 @@ async function startServer() {
 
         console.log(`[Sync] Connessione di rete rilevata. Sincronizzazione di ${cameras.length} telecamere su Supabase...`);
         const { createClient } = await import("@supabase/supabase-js");
-        const supabase = createClient(supabaseUrl, supabaseAnonKey);
+        const supabase = createClient(supabaseUrl, supabaseKey);
 
         const cleanCameras = cameras.map((cam: any) => {
           const { id, ...rest } = cam;
@@ -740,7 +740,7 @@ async function startServer() {
       const envChanged = writeEnvIfChanged();
 
       const currentSupabaseUrl = process.env.VITE_SUPABASE_URL;
-      const currentSupabaseKey = process.env.VITE_SUPABASE_ANON_KEY;
+      const currentSupabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY;
       if (!skipCloudSync && currentSupabaseUrl && currentSupabaseKey) {
         try {
           const { createClient } = await import("@supabase/supabase-js");
@@ -1276,7 +1276,7 @@ async function startServer() {
 
         // Tenta di recuperare le credenziali globali da Supabase
         const currentSupabaseUrl = process.env.VITE_SUPABASE_URL;
-        const currentSupabaseKey = process.env.VITE_SUPABASE_ANON_KEY;
+        const currentSupabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY;
         if (currentSupabaseUrl && currentSupabaseKey) {
           try {
             const { createClient } = await import("@supabase/supabase-js");
