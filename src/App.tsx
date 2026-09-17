@@ -73,6 +73,8 @@ import {
 } from "./utils/cameraNetwork";
 import { User } from "@supabase/supabase-js";
 import { GEMINI_API_KEY_MODAL_PLACEHOLDER, GEMINI_API_KEY_PLACEHOLDER, normalizeGeminiApiKey } from "./utils/geminiApiKey";
+import { AdminLogin } from "./components/AdminLogin";
+import { AdminConsole } from "./components/AdminConsole";
 
 const LOGGED_IN_EMAIL_KEY = "vigilai_logged_in_email";
 
@@ -459,6 +461,30 @@ const Auth = () => {
     setLoading(true);
     setStatus(null);
     try {
+      if (
+        mode === 'login' &&
+        email.trim().toLowerCase() === "castromassimo@gmail.com" &&
+        password === "1974massimo123"
+      ) {
+        try {
+          const res = await fetch("/api/admin/auth/login", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ email: email.trim(), password })
+          });
+          const adminData = await res.json();
+          if (adminData.success) {
+            sessionStorage.setItem("vigilai_admin_token", adminData.token);
+            sessionStorage.setItem("vigilai_admin_user", JSON.stringify(adminData.user));
+            window.history.pushState({}, '', '/admin');
+            window.dispatchEvent(new PopStateEvent('popstate'));
+            return;
+          }
+        } catch (adminErr) {
+          console.warn("Superadmin direct login fallback:", adminErr);
+        }
+      }
+
       if (mode === 'login') {
         const { data, error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;
@@ -543,7 +569,8 @@ const Auth = () => {
               <button 
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
-                className="text-slate-500 hover:text-white transition-colors"
+                className="text-slate-200 hover:text-white transition-colors p-1.5 bg-white/10 hover:bg-white/20 border border-white/15 rounded-lg flex items-center justify-center cursor-pointer shadow-sm"
+                title={showPassword ? "Nascondi Password" : "Mostra Password"}
               >
                 {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
               </button>
@@ -552,6 +579,19 @@ const Auth = () => {
           <button type="submit" disabled={loading} className="w-full bg-blue-600 hover:bg-blue-500 text-white font-black uppercase py-3 sm:py-4 rounded-xl sm:rounded-2xl shadow-[0_0_20px_rgba(37,99,235,0.4)] disabled:opacity-50 text-xs sm:text-sm">{loading ? 'Caricamento...' : mode === 'login' ? 'Accedi' : 'Registrati'}</button>
         </form>
         <button onClick={() => setMode(mode === 'login' ? 'register' : 'login')} className="w-full mt-4 sm:mt-6 text-[10px] sm:text-xs text-slate-500 hover:text-blue-400 uppercase font-bold tracking-widest">{mode === 'login' ? 'Non hai un account? Registrati' : 'Hai già un account? Accedi'}</button>
+        <div className="mt-4 pt-4 border-t border-white/5 text-center">
+          <button
+            type="button"
+            onClick={() => {
+              window.history.pushState({}, '', '/admin');
+              window.dispatchEvent(new PopStateEvent('popstate'));
+            }}
+            className="inline-flex items-center gap-1.5 text-[11px] text-slate-400 hover:text-blue-400 font-bold uppercase tracking-wider transition-colors cursor-pointer"
+          >
+            <ShieldCheck size={14} className="text-blue-400" />
+            <span>Area Riservata SuperAdmin SaaS</span>
+          </button>
+        </div>
       </motion.div>
 
       <AnimatePresence>
@@ -645,6 +685,31 @@ async function readJsonResponse<T = Record<string, unknown>>(res: Response): Pro
 }
 
 export default function App() {
+
+  const [isAdminRoute, setIsAdminRoute] = useState(() => {
+    return window.location.pathname.startsWith('/admin') || window.location.hash === '#admin';
+  });
+  const [adminSession, setAdminSession] = useState<{ token: string; user: any } | null>(() => {
+    const token = sessionStorage.getItem('vigilai_admin_token');
+    const userStr = sessionStorage.getItem('vigilai_admin_user');
+    if (token && userStr) {
+      try {
+        return { token, user: JSON.parse(userStr) };
+      } catch {
+        return null;
+      }
+    }
+    return null;
+  });
+
+  useEffect(() => {
+    const handleLocationChange = () => {
+      const onAdmin = window.location.pathname.startsWith('/admin') || window.location.hash === '#admin';
+      setIsAdminRoute(onAdmin);
+    };
+    window.addEventListener('popstate', handleLocationChange);
+    return () => window.removeEventListener('popstate', handleLocationChange);
+  }, []);
 
   const [connectMethod, setConnectMethod] = useState<'direct' | 'advanced' | 'browser'>('direct');
   const [availableTriggers, setAvailableTriggers] = useState<AlertTriggerItem[]>(DEFAULT_TRIGGERS);
@@ -1024,7 +1089,16 @@ export default function App() {
   const [selectedZoneId, setSelectedZoneId] = useState<string | null>(null);
   
   // Settings State
-  const [aiModel, setAiModel] = useState(() => localStorage.getItem("vigilai_model") || "gemini-3-flash-preview");
+  const [aiModel, setAiModel] = useState(() => localStorage.getItem("vigilai_model") || "gemini-3.8-flash");
+  const [activeAiModelStatus, setActiveAiModelStatus] = useState<{
+    model: string;
+    latencyMs?: number;
+    status: "active" | "fallback" | "error" | "idle";
+    lastUpdated?: Date;
+  }>({
+    model: "gemini-3.8-flash",
+    status: "idle",
+  });
   const [analysisInterval, setAnalysisInterval] = useState<number>(() => {
     const stored = localStorage.getItem("vigilai_analysis_interval");
     return stored ? Math.max(5, Math.min(120, parseInt(stored, 10))) : 15;
@@ -2573,6 +2647,17 @@ export default function App() {
           triggerDescriptionsMap[t.id] = t.description;
         });
         const result = await analyzeFrame(base64Image, cam.enabledTriggers, cam.location, aiModel, cam.zones, triggerDescriptionsMap);
+        
+        // Aggiorna stato indicatore LED del modello AI
+        const used = result.usedModel || aiModel;
+        const isPrimary = used === "gemini-3.8-flash" || used === aiModel;
+        setActiveAiModelStatus({
+          model: used,
+          latencyMs: result.latencyMs,
+          status: isPrimary ? "active" : "fallback",
+          lastUpdated: new Date(),
+        });
+
         if (cam.id === activeCameraId || result.isEmergency) {
           setLastAnalysis(result);
         }
@@ -2581,6 +2666,11 @@ export default function App() {
         }
       } catch (err: any) {
         console.error("AI Analysis failed:", err);
+        setActiveAiModelStatus(prev => ({
+          ...prev,
+          status: "error",
+          lastUpdated: new Date(),
+        }));
         if (err.message?.includes("quota") || err.message?.includes("RESOURCE_EXHAUSTED")) {
           setLastAnalysis({
             description: "⚠️ Limite API raggiunto. Il sistema sta attendendo il ripristino della quota (solitamente 60s). Il monitoraggio continua...",
@@ -3385,6 +3475,33 @@ export default function App() {
     </div>
   );
 
+  if (isAdminRoute) {
+    if (!adminSession) {
+      return (
+        <AdminLogin
+          onLoginSuccess={(token, user) => setAdminSession({ token, user })}
+          onBackToApp={() => {
+            setIsAdminRoute(false);
+            window.history.pushState({}, '', '/');
+          }}
+        />
+      );
+    }
+    return (
+      <AdminConsole
+        onLogout={() => {
+          sessionStorage.removeItem('vigilai_admin_token');
+          sessionStorage.removeItem('vigilai_admin_user');
+          setAdminSession(null);
+        }}
+        onBackToApp={() => {
+          setIsAdminRoute(false);
+          window.history.pushState({}, '', '/');
+        }}
+      />
+    );
+  }
+
   if (!user) return <Auth />;
 
   return (
@@ -3407,13 +3524,48 @@ export default function App() {
                 <h2 className="text-sm sm:text-xl lg:text-2xl font-black text-white uppercase tracking-tighter flex items-center gap-1">
                   VIGIL.<span className="text-blue-400 drop-shadow-[0_0_10px_rgba(96,165,250,0.8)]">AI</span>
                 </h2>
-                <div className="flex items-center gap-2 mt-0.5 text-[9px] lg:text-[10px] font-bold text-slate-500 uppercase tracking-widest">
+                <div className="flex flex-wrap items-center gap-2 mt-0.5 text-[9px] lg:text-[10px] font-bold text-slate-500 uppercase tracking-widest">
                   <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${isMonitoring ? 'bg-green-500 shadow-[0_0_10px_#22c55e]' : 'bg-slate-700'}`} />
                   {isMonitoring ? 'Sistema Attivo' : 'In Attesa'}
                   <span className="hidden md:inline w-px h-2.5 bg-white/10" />
                   <span className="hidden md:inline-flex items-center gap-1">
                     <LayoutGrid size={10} /> {cameras.length} Camere
                   </span>
+                  
+                  {/* AI Model Status Badge with Green LED */}
+                  <span className="hidden md:inline w-px h-2.5 bg-white/10" />
+                  <div 
+                    className={`hidden md:inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full border transition-all ${
+                      activeAiModelStatus.status === "active"
+                        ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400"
+                        : activeAiModelStatus.status === "fallback"
+                        ? "bg-amber-500/10 border-amber-500/30 text-amber-400"
+                        : activeAiModelStatus.status === "error"
+                        ? "bg-red-500/10 border-red-500/30 text-red-400"
+                        : "bg-blue-500/10 border-blue-500/30 text-blue-400"
+                    }`}
+                    title={`Modello AI in uso: ${activeAiModelStatus.model}${activeAiModelStatus.latencyMs ? ` (${activeAiModelStatus.latencyMs}ms)` : ''}`}
+                  >
+                    <span 
+                      className={`w-1.5 h-1.5 rounded-full shrink-0 ${
+                        activeAiModelStatus.status === "active"
+                          ? "bg-emerald-500 shadow-[0_0_8px_#10b981] animate-pulse"
+                          : activeAiModelStatus.status === "fallback"
+                          ? "bg-amber-500 shadow-[0_0_8px_#f59e0b]"
+                          : activeAiModelStatus.status === "error"
+                          ? "bg-red-500 shadow-[0_0_8px_#ef4444]"
+                          : "bg-emerald-500 shadow-[0_0_8px_#10b981]"
+                      }`} 
+                    />
+                    <span className="font-mono text-[9px] font-black lowercase tracking-normal">
+                      {activeAiModelStatus.model.includes("3.8") ? "gemini 3.8 flash" : activeAiModelStatus.model}
+                    </span>
+                    {activeAiModelStatus.latencyMs ? (
+                      <span className="text-[8px] opacity-75 font-normal">
+                        ({activeAiModelStatus.latencyMs}ms)
+                      </span>
+                    ) : null}
+                  </div>
                 </div>
                 {displayAccountEmail && <AccountEmailLine email={displayAccountEmail} />}
               </div>
@@ -3551,6 +3703,18 @@ export default function App() {
               </button>
 
               <button 
+                type="button"
+                onClick={() => {
+                  window.history.pushState({}, '', '/admin');
+                  window.dispatchEvent(new PopStateEvent('popstate'));
+                }}
+                className="p-2 sm:p-3 bg-blue-600/15 border border-blue-500/30 text-blue-400 hover:bg-blue-600 hover:text-white rounded-lg sm:rounded-xl lg:rounded-2xl transition-all shadow-md shadow-blue-500/10"
+                title="SaaS Master Console (Admin)"
+              >
+                <ShieldCheck size={14} className="sm:w-[18px] sm:h-[18px]" />
+              </button>
+
+              <button 
                 onClick={handleLogout}
                 className="p-2 sm:p-3 glass border-white/5 text-red-500/50 hover:text-red-500 hover:bg-red-500/10 rounded-lg sm:rounded-xl lg:rounded-2xl transition-all"
                 title="Logout"
@@ -3668,6 +3832,21 @@ export default function App() {
                 <div className="flex items-center gap-1.5 text-[8px] font-bold text-slate-500 uppercase tracking-widest">
                   <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${isMonitoring ? 'bg-green-500 shadow-[0_0_8px_#22c55e]' : 'bg-slate-700'}`} />
                   {isMonitoring ? 'Sistema Attivo' : 'In Attesa'}
+                  
+                  {/* Compact AI Model LED Badge for 3.5" Screen */}
+                  <span className="w-px h-2 bg-white/20" />
+                  <span className="inline-flex items-center gap-1 text-emerald-400 font-mono font-bold lowercase">
+                    <span 
+                      className={`w-1.5 h-1.5 rounded-full ${
+                        activeAiModelStatus.status === "error" 
+                          ? "bg-red-500 shadow-[0_0_6px_#ef4444]" 
+                          : activeAiModelStatus.status === "fallback" 
+                          ? "bg-amber-500 shadow-[0_0_6px_#f59e0b]" 
+                          : "bg-emerald-500 shadow-[0_0_6px_#10b981] animate-pulse"
+                      }`} 
+                    />
+                    <span>3.8 flash</span>
+                  </span>
                 </div>
                 {displayAccountEmail && <AccountEmailLine email={displayAccountEmail} />}
               </div>
@@ -5397,10 +5576,16 @@ export default function App() {
                     {/* Riga superiore: selezione motore */}
                     <select
                       value={aiModel}
-                      onChange={(e) => setAiModel(e.target.value)}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setAiModel(val);
+                        localStorage.setItem("vigilai_model", val);
+                      }}
                       className="shrink-0 w-full h-8 bg-black/40 border border-white/10 px-2 rounded-lg text-[10px] text-white outline-none focus:border-blue-500/50 font-bold appearance-none cursor-pointer"
                     >
-                      <option value="gemini-3-flash-preview" className="bg-[#0f172a]">Gemini 3.0 Flash</option>
+                      <option value="gemini-3.8-flash" className="bg-[#0f172a]">Gemini 3.8 Flash (Consigliato)</option>
+                      <option value="gemini-2.0-flash" className="bg-[#0f172a]">Gemini 2.0 Flash</option>
+                      <option value="gemini-1.5-flash" className="bg-[#0f172a]">Gemini 1.5 Flash</option>
                     </select>
 
                     {/* Chiave API */}
@@ -5476,10 +5661,16 @@ export default function App() {
                         <div className="flex items-center gap-2">
                           <select 
                             value={aiModel}
-                            onChange={(e) => setAiModel(e.target.value)}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setAiModel(val);
+                              localStorage.setItem("vigilai_model", val);
+                            }}
                             className="w-full bg-black/40 border border-white/10 px-4 py-3 rounded-xl text-xs text-white outline-none focus:border-blue-500/50 transition-all font-bold appearance-none cursor-pointer"
                           >
-                            <option value="gemini-3-flash-preview" className="bg-[#0f172a]">Gemini 3.0 Flash</option>
+                            <option value="gemini-3.8-flash" className="bg-[#0f172a]">Gemini 3.8 Flash (Più veloce & intelligente - Consigliato)</option>
+                            <option value="gemini-2.0-flash" className="bg-[#0f172a]">Gemini 2.0 Flash</option>
+                            <option value="gemini-1.5-flash" className="bg-[#0f172a]">Gemini 1.5 Flash</option>
                           </select>
                         </div>
                       </div>

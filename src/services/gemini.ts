@@ -7,16 +7,19 @@ export interface DetectionResult {
   detectedEvents: string[];
   description: string;
   isEmergency: boolean;
+  usedModel?: string;
+  latencyMs?: number;
 }
 
 export const analyzeFrame = async (
   base64Image: string, 
   triggers: AlertTrigger[] = ["intrusion", "violence"],
   location: string = "Area monitorata",
-  modelId: string = "gemini-3-flash-preview",
+  modelId: string = "gemini-3.8-flash",
   zones: any[] = [],
   triggerDescriptionsMap?: Record<string, string>
 ): Promise<DetectionResult> => {
+  const startTime = Date.now();
   try {
     let rawKey = localStorage.getItem("vigilai_gemini_key") || "";
     if (!rawKey) {
@@ -36,7 +39,7 @@ export const analyzeFrame = async (
     const keyFormat = getGeminiApiKeyFormat(apiKey);
     console.log(`[AI Core] Inizializzazione chiave formato ${keyFormat}: ${apiKey.substring(0, 4)}...${apiKey.substring(apiKey.length - 4)}`);
 
-    // Inizializzazione con v1beta per supportare i modelli preview di generazione 3
+    // Inizializzazione con SDK ufficiale @google/genai
     const ai = new GoogleGenAI({ apiKey });
 
     // Clean base64 data if it contains the prefix
@@ -80,12 +83,38 @@ export const analyzeFrame = async (
     
     CRITERIO EMERGENZA (isEmergency=true): Rapina (volto coperto e armi), violenza, fiamme, o QUALSIASI intrusione di persone o veicoli nelle zone 'restricted' o 'alert'.`;
 
-    // Prova i modelli della nuova generazione 3 e 2
-    const modelsToTry = [modelId, "gemini-3-flash-preview", "gemini-2.0-flash", "gemini-1.5-flash"];
+    // Prova prima il modello 3.8 Flash, poi 3.0 e fallback veloci 2.0 / 1.5
+    const modelsToTry = Array.from(new Set([
+      modelId,
+      "gemini-3.8-flash",
+      "gemini-3-flash-preview",
+      "gemini-2.0-flash",
+      "gemini-1.5-flash"
+    ]));
     let lastError = "";
 
     for (const modelName of modelsToTry) {
       try {
+        const isModel38 = modelName.includes("3.8");
+        const configObj: any = {
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              threatLevel: { type: Type.STRING, enum: ["low", "medium", "high"] },
+              detectedEvents: { type: Type.ARRAY, items: { type: Type.STRING } },
+              description: { type: Type.STRING },
+              isEmergency: { type: Type.BOOLEAN },
+            },
+            required: ["threatLevel", "detectedEvents", "description", "isEmergency"],
+          },
+        };
+
+        // Su Gemini 3.8 Flash ottimizziamo la latenza per videoanalisi continua
+        if (isModel38) {
+          configObj.thinkingConfig = { thinkingLevel: "low" };
+        }
+
         const response = await ai.models.generateContent({
           model: modelName,
           contents: [
@@ -97,25 +126,21 @@ export const analyzeFrame = async (
               ]
             }
           ],
-          config: {
-            responseMimeType: "application/json",
-            responseSchema: {
-              type: Type.OBJECT,
-              properties: {
-                threatLevel: { type: Type.STRING, enum: ["low", "medium", "high"] },
-                detectedEvents: { type: Type.ARRAY, items: { type: Type.STRING } },
-                description: { type: Type.STRING },
-                isEmergency: { type: Type.BOOLEAN },
-              },
-              required: ["threatLevel", "detectedEvents", "description", "isEmergency"],
-            },
-          },
+          config: configObj,
         });
 
         const text = response.text;
         if (!text) throw new Error("Risposta AI vuota");
         
-        return JSON.parse(text);
+        const parsed = JSON.parse(text);
+        const latencyMs = Date.now() - startTime;
+        console.log(`[AI Core] Analisi frame eseguita con successo con modello: ${modelName} (${latencyMs}ms)`);
+        
+        return {
+          ...parsed,
+          usedModel: modelName,
+          latencyMs,
+        };
       } catch (err: any) {
         lastError = err.message;
         if (!err.message.includes("404")) break; // Se l'errore non è 404, fermati
@@ -126,6 +151,7 @@ export const analyzeFrame = async (
     throw new Error(lastError);
   } catch (error: any) {
     let cleanErrorMessage = error.message || "Errore sconosciuto durante l'analisi.";
+    const latencyMs = Date.now() - startTime;
     
     // Se l'errore è una stringa JSON (come spesso accade con gli errori 429), estraiamo solo il messaggio
     if (cleanErrorMessage.includes("RESOURCE_EXHAUSTED") || cleanErrorMessage.includes("quota")) {
@@ -144,6 +170,8 @@ export const analyzeFrame = async (
       detectedEvents: [],
       description: cleanErrorMessage,
       isEmergency: false,
+      usedModel: modelId,
+      latencyMs,
     };
   }
 };
