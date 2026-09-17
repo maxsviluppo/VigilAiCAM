@@ -51,7 +51,7 @@ import * as Lucide from "lucide-react";
 import { motion, AnimatePresence, Reorder } from "framer-motion";
 import { QRCodeCanvas } from 'qrcode.react';
 import { analyzeFrame, DetectionResult } from "./services/gemini";
-import { Camera, Incident, AlertTrigger, AlertTriggerItem, Zone, ZoneType, Point } from "./types";
+import { Camera, Incident, AlertTrigger, AlertTriggerItem, Zone, ZoneType, Point, TriggerSchedule } from "./types";
 import { supabase } from "./supabase";
 import {
   finalizeCameraForSave,
@@ -70,6 +70,8 @@ import {
   parseIpFromRtspUrl,
   requiresStreamUrl,
   toDbCameraRecord,
+  isTriggerScheduleActive,
+  getTriggerScheduleBadgeText,
 } from "./utils/cameraNetwork";
 import { User } from "@supabase/supabase-js";
 import { GEMINI_API_KEY_MODAL_PLACEHOLDER, GEMINI_API_KEY_PLACEHOLDER, normalizeGeminiApiKey } from "./utils/geminiApiKey";
@@ -738,6 +740,10 @@ export default function App() {
   const [editingCameraNumber, setEditingCameraNumber] = useState<number | null>(null);
   const [editingCamera, setEditingCamera] = useState<Camera | null>(null);
   const [activeCameraTab, setActiveCameraTab] = useState<'info' | 'source' | 'triggers' | 'client'>('info');
+  const [schedulingTrigger, setSchedulingTrigger] = useState<{
+    trigger: AlertTriggerItem;
+    schedule: TriggerSchedule;
+  } | null>(null);
   const [activeCamStatuses, setActiveCamStatuses] = useState<Record<string, boolean>>({});
   const [cameraToDelete, setCameraToDelete] = useState<string | null>(null);
   const [isNightMode, setIsNightMode] = useState(false);
@@ -1585,15 +1591,16 @@ export default function App() {
     };
   }, [fetchUpdateStatus, stopUpdatePolling, startUpdatePolling, clearSimulateUpdateTimeouts]);
 
+  // Controllo aggiornamenti automatico UNA SOLA VOLTA all'avvio del sistema (senza refresh ciclici)
+  const startupUpdateCheckDoneRef = useRef(false);
   useEffect(() => {
-    if (!isMobile35) return;
-    const bootCheck = setTimeout(() => checkForUpdates(true), 60000);
-    const interval = setInterval(() => checkForUpdates(true), 6 * 60 * 60 * 1000);
-    return () => {
-      clearTimeout(bootCheck);
-      clearInterval(interval);
-    };
-  }, [isMobile35, checkForUpdates]);
+    if (startupUpdateCheckDoneRef.current) return;
+    startupUpdateCheckDoneRef.current = true;
+    const bootTimer = setTimeout(() => {
+      checkForUpdates(true);
+    }, 5000);
+    return () => clearTimeout(bootTimer);
+  }, [checkForUpdates]);
 
   const prevKeyboardTargetRef = useRef<{ id: string; title: string } | null>(null);
   useEffect(() => {
@@ -2646,7 +2653,26 @@ export default function App() {
         availableTriggers.forEach(t => {
           triggerDescriptionsMap[t.id] = t.description;
         });
-        const result = await analyzeFrame(base64Image, cam.enabledTriggers, cam.location, aiModel, cam.zones, triggerDescriptionsMap);
+
+        // Filtra i trigger attivi in base alla programmazione oraria (es. furto mattina, incendio notte)
+        const now = new Date();
+        const activeTriggersNow = (cam.enabledTriggers || []).filter(tId => {
+          const sched = cam.triggerSchedules?.[tId];
+          return isTriggerScheduleActive(sched, now);
+        });
+
+        if (activeTriggersNow.length === 0) {
+          setIsAnalyzing(false);
+          setLastAnalysis({
+            threatLevel: "low",
+            detectedEvents: [],
+            description: "Standby orario: nessun trigger programmato per questa fascia.",
+            isEmergency: false,
+          });
+          return;
+        }
+
+        const result = await analyzeFrame(base64Image, activeTriggersNow, cam.location, aiModel, cam.zones, triggerDescriptionsMap);
         
         // Aggiorna stato indicatore LED del modello AI
         const used = result.usedModel || aiModel;
@@ -2889,6 +2915,7 @@ export default function App() {
 
       persistLocalCameraSettings(savedCam.id, {
         enabledTriggers: savedCam.enabledTriggers,
+        triggerSchedules: savedCam.triggerSchedules,
       });
 
       setCameras(prev => {
@@ -5156,51 +5183,76 @@ export default function App() {
                           const isActive = editingCamera.enabledTriggers.includes(trigger.id as AlertTrigger);
                           const LucideIcon = (Lucide as any)[trigger.icon_name] || Lucide.AlertTriangle;
                           const iconGradient = TRIGGER_ICON_GRADIENTS[trigger.color_class] || 'from-slate-500 to-slate-700';
+                          const sched = editingCamera.triggerSchedules?.[trigger.id];
+                          const schedBadge = getTriggerScheduleBadgeText(sched);
                           return (
-                            <button
+                            <div
                               key={trigger.id}
-                              type="button"
-                              title={trigger.description}
-                              onClick={() => {
-                                setEditingCamera(prev => {
-                                  if (!prev) return null;
-                                  const current = prev.enabledTriggers || [];
-                                  const updated = isActive
-                                    ? current.filter(t => t !== trigger.id)
-                                    : [...current, trigger.id as AlertTrigger];
-                                  return { ...prev, enabledTriggers: updated };
-                                });
-                              }}
-                              className={`flex flex-col items-center gap-1.5 w-full min-w-0 transition-all active:scale-95 cursor-pointer ${
-                                isActive ? 'opacity-100' : 'opacity-55 hover:opacity-85'
-                              }`}
+                              className="flex flex-col items-center gap-1 w-full min-w-0"
                             >
-                              <div
-                                className={`relative w-[58px] h-[58px] shrink-0 rounded-[13px] flex items-center justify-center bg-gradient-to-br shadow-md transition-all ${
-                                  isActive
-                                    ? `${iconGradient} ring-2 ring-white/25`
-                                    : 'from-white/10 to-white/5 border border-white/10'
+                              <button
+                                type="button"
+                                title={trigger.description}
+                                onClick={() => {
+                                  if (isActive) {
+                                    setEditingCamera(prev => {
+                                      if (!prev) return null;
+                                      return {
+                                        ...prev,
+                                        enabledTriggers: (prev.enabledTriggers || []).filter(t => t !== trigger.id)
+                                      };
+                                    });
+                                  } else {
+                                    const existing = editingCamera.triggerSchedules?.[trigger.id] || { allDay: true, startTime: "08:00", endTime: "20:00" };
+                                    setSchedulingTrigger({ trigger, schedule: existing });
+                                  }
+                                }}
+                                className={`flex flex-col items-center gap-1.5 w-full min-w-0 transition-all active:scale-95 cursor-pointer ${
+                                  isActive ? 'opacity-100' : 'opacity-55 hover:opacity-85'
                                 }`}
                               >
-                                <LucideIcon
-                                  size={24}
-                                  strokeWidth={2}
-                                  className={isActive ? 'text-white drop-shadow-sm' : 'text-slate-400'}
-                                />
-                                {isActive && (
-                                  <span className="absolute -top-1 -right-1 w-4 h-4 bg-blue-500 rounded-full flex items-center justify-center border-2 border-slate-900 shadow-md">
-                                    <Check size={9} strokeWidth={3} className="text-white" />
-                                  </span>
-                                )}
-                              </div>
-                              <span
-                                className={`text-[8px] font-bold uppercase tracking-tight text-center leading-tight line-clamp-2 w-full max-w-[72px] ${
-                                  isActive ? 'text-white' : 'text-slate-500'
-                                }`}
-                              >
-                                {trigger.label}
-                              </span>
-                            </button>
+                                <div
+                                  className={`relative w-[58px] h-[58px] shrink-0 rounded-[13px] flex items-center justify-center bg-gradient-to-br shadow-md transition-all ${
+                                    isActive
+                                      ? `${iconGradient} ring-2 ring-white/25`
+                                      : 'from-white/10 to-white/5 border border-white/10'
+                                  }`}
+                                >
+                                  <LucideIcon
+                                    size={24}
+                                    strokeWidth={2}
+                                    className={`${isActive ? 'text-white drop-shadow-sm' : 'text-slate-400'} ${isActive && schedBadge ? '-translate-y-1' : ''}`}
+                                  />
+                                  {isActive && (
+                                    <span className="absolute -top-1 -right-1 w-4 h-4 bg-blue-500 rounded-full flex items-center justify-center border-2 border-slate-900 shadow-md">
+                                      <Check size={9} strokeWidth={3} className="text-white" />
+                                    </span>
+                                  )}
+
+                                  {/* Orario dentro l'icona (solo se non 24h) */}
+                                  {isActive && schedBadge && (
+                                    <span
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        const existing = editingCamera.triggerSchedules?.[trigger.id] || { allDay: true, startTime: "08:00", endTime: "20:00" };
+                                        setSchedulingTrigger({ trigger, schedule: existing });
+                                      }}
+                                      className="absolute bottom-1 inset-x-1 bg-black/85 backdrop-blur-md text-[6px] font-black uppercase text-white tracking-tight text-center py-0.5 rounded border border-white/20 shadow-md truncate hover:bg-blue-600 transition-colors"
+                                      title="Tocca per modificare orario"
+                                    >
+                                      {schedBadge}
+                                    </span>
+                                  )}
+                                </div>
+                                <span
+                                  className={`text-[8px] font-bold uppercase tracking-tight text-center leading-tight line-clamp-2 w-full max-w-[72px] ${
+                                    isActive ? 'text-white' : 'text-slate-500'
+                                  }`}
+                                >
+                                  {trigger.label}
+                                </span>
+                              </button>
+                            </div>
                           );
                         })}
                       </div>
@@ -5325,6 +5377,165 @@ export default function App() {
               </div>
             </motion.div>
           </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Trigger Schedule Modal (Programmazione Oraria Allarmi) */}
+      <AnimatePresence>
+        {schedulingTrigger && editingCamera && (
+          <div className="fixed inset-0 z-[250] bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-2 sm:p-4 pointer-events-auto">
+            <motion.div
+              initial={{ scale: 0.92, opacity: 0, y: 10 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.92, opacity: 0, y: 10 }}
+              className="w-full max-w-[340px] max-h-[295px] sm:max-h-[90vh] bg-[#0c101d] border-2 border-blue-500/50 rounded-2xl p-3 sm:p-4 shadow-2xl flex flex-col gap-2.5 text-white overflow-y-auto custom-scrollbar my-auto mx-auto"
+            >
+              {/* Header */}
+              <div className="flex items-center gap-2.5 pb-2 border-b border-white/10 shrink-0">
+                <div className={`w-8 h-8 rounded-xl flex items-center justify-center bg-gradient-to-br ${TRIGGER_ICON_GRADIENTS[schedulingTrigger.trigger.color_class] || 'from-blue-600 to-indigo-700'} text-white shadow-md shrink-0`}>
+                  {(() => {
+                    const Icon = (Lucide as any)[schedulingTrigger.trigger.icon_name] || Lucide.Bell;
+                    return <Icon size={16} strokeWidth={2.5} />;
+                  })()}
+                </div>
+                <div className="flex flex-col min-w-0">
+                  <span className="text-[10px] font-black text-white uppercase tracking-wider truncate">
+                    {schedulingTrigger.trigger.label}
+                  </span>
+                  <span className="text-[7.5px] font-bold text-slate-400 uppercase tracking-widest">
+                    Programmazione Oraria
+                  </span>
+                </div>
+              </div>
+
+              {/* Opzione 1: Tutto il giorno (spuntato di default) */}
+              <button
+                type="button"
+                onClick={() => setSchedulingTrigger(prev => prev ? {
+                  ...prev,
+                  schedule: { ...prev.schedule, allDay: !prev.schedule.allDay }
+                } : null)}
+                className={`w-full flex items-center justify-between p-2.5 rounded-xl border transition-all cursor-pointer ${
+                  schedulingTrigger.schedule.allDay
+                    ? 'bg-blue-600/20 border-blue-500/60 text-white shadow-[0_0_15px_rgba(37,99,235,0.15)]'
+                    : 'bg-white/5 border-white/10 text-slate-400 hover:text-white'
+                }`}
+              >
+                <div className="flex items-center gap-2">
+                  <div className={`w-5 h-5 rounded-lg flex items-center justify-center border transition-all ${
+                    schedulingTrigger.schedule.allDay ? 'bg-blue-600 border-blue-400 text-white' : 'border-white/20 bg-white/5'
+                  }`}>
+                    {schedulingTrigger.schedule.allDay && <Check size={12} strokeWidth={3} />}
+                  </div>
+                  <span className="text-[9.5px] font-black uppercase tracking-wider">Tutto il giorno</span>
+                </div>
+                <span className="text-[8px] font-mono text-blue-400 font-bold bg-blue-500/10 px-1.5 py-0.5 rounded">24/7</span>
+              </button>
+
+              {/* Opzione 2: Fascia oraria personalizzata se non tutto il giorno */}
+              {!schedulingTrigger.schedule.allDay && (
+                <div className="space-y-2 p-2.5 bg-white/5 rounded-xl border border-white/10 animate-fade-in">
+                  <div className="flex justify-between items-center px-0.5">
+                    <span className="text-[7.5px] font-black uppercase tracking-widest text-slate-400">
+                      Fascia Oraria Attiva
+                    </span>
+                    <span className="text-[7.5px] font-mono text-blue-400 font-bold">
+                      {(schedulingTrigger.schedule.startTime || "08:00") + " - " + (schedulingTrigger.schedule.endTime || "20:00")}
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="flex flex-col gap-1">
+                      <label className="text-[7.5px] font-black uppercase tracking-widest text-slate-400">Dalle ore</label>
+                      <input
+                        type="time"
+                        value={schedulingTrigger.schedule.startTime || "08:00"}
+                        onChange={(e) => setSchedulingTrigger(prev => prev ? {
+                          ...prev,
+                          schedule: { ...prev.schedule, startTime: e.target.value, presetName: undefined }
+                        } : null)}
+                        className="w-full h-8 bg-black/60 border border-white/20 rounded-lg text-xs font-mono font-bold text-center text-white focus:border-blue-400 outline-none"
+                      />
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      <label className="text-[7.5px] font-black uppercase tracking-widest text-slate-400">Alle ore</label>
+                      <input
+                        type="time"
+                        value={schedulingTrigger.schedule.endTime || "20:00"}
+                        onChange={(e) => setSchedulingTrigger(prev => prev ? {
+                          ...prev,
+                          schedule: { ...prev.schedule, endTime: e.target.value, presetName: undefined }
+                        } : null)}
+                        className="w-full h-8 bg-black/60 border border-white/20 rounded-lg text-xs font-mono font-bold text-center text-white focus:border-blue-400 outline-none"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Scorciatoie rapide touch */}
+                  <div className="grid grid-cols-3 gap-1 pt-0.5">
+                    {[
+                      { id: 'mattina', label: 'Mattina', s: '08:00', e: '14:00' },
+                      { id: 'pomeriggio', label: 'Pomeriggio', s: '14:00', e: '20:00' },
+                      { id: 'notte', label: 'Notte', s: '22:00', e: '06:00' },
+                    ].map(preset => (
+                      <button
+                        key={preset.label}
+                        type="button"
+                        onClick={() => setSchedulingTrigger(prev => prev ? {
+                          ...prev,
+                          schedule: { ...prev.schedule, startTime: preset.s, endTime: preset.e, presetName: preset.id as any }
+                        } : null)}
+                        className={`py-1 px-1 border rounded-md text-[7px] font-bold uppercase tracking-wider text-center active:scale-95 transition-all ${
+                          schedulingTrigger.schedule.presetName === preset.id
+                            ? 'bg-blue-600/40 border-blue-400 text-white'
+                            : 'bg-white/5 hover:bg-white/15 border-white/10 text-slate-300'
+                        }`}
+                      >
+                        {preset.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* SOLO TASTO CONFERMA */}
+              <button
+                type="button"
+                onClick={() => {
+                  if (!editingCamera || !schedulingTrigger) return;
+                  const { trigger, schedule } = schedulingTrigger;
+                  const currentTriggers = editingCamera.enabledTriggers || [];
+                  const updatedTriggers = currentTriggers.includes(trigger.id as AlertTrigger)
+                    ? currentTriggers
+                    : [...currentTriggers, trigger.id as AlertTrigger];
+
+                  const updatedSchedules = {
+                    ...(editingCamera.triggerSchedules || {}),
+                    [trigger.id]: schedule,
+                  };
+
+                  const updatedCamera: Camera = {
+                    ...editingCamera,
+                    enabledTriggers: updatedTriggers,
+                    triggerSchedules: updatedSchedules,
+                  };
+
+                  setEditingCamera(updatedCamera);
+                  setCameras(prev => prev.map(c => c.id === updatedCamera.id ? updatedCamera : c));
+                  persistLocalCameraSettings(updatedCamera.id, {
+                    enabledTriggers: updatedTriggers,
+                    triggerSchedules: updatedSchedules,
+                  });
+
+                  setSchedulingTrigger(null);
+                }}
+                className="w-full py-2.5 bg-blue-600 hover:bg-blue-500 active:scale-95 text-white text-[10px] font-black uppercase tracking-widest rounded-xl shadow-lg shadow-blue-600/30 transition-all cursor-pointer flex items-center justify-center gap-1.5 mt-0.5 shrink-0"
+              >
+                <Check size={14} strokeWidth={3} />
+                <span>Conferma</span>
+              </button>
+            </motion.div>
+          </div>
         )}
       </AnimatePresence>
 
@@ -5473,10 +5684,32 @@ export default function App() {
             >
               <div className={isMobile35 ? 'vigil-settings-35-header' : 'flex justify-between items-center shrink-0'}>
                 {!isMobile35 && (
-                  <h2 className="text-lg sm:text-2xl font-black text-white uppercase">Impostazioni Sistema</h2>
+                  <div className="flex items-center gap-3">
+                    <h2 className="text-lg sm:text-2xl font-black text-white uppercase">Impostazioni Sistema</h2>
+                    <button
+                      type="button"
+                      onClick={() => checkForUpdates(false)}
+                      className="px-2.5 py-1 bg-blue-600/20 hover:bg-blue-600 border border-blue-500/30 hover:border-blue-400 text-blue-400 hover:text-white rounded-lg text-[9px] font-black uppercase tracking-wider flex items-center gap-1.5 transition-all cursor-pointer"
+                      title="Controlla se ci sono nuovi aggiornamenti software"
+                    >
+                      <RefreshCw size={11} />
+                      <span>Verifica Aggiornamenti (v{appVersion})</span>
+                    </button>
+                  </div>
                 )}
                 {isMobile35 && (
-                  <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Impostazioni Sistema</span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Impostazioni</span>
+                    <button
+                      type="button"
+                      onClick={() => checkForUpdates(false)}
+                      className="px-1.5 py-0.5 bg-blue-600/30 border border-blue-500/40 rounded text-blue-300 text-[8px] font-black uppercase tracking-wider flex items-center gap-1 active:scale-95"
+                      title="Verifica aggiornamenti"
+                    >
+                      <RefreshCw size={8} />
+                      <span>Aggiorna (v{appVersion})</span>
+                    </button>
+                  </div>
                 )}
                 <button
                   type="button"
@@ -5593,8 +5826,8 @@ export default function App() {
                         : "bg-white/5 border-white/5 text-slate-400 hover:bg-white/10 hover:text-white"
                     }`}
                   >
-                    <Activity size={14} className="sm:w-[16px] sm:h-[16px]" />
-                    <span>Test alarm</span>
+                    <RefreshCw size={14} className="sm:w-[16px] sm:h-[16px]" />
+                    <span>Sistema & Aggiornamenti</span>
                   </button>
                 </div>
               )}
@@ -6120,10 +6353,10 @@ export default function App() {
                       <button
                         type="button"
                         onClick={() => checkForUpdates(false)}
-                        className={`w-full py-2.5 bg-blue-600/20 border border-blue-500/30 rounded-xl font-black uppercase tracking-widest text-blue-400 hover:bg-blue-600 hover:text-white transition-all flex items-center justify-center gap-2 ${isMobile35 ? "text-[9px]" : "text-[10px]"}`}
+                        className={`w-full py-2.5 bg-blue-600 border border-blue-400 rounded-xl font-black uppercase tracking-widest text-white hover:bg-blue-500 active:scale-[0.98] transition-all flex items-center justify-center gap-2 shadow-lg shadow-blue-500/20 cursor-pointer ${isMobile35 ? "text-[9px]" : "text-[10px]"}`}
                       >
                         <RefreshCw size={12} />
-                        Controlla aggiornamenti
+                        Verifica aggiornamenti ora
                       </button>
                       <button
                         type="button"

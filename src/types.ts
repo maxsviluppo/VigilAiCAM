@@ -22,6 +22,13 @@ export interface Zone {
   label?: string;
 }
 
+export interface TriggerSchedule {
+  allDay: boolean;
+  startTime?: string;
+  endTime?: string;
+  presetName?: 'mattina' | 'pomeriggio' | 'notte';
+}
+
 export interface Camera {
   id: string;
   name: string;
@@ -36,6 +43,7 @@ export interface Camera {
   zones?: Zone[];
   status: "online" | "offline";
   enabledTriggers: AlertTrigger[];
+  triggerSchedules?: Record<string, TriggerSchedule>;
 }
 
 export interface Incident {

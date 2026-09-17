@@ -1,4 +1,4 @@
-import type { Camera } from '../types';
+import type { Camera, TriggerSchedule } from '../types';
 
 const LOCAL_CAMERA_SETTINGS_KEY = 'vigilai_camera_local_settings';
 
@@ -18,7 +18,45 @@ export function parseEnabledTriggers(val: unknown): string[] {
   return [];
 }
 
-export function loadLocalCameraSettings(cameraId: string): { enabledTriggers?: string[] } {
+export function isTriggerScheduleActive(schedule?: TriggerSchedule, now: Date = new Date()): boolean {
+  if (!schedule || schedule.allDay) return true;
+  if (!schedule.startTime || !schedule.endTime) return true;
+
+  const currentMinutes = now.getHours() * 60 + now.getMinutes();
+  const [startH, startM] = schedule.startTime.split(':').map(Number);
+  const [endH, endM] = schedule.endTime.split(':').map(Number);
+  const startMinutes = (startH || 0) * 60 + (startM || 0);
+  const endMinutes = (endH || 0) * 60 + (endM || 0);
+
+  if (startMinutes <= endMinutes) {
+    return currentMinutes >= startMinutes && currentMinutes <= endMinutes;
+  } else {
+    // Cross-midnight range (e.g., 22:00 to 06:00)
+    return currentMinutes >= startMinutes || currentMinutes <= endMinutes;
+  }
+}
+
+export function getTriggerScheduleBadgeText(sched?: TriggerSchedule): string | null {
+  if (!sched || sched.allDay) return null; // per le 24 ore non metti nulla
+  if (sched.presetName === 'mattina' || (sched.startTime === '08:00' && sched.endTime === '14:00')) {
+    return 'Mattina';
+  }
+  if (sched.presetName === 'pomeriggio' || (sched.startTime === '14:00' && sched.endTime === '20:00')) {
+    return 'Pomeriggio';
+  }
+  if (sched.presetName === 'notte' || (sched.startTime === '22:00' && sched.endTime === '06:00')) {
+    return 'Notte';
+  }
+  if (sched.startTime && sched.endTime) {
+    return `${sched.startTime}-${sched.endTime}`;
+  }
+  return null;
+}
+
+export function loadLocalCameraSettings(cameraId: string): { 
+  enabledTriggers?: string[];
+  triggerSchedules?: Record<string, TriggerSchedule>;
+} {
   try {
     const all = JSON.parse(localStorage.getItem(LOCAL_CAMERA_SETTINGS_KEY) || '{}');
     return all[cameraId] || {};
@@ -29,7 +67,10 @@ export function loadLocalCameraSettings(cameraId: string): { enabledTriggers?: s
 
 export function persistLocalCameraSettings(
   cameraId: string,
-  settings: { enabledTriggers?: string[] }
+  settings: { 
+    enabledTriggers?: string[];
+    triggerSchedules?: Record<string, TriggerSchedule>;
+  }
 ) {
   try {
     const all = JSON.parse(localStorage.getItem(LOCAL_CAMERA_SETTINGS_KEY) || '{}');
@@ -356,6 +397,7 @@ export function finalizeCameraForSave(
       : Array.isArray(merged.enabledTriggers)
         ? [...merged.enabledTriggers]
         : [],
+    triggerSchedules: edited.triggerSchedules || merged.triggerSchedules || {},
     rtspPath: edited.rtspPath ?? merged.rtspPath ?? '/stream1',
   };
 }
@@ -381,10 +423,19 @@ export function mapDbCamera(c: Record<string, unknown>, subnetHint?: string | nu
     safeIp !== ip && piIp && parseIpFromRtspUrl(url) === piIp ? '' : url;
 
   let enabledTriggers = parseEnabledTriggers(c.enabled_triggers);
-  if (enabledTriggers.length === 0 && c.id) {
+  let triggerSchedules: Record<string, TriggerSchedule> = {};
+  
+  if (c.trigger_schedules && typeof c.trigger_schedules === 'object') {
+    triggerSchedules = c.trigger_schedules as Record<string, TriggerSchedule>;
+  }
+
+  if (c.id) {
     const local = loadLocalCameraSettings(String(c.id));
-    if (local.enabledTriggers?.length) {
+    if (enabledTriggers.length === 0 && local.enabledTriggers?.length) {
       enabledTriggers = [...local.enabledTriggers];
+    }
+    if (Object.keys(triggerSchedules).length === 0 && local.triggerSchedules) {
+      triggerSchedules = { ...local.triggerSchedules };
     }
   }
 
@@ -402,6 +453,7 @@ export function mapDbCamera(c: Record<string, unknown>, subnetHint?: string | nu
     zones: (c.zones as Camera['zones']) || [],
     status: (c.status as Camera['status']) || 'online',
     enabledTriggers,
+    triggerSchedules,
   };
 }
 
