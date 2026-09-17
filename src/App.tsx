@@ -3525,46 +3525,74 @@ export default function App() {
                   VIGIL.<span className="text-blue-400 drop-shadow-[0_0_10px_rgba(96,165,250,0.8)]">AI</span>
                 </h2>
                 <div className="flex flex-wrap items-center gap-2 mt-0.5 text-[9px] lg:text-[10px] font-bold text-slate-500 uppercase tracking-widest">
-                  <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${isMonitoring ? 'bg-green-500 shadow-[0_0_10px_#22c55e]' : 'bg-slate-700'}`} />
-                  {isMonitoring ? 'Sistema Attivo' : 'In Attesa'}
-                  <span className="hidden md:inline w-px h-2.5 bg-white/10" />
-                  <span className="hidden md:inline-flex items-center gap-1">
-                    <LayoutGrid size={10} /> {cameras.length} Camere
-                  </span>
-                  
-                  {/* AI Model Status Badge with Green LED */}
-                  <span className="hidden md:inline w-px h-2.5 bg-white/10" />
-                  <div 
-                    className={`hidden md:inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full border transition-all ${
-                      activeAiModelStatus.status === "active"
-                        ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400"
-                        : activeAiModelStatus.status === "fallback"
-                        ? "bg-amber-500/10 border-amber-500/30 text-amber-400"
-                        : activeAiModelStatus.status === "error"
-                        ? "bg-red-500/10 border-red-500/30 text-red-400"
-                        : "bg-blue-500/10 border-blue-500/30 text-blue-400"
-                    }`}
-                    title={`Modello AI in uso: ${activeAiModelStatus.model}${activeAiModelStatus.latencyMs ? ` (${activeAiModelStatus.latencyMs}ms)` : ''}`}
-                  >
+                  {/* Mobile view (< md): AI Model + Green LED replaces "Sistema Attivo" */}
+                  <div className="flex md:hidden items-center gap-1.5">
                     <span 
-                      className={`w-1.5 h-1.5 rounded-full shrink-0 ${
-                        activeAiModelStatus.status === "active"
-                          ? "bg-emerald-500 shadow-[0_0_8px_#10b981] animate-pulse"
-                          : activeAiModelStatus.status === "fallback"
-                          ? "bg-amber-500 shadow-[0_0_8px_#f59e0b]"
-                          : activeAiModelStatus.status === "error"
-                          ? "bg-red-500 shadow-[0_0_8px_#ef4444]"
-                          : "bg-emerald-500 shadow-[0_0_8px_#10b981]"
+                      className={`w-2 h-2 rounded-full shrink-0 ${
+                        !isMonitoring 
+                          ? 'bg-slate-700' 
+                          : activeAiModelStatus.status === 'error'
+                          ? 'bg-red-500 shadow-[0_0_8px_#ef4444]'
+                          : activeAiModelStatus.status === 'fallback'
+                          ? 'bg-amber-500 shadow-[0_0_8px_#f59e0b]'
+                          : 'bg-emerald-500 shadow-[0_0_8px_#10b981] animate-pulse'
                       }`} 
                     />
-                    <span className="font-mono text-[9px] font-black lowercase tracking-normal">
-                      {activeAiModelStatus.model.includes("3.8") ? "gemini 3.8 flash" : activeAiModelStatus.model}
-                    </span>
-                    {activeAiModelStatus.latencyMs ? (
-                      <span className="text-[8px] opacity-75 font-normal">
-                        ({activeAiModelStatus.latencyMs}ms)
+                    {isMonitoring ? (
+                      <span className="inline-flex items-center gap-1 font-mono text-[9px] font-black lowercase tracking-normal text-emerald-400">
+                        <span>{activeAiModelStatus.model.includes("3.8") ? "gemini 3.8 flash" : activeAiModelStatus.model}</span>
+                        {activeAiModelStatus.latencyMs ? (
+                          <span className="text-[8px] text-slate-400 font-normal">
+                            ({activeAiModelStatus.latencyMs}ms)
+                          </span>
+                        ) : null}
                       </span>
-                    ) : null}
+                    ) : (
+                      <span className="text-slate-500 font-bold uppercase">In Attesa</span>
+                    )}
+                  </div>
+
+                  {/* Desktop view (>= md): Classic Sistema Attivo + Camera Count + AI Model Badge */}
+                  <div className="hidden md:flex items-center gap-2">
+                    <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${isMonitoring ? 'bg-green-500 shadow-[0_0_10px_#22c55e]' : 'bg-slate-700'}`} />
+                    <span>{isMonitoring ? 'Sistema Attivo' : 'In Attesa'}</span>
+                    <span className="w-px h-2.5 bg-white/10" />
+                    <span className="inline-flex items-center gap-1">
+                      <LayoutGrid size={10} /> {cameras.length} Camere
+                    </span>
+                    <span className="w-px h-2.5 bg-white/10" />
+                    <div 
+                      className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full border transition-all ${
+                        activeAiModelStatus.status === "active"
+                          ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400"
+                          : activeAiModelStatus.status === "fallback"
+                          ? "bg-amber-500/10 border-amber-500/30 text-amber-400"
+                          : activeAiModelStatus.status === "error"
+                          ? "bg-red-500/10 border-red-500/30 text-red-400"
+                          : "bg-blue-500/10 border-blue-500/30 text-blue-400"
+                      }`}
+                      title={`Modello AI in uso: ${activeAiModelStatus.model}${activeAiModelStatus.latencyMs ? ` (${activeAiModelStatus.latencyMs}ms)` : ''}`}
+                    >
+                      <span 
+                        className={`w-1.5 h-1.5 rounded-full shrink-0 ${
+                          activeAiModelStatus.status === "active"
+                            ? "bg-emerald-500 shadow-[0_0_8px_#10b981] animate-pulse"
+                            : activeAiModelStatus.status === "fallback"
+                            ? "bg-amber-500 shadow-[0_0_8px_#f59e0b]"
+                            : activeAiModelStatus.status === "error"
+                            ? "bg-red-500 shadow-[0_0_8px_#ef4444]"
+                            : "bg-emerald-500 shadow-[0_0_8px_#10b981]"
+                        }`} 
+                      />
+                      <span className="font-mono text-[9px] font-black lowercase tracking-normal">
+                        {activeAiModelStatus.model.includes("3.8") ? "gemini 3.8 flash" : activeAiModelStatus.model}
+                      </span>
+                      {activeAiModelStatus.latencyMs ? (
+                        <span className="text-[8px] opacity-75 font-normal">
+                          ({activeAiModelStatus.latencyMs}ms)
+                        </span>
+                      ) : null}
+                    </div>
                   </div>
                 </div>
                 {displayAccountEmail && <AccountEmailLine email={displayAccountEmail} />}
@@ -3832,21 +3860,6 @@ export default function App() {
                 <div className="flex items-center gap-1.5 text-[8px] font-bold text-slate-500 uppercase tracking-widest">
                   <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${isMonitoring ? 'bg-green-500 shadow-[0_0_8px_#22c55e]' : 'bg-slate-700'}`} />
                   {isMonitoring ? 'Sistema Attivo' : 'In Attesa'}
-                  
-                  {/* Compact AI Model LED Badge for 3.5" Screen */}
-                  <span className="w-px h-2 bg-white/20" />
-                  <span className="inline-flex items-center gap-1 text-emerald-400 font-mono font-bold lowercase">
-                    <span 
-                      className={`w-1.5 h-1.5 rounded-full ${
-                        activeAiModelStatus.status === "error" 
-                          ? "bg-red-500 shadow-[0_0_6px_#ef4444]" 
-                          : activeAiModelStatus.status === "fallback" 
-                          ? "bg-amber-500 shadow-[0_0_6px_#f59e0b]" 
-                          : "bg-emerald-500 shadow-[0_0_6px_#10b981] animate-pulse"
-                      }`} 
-                    />
-                    <span>3.8 flash</span>
-                  </span>
                 </div>
                 {displayAccountEmail && <AccountEmailLine email={displayAccountEmail} />}
               </div>
@@ -4053,20 +4066,49 @@ export default function App() {
                         </div>
                         {/* ── END ZONE OVERLAY ── */}
 
+                        {/* Top Alarm Scene Banner in alto with AI Model small note */}
+                        {alertingCameraIds.includes(activeCamera.id) && isMonitoring && (
+                          <div className="absolute top-1.5 left-1.5 right-1.5 z-30 bg-red-950/95 border border-red-500/60 rounded-lg px-2 py-1 flex items-center justify-between shadow-2xl backdrop-blur-md">
+                            <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                              <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-ping shrink-0" />
+                              <p className="text-[7.5px] font-bold text-red-200 truncate">
+                                {lastAnalysis?.description || "Anomalia rilevata nella scena"}
+                              </p>
+                            </div>
+                            <div className="flex items-center gap-1 text-[7px] text-emerald-400 font-mono bg-black/60 px-1.5 py-0.5 rounded border border-emerald-500/30 shrink-0 ml-1">
+                              <span className="w-1 h-1 rounded-full bg-emerald-400 animate-pulse" />
+                              <span>{activeAiModelStatus.model.includes("3.8") ? "gemini 3.8 flash" : activeAiModelStatus.model}</span>
+                            </div>
+                          </div>
+                        )}
+
                         {/* Alarm Overlay for the active camera */}
                         <AnimatePresence>
                           {alertingCameraIds.includes(activeCamera.id) && isMonitoring && (
                             <motion.div 
                               initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                              className="absolute inset-0 z-40 border-4 border-red-500/50 animate-pulse bg-red-950/40 flex flex-col items-center justify-center p-2"
+                              className="absolute inset-0 z-40 border-4 border-red-500/50 animate-pulse bg-red-950/85 flex flex-col items-center justify-center p-2 text-center"
                             >
-                              <div className="p-2 rounded-full bg-red-600 animate-bounce mb-1">
+                              {/* Nota in piccolo in alto con modello AI */}
+                              <div className="flex items-center gap-1 text-[7px] text-emerald-400 font-mono bg-black/70 px-2 py-0.5 rounded-full border border-emerald-500/40 mb-1">
+                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                                <span>{activeAiModelStatus.model.includes("3.8") ? "gemini 3.8 flash" : activeAiModelStatus.model}</span>
+                                {activeAiModelStatus.latencyMs ? <span>({activeAiModelStatus.latencyMs}ms)</span> : null}
+                              </div>
+
+                              <div className="p-1.5 rounded-full bg-red-600 animate-bounce mb-1">
                                 <AlertTriangle className="text-white w-4 h-4" />
                               </div>
                               <h2 className="text-[10px] font-black text-white uppercase tracking-tighter text-center">ALLARME RILEVATO</h2>
+                              
+                              {/* Descrizione della scena in allarme */}
+                              <p className="text-[8px] font-bold text-red-100 leading-snug line-clamp-2 px-2 max-w-[95%] bg-black/60 rounded-md p-1 border border-red-500/30 my-1">
+                                {lastAnalysis?.description || "Rilevata potenziale anomalia o intrusione nella scena."}
+                              </p>
+
                               <button 
                                 onClick={() => stopActiveAlert(activeCamera.id)}
-                                className="mt-1.5 px-3 py-1 bg-white text-red-600 rounded-lg font-black uppercase tracking-widest text-[8px] shadow-lg active:scale-95 transition-all"
+                                className="mt-1 px-3 py-1 bg-white text-red-600 rounded-lg font-black uppercase tracking-widest text-[8px] shadow-lg active:scale-95 transition-all"
                               >
                                 Silenzia
                               </button>
@@ -4078,7 +4120,19 @@ export default function App() {
                       {/* AI DIAGNOSTICS & ANALYSIS FEED (compact for 3.5") */}
                       <div className="bg-[#0b0e17] border border-white/5 rounded-xl p-1.5 shrink-0 flex items-center justify-between gap-2 overflow-hidden">
                         <div className="flex items-center gap-1.5 flex-1 overflow-hidden">
-                          <Cpu size={12} className="text-blue-400 animate-pulse shrink-0" />
+                          {/* SOLO IL LED VERDE accanto al report testuale */}
+                          <span 
+                            className={`w-2 h-2 rounded-full shrink-0 ${
+                              !isMonitoring || !isAiEnabled
+                                ? 'bg-slate-700'
+                                : activeAiModelStatus.status === 'error'
+                                ? 'bg-red-500 shadow-[0_0_8px_#ef4444]'
+                                : activeAiModelStatus.status === 'fallback'
+                                ? 'bg-amber-500 shadow-[0_0_8px_#f59e0b]'
+                                : 'bg-emerald-500 shadow-[0_0_8px_#10b981] animate-pulse'
+                            }`}
+                            title={`AI Model: ${activeAiModelStatus.model}${activeAiModelStatus.latencyMs ? ` (${activeAiModelStatus.latencyMs}ms)` : ''}`}
+                          />
                           <p className="text-[8px] font-semibold text-slate-300 leading-tight line-clamp-2">
                             {isMonitoring && isAiEnabled ? (
                               isAnalyzing ? "Elaborazione in corso..." : (lastAnalysis?.description || "In attesa di dati video...")
