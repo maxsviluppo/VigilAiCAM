@@ -11,14 +11,13 @@ const AQ_GEMINI_KEY = /^AQ\.[A-Za-z0-9_-]{20,}$/;
 export type GeminiApiKeyFormat = "legacy" | "aq" | "unknown";
 
 export const VIGILAI_DEFAULT_AI_MODEL = "gemini-3.8-flash";
-export const VIGILAI_FALLBACK_AI_MODELS = ["gemini-3.8-flash", "gemini-2.5-flash", "gemini-flash-latest"];
+export const VIGILAI_FALLBACK_AI_MODELS = ["gemini-3.8-flash", "gemini-3-flash-preview", "gemini-2.5-flash", "gemini-flash-latest"];
 
 const DEPRECATED_AI_MODELS = new Set([
   "gemini-1.5-flash",
   "gemini-1.5-flash-latest",
   "gemini-1.5-flash-8b",
   "gemini-2.0-flash",
-  "gemini-3-flash-preview",
 ]);
 
 /** Forza Gemini 3.8 se in localStorage/cloud è rimasto un modello vecchio (es. 1.5). */
@@ -110,6 +109,14 @@ export function formatGeminiAuthError(apiKey: string, rawMessage = ""): string {
     return (
       "Autenticazione Gemini fallita: chiave AIza non valida o revocata. " +
       "Crea una nuova chiave in AI Studio (formato AQ.) e sostituisci quella nel .env e in Impostazioni."
+    );
+  }
+
+  if (base.includes("403") || base.includes("PERMISSION_DENIED") || base.includes("denied access")) {
+    return (
+      "Errore 403 Google: Accesso negato ('Your project has been denied access'). " +
+      "Questa specifica chiave appartiene a un sotto-progetto Google Cloud disabilitato. " +
+      "Usa la chiave generata nel Default Gemini Project (gen-lang-client-0195516927)."
     );
   }
 

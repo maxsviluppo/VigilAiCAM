@@ -8,6 +8,7 @@ import {
   resolveVigilAiModel,
   validateGeminiApiKeyOrThrow,
   VIGILAI_DEFAULT_AI_MODEL,
+  VIGILAI_FALLBACK_AI_MODELS,
 } from "../utils/geminiApiKey";
 import { geminiGenerateContentRest } from "../utils/geminiRest";
 
@@ -26,7 +27,7 @@ export const analyzeFrame = async (
   base64Image: string, 
   triggers: AlertTrigger[] = ["intrusion", "violence"],
   location: string = "Area monitorata",
-  modelId: string = "gemini-3.8-flash",
+  modelId: string = VIGILAI_DEFAULT_AI_MODEL,
   zones: any[] = [],
   triggerDescriptionsMap?: Record<string, string>
 ): Promise<DetectionResult> => {
@@ -34,22 +35,19 @@ export const analyzeFrame = async (
   let resolvedApiKey = "";
   try {
     const hasLocalStorage = typeof localStorage !== "undefined" && typeof localStorage?.getItem === "function";
-    let rawKey = hasLocalStorage ? (localStorage.getItem("vigilai_gemini_key") || "") : "";
-    if (!rawKey) {
-       // @ts-ignore
-       rawKey = (typeof import.meta !== "undefined" && (import.meta as any).env?.VITE_GEMINI_API_KEY) || "";
-    }
-    if (!rawKey) {
-       // @ts-ignore
-       rawKey = (typeof process !== "undefined" && (process.env?.GEMINI_API_KEY || process.env?.VITE_GEMINI_API_KEY)) || "";
-    }
-    const apiKey = validateGeminiApiKeyOrThrow(rawKey);
-    resolvedApiKey = apiKey;
+    const localKey = hasLocalStorage ? normalizeGeminiApiKey(localStorage.getItem("vigilai_gemini_key") || "") : "";
+    const envKey = normalizeGeminiApiKey(
+      (typeof import.meta !== "undefined" && (import.meta as any).env?.VITE_GEMINI_API_KEY) ||
+      (typeof process !== "undefined" && (process.env?.GEMINI_API_KEY || process.env?.VITE_GEMINI_API_KEY)) || ""
+    );
 
-    const keyFormat = getGeminiApiKeyFormat(apiKey);
-    console.log(`[AI Core] Inizializzazione chiave formato ${keyFormat}: ${apiKey.substring(0, 4)}...${apiKey.substring(apiKey.length - 4)}`);
+    const keysToTry: string[] = [];
+    if (localKey) keysToTry.push(localKey);
+    if (envKey && !keysToTry.includes(envKey)) keysToTry.push(envKey);
 
-    const ai = createGeminiClient(apiKey);
+    if (keysToTry.length === 0) {
+      throw new Error("API Key mancante. Inseriscila in Impostazioni → IA.");
+    }
 
     // Clean base64 data if it contains the prefix
     const cleanBase64 = base64Image.includes(",") ? base64Image.split(",")[1] : base64Image;
@@ -94,11 +92,10 @@ export const analyzeFrame = async (
 
     const primaryModel = resolveVigilAiModel(modelId);
 
-    // Costruiamo la sequenza di modelli: primario (3.8-flash) con fallback intelligente su 2.5-flash e flash-latest
+    // Costruiamo la sequenza di modelli resiliente: primario (3-flash-preview o 3.8-flash) con fallback intelligente
     const modelsToTry = [
       primaryModel,
-      ...(primaryModel !== "gemini-2.5-flash" ? ["gemini-2.5-flash"] : []),
-      ...(primaryModel !== "gemini-flash-latest" ? ["gemini-flash-latest"] : [])
+      ...VIGILAI_FALLBACK_AI_MODELS.filter((m) => m !== primaryModel),
     ];
 
     const contents = [
@@ -115,101 +112,133 @@ export const analyzeFrame = async (
     let finalParsed: any = null;
     let successfulModel = primaryModel;
 
-    for (let i = 0; i < modelsToTry.length; i++) {
-      const candidateModel = modelsToTry[i];
-      const is38 = candidateModel.includes("3.8");
+    // Iterazione con self-healing: prova prima la chiave salvata in locale, se fallisce con 403/progetto disabilitato prova quella del .env
+    for (let k = 0; k < keysToTry.length; k++) {
+      const apiKey = keysToTry[k];
+      resolvedApiKey = apiKey;
+      validateGeminiApiKeyOrThrow(apiKey);
+      const keyFormat = getGeminiApiKeyFormat(apiKey);
+      const ai = createGeminiClient(apiKey);
+      let keyPermissionError = false;
 
-      const configObj: any = {
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            threatLevel: { type: Type.STRING, enum: ["low", "medium", "high"] },
-            detectedEvents: { type: Type.ARRAY, items: { type: Type.STRING } },
-            description: { type: Type.STRING },
-            isEmergency: { type: Type.BOOLEAN },
+      for (let i = 0; i < modelsToTry.length; i++) {
+        const candidateModel = modelsToTry[i];
+        const is38 = candidateModel.includes("3.8");
+
+        const configObj: any = {
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              threatLevel: { type: Type.STRING, enum: ["low", "medium", "high"] },
+              detectedEvents: { type: Type.ARRAY, items: { type: Type.STRING } },
+              description: { type: Type.STRING },
+              isEmergency: { type: Type.BOOLEAN },
+            },
+            required: ["threatLevel", "detectedEvents", "description", "isEmergency"],
           },
-          required: ["threatLevel", "detectedEvents", "description", "isEmergency"],
-        },
-      };
+        };
 
-      if (is38) {
-        configObj.thinkingConfig = { thinkingLevel: "low" };
-      }
+        if (is38) {
+          configObj.thinkingConfig = { thinkingLevel: "low" };
+        }
 
-      // Prova fino a 2 tentativi se 503 (high demand) sul modello primario
-      const maxAttempts = (candidateModel === primaryModel) ? 2 : 1;
-      let attemptSuccess = false;
+        // Prova fino a 2 tentativi se 503 (high demand) sul modello primario
+        const maxAttempts = (candidateModel === primaryModel) ? 2 : 1;
+        let attemptSuccess = false;
 
-      for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-        try {
-          let text: string;
-          if (keyFormat === "aq") {
-            const restBody: Record<string, unknown> = {
-              contents,
-              generationConfig: {
-                responseMimeType: configObj.responseMimeType,
-                responseSchema: configObj.responseSchema,
-              },
-            };
-            if (configObj.thinkingConfig) {
-              (restBody.generationConfig as Record<string, unknown>).thinkingConfig = configObj.thinkingConfig;
+        for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+          try {
+            let text: string;
+            if (keyFormat === "aq") {
+              const restBody: Record<string, unknown> = {
+                contents,
+                generationConfig: {
+                  responseMimeType: configObj.responseMimeType,
+                  responseSchema: configObj.responseSchema,
+                },
+              };
+              if (configObj.thinkingConfig) {
+                (restBody.generationConfig as Record<string, unknown>).thinkingConfig = configObj.thinkingConfig;
+              }
+              text = await geminiGenerateContentRest(apiKey, candidateModel, restBody);
+            } else {
+              const response = await ai.models.generateContent({
+                model: candidateModel,
+                contents,
+                config: configObj,
+              });
+              if (!response.text) throw new Error("Risposta AI vuota");
+              text = response.text;
             }
-            text = await geminiGenerateContentRest(apiKey, candidateModel, restBody);
-          } else {
-            const response = await ai.models.generateContent({
-              model: candidateModel,
-              contents,
-              config: configObj,
-            });
-            if (!response.text) throw new Error("Risposta AI vuota");
-            text = response.text;
+
+            finalParsed = JSON.parse(text);
+            successfulModel = candidateModel;
+            attemptSuccess = true;
+            break;
+          } catch (callErr: any) {
+            lastErrorMsg = callErr.message || String(callErr);
+
+            if (lastErrorMsg.startsWith("{")) {
+              try {
+                const p = JSON.parse(lastErrorMsg);
+                lastErrorMsg = p.error?.message || lastErrorMsg;
+              } catch {}
+            }
+
+            const isAuthOrPermission =
+              lastErrorMsg.includes("403") ||
+              lastErrorMsg.includes("PERMISSION_DENIED") ||
+              lastErrorMsg.includes("denied access") ||
+              lastErrorMsg.includes("disabled");
+
+            if (isAuthOrPermission) {
+              console.warn(`[AI Core] Chiave ${apiKey.slice(0, 8)}... non ha accesso (${lastErrorMsg.slice(0, 80)})`);
+              keyPermissionError = true;
+              break;
+            }
+
+            if (
+              lastErrorMsg.includes("401") ||
+              lastErrorMsg.includes("UNAUTHENTICATED") ||
+              lastErrorMsg.toLowerCase().includes("api key not valid") ||
+              lastErrorMsg.includes("ACCESS_TOKEN_TYPE_UNSUPPORTED") ||
+              lastErrorMsg.includes("Expected OAuth")
+            ) {
+              console.warn(`[AI Core] Chiave non autenticata: ${lastErrorMsg.slice(0, 80)}`);
+              keyPermissionError = true;
+              break;
+            }
+
+            const isOverloaded = 
+              lastErrorMsg.includes("503") ||
+              lastErrorMsg.includes("UNAVAILABLE") ||
+              lastErrorMsg.includes("high demand") ||
+              lastErrorMsg.includes("RESOURCE_EXHAUSTED") ||
+              lastErrorMsg.includes("quota") ||
+              lastErrorMsg.includes("429");
+
+            if (isOverloaded && attempt < maxAttempts) {
+              console.warn(`[AI Core] ${candidateModel} picco temporaneo (tentativo ${attempt}/${maxAttempts}). Attesa 600ms e riprovo...`);
+              await sleep(600);
+              continue;
+            }
+
+            console.warn(`[AI Core] Modello ${candidateModel} non disponibile al momento (${lastErrorMsg.slice(0, 100)}).`);
+            break;
           }
+        }
 
-          finalParsed = JSON.parse(text);
-          successfulModel = candidateModel;
-          attemptSuccess = true;
-          break;
-        } catch (callErr: any) {
-          lastErrorMsg = callErr.message || String(callErr);
-
-          if (lastErrorMsg.startsWith("{")) {
-            try {
-              const p = JSON.parse(lastErrorMsg);
-              lastErrorMsg = p.error?.message || lastErrorMsg;
-            } catch {}
-          }
-
-          if (
-            lastErrorMsg.includes("401") ||
-            lastErrorMsg.includes("UNAUTHENTICATED") ||
-            lastErrorMsg.toLowerCase().includes("api key not valid") ||
-            lastErrorMsg.includes("ACCESS_TOKEN_TYPE_UNSUPPORTED") ||
-            lastErrorMsg.includes("Expected OAuth")
-          ) {
-            throw new Error(formatGeminiAuthError(resolvedApiKey, lastErrorMsg));
-          }
-
-          const isOverloaded = 
-            lastErrorMsg.includes("503") ||
-            lastErrorMsg.includes("UNAVAILABLE") ||
-            lastErrorMsg.includes("high demand") ||
-            lastErrorMsg.includes("RESOURCE_EXHAUSTED") ||
-            lastErrorMsg.includes("quota") ||
-            lastErrorMsg.includes("429");
-
-          if (isOverloaded && attempt < maxAttempts) {
-            console.warn(`[AI Core] ${candidateModel} picco temporaneo (tentativo ${attempt}/${maxAttempts}). Attesa 600ms e riprovo...`);
-            await sleep(600);
-            continue;
-          }
-
-          console.warn(`[AI Core] Modello ${candidateModel} non disponibile al momento (${lastErrorMsg.slice(0, 100)}).`);
+        if (attemptSuccess || keyPermissionError) {
           break;
         }
       }
 
-      if (attemptSuccess) {
+      if (finalParsed) {
+        if (apiKey !== localKey && hasLocalStorage) {
+          console.log("[AI Core] Auto-ripristino: salvata in localStorage la chiave funzionante dal .env");
+          localStorage.setItem("vigilai_gemini_key", apiKey);
+        }
         break;
       }
     }
@@ -229,11 +258,16 @@ export const analyzeFrame = async (
       };
     }
 
-    console.error(`[AI Core] Tutti i modelli sono temporaneamente occupati: ${lastErrorMsg}`);
+    console.error(`[AI Core] Tutti i modelli hanno fallito: ${lastErrorMsg}`);
+    const isPermissionError = lastErrorMsg.includes("403") || lastErrorMsg.includes("PERMISSION_DENIED") || lastErrorMsg.includes("denied access") || lastErrorMsg.includes("disabled");
+    const errorDesc = isPermissionError 
+      ? `⚠️ Errore Google API (403): Accesso negato o progetto disabilitato (${lastErrorMsg.slice(0, 80)}).`
+      : `⚠️ Modelli Gemini temporaneamente occupati da picco di traffico. Nuovo tentativo al prossimo frame.`;
+
     return {
       threatLevel: "low",
       detectedEvents: [],
-      description: `⚠️ Modelli Gemini temporaneamente occupati da picco di traffico. Nuovo tentativo al prossimo frame.`,
+      description: errorDesc,
       isEmergency: false,
       usedModel: primaryModel,
       latencyMs,

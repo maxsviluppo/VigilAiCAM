@@ -1,7 +1,7 @@
 import { Injectable } from '@angular/core';
 import { Type } from '@google/genai';
 import { createGeminiClient } from '../utils/geminiClient';
-import { getGeminiApiKeyFormat, normalizeGeminiApiKey, resolveVigilAiModel } from '../utils/geminiApiKey';
+import { getGeminiApiKeyFormat, normalizeGeminiApiKey, resolveVigilAiModel, VIGILAI_FALLBACK_AI_MODELS } from '../utils/geminiApiKey';
 import { geminiGenerateContentRest } from '../utils/geminiRest';
 
 @Injectable({
@@ -34,8 +34,7 @@ export class GeminiService {
         const primaryModel = resolveVigilAiModel(localStorage.getItem("vigilai_model"));
         const modelsToTry = [
             primaryModel,
-            ...(primaryModel !== "gemini-2.5-flash" ? ["gemini-2.5-flash"] : []),
-            ...(primaryModel !== "gemini-flash-latest" ? ["gemini-flash-latest"] : [])
+            ...VIGILAI_FALLBACK_AI_MODELS.filter((m) => m !== primaryModel)
         ];
 
         const base64Image = await this.fileToBase64(file);

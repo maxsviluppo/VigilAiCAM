@@ -32,7 +32,7 @@ import {
 // FIX DEFINITIVO PER ENETUNREACH SU RASPBERRY PI (Node.js 18+ IPv6 issue)
 dns.setDefaultResultOrder("ipv4first");
 
-dotenv.config();
+dotenv.config({ override: true });
 
 // ─── TELEGRAM via Direct API (Senza OpenClaw) ─────────────────────────────────
 // Invia una notifica Telegram usando direttamente le API di Telegram.
@@ -713,6 +713,7 @@ async function startServer() {
       res.json({
         success: true,
         geminiKey: process.env.GEMINI_API_KEY || "",
+        geminiKeyUpdatedAt: process.env.GEMINI_API_KEY_UPDATED_AT || "",
         emailUser: process.env.EMAIL_USER || "",
         emailPass: process.env.EMAIL_PASS || "",
         telegramChatId: process.env.TELEGRAM_CHAT_ID || "",

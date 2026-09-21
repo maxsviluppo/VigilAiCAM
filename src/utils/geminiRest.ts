@@ -4,7 +4,7 @@ export async function geminiGenerateContentRest(
   model: string,
   body: Record<string, unknown>,
 ): Promise<string> {
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`;
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`;
   const res = await fetch(url, {
     method: "POST",
     headers: {
