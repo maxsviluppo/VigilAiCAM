@@ -74,7 +74,7 @@ import {
   getTriggerScheduleBadgeText,
 } from "./utils/cameraNetwork";
 import { User } from "@supabase/supabase-js";
-import { GEMINI_API_KEY_MODAL_PLACEHOLDER, GEMINI_API_KEY_PLACEHOLDER, normalizeGeminiApiKey, pickPreferredGeminiApiKey } from "./utils/geminiApiKey";
+import { GEMINI_API_KEY_MODAL_PLACEHOLDER, GEMINI_API_KEY_PLACEHOLDER, normalizeGeminiApiKey, pickPreferredGeminiApiKey, resolveVigilAiModel, VIGILAI_DEFAULT_AI_MODEL } from "./utils/geminiApiKey";
 import { AdminLogin } from "./components/AdminLogin";
 import { AdminConsole } from "./components/AdminConsole";
 
@@ -1095,7 +1095,13 @@ export default function App() {
   const [selectedZoneId, setSelectedZoneId] = useState<string | null>(null);
   
   // Settings State
-  const [aiModel, setAiModel] = useState(() => localStorage.getItem("vigilai_model") || "gemini-3.8-flash");
+  const [aiModel, setAiModel] = useState(() => {
+    const resolved = resolveVigilAiModel(localStorage.getItem("vigilai_model"));
+    if (localStorage.getItem("vigilai_model") !== resolved) {
+      localStorage.setItem("vigilai_model", resolved);
+    }
+    return resolved;
+  });
   const [activeAiModelStatus, setActiveAiModelStatus] = useState<{
     model: string;
     latencyMs?: number;
@@ -5896,9 +5902,7 @@ export default function App() {
                       }}
                       className="shrink-0 w-full h-8 bg-black/40 border border-white/10 px-2 rounded-lg text-[10px] text-white outline-none focus:border-blue-500/50 font-bold appearance-none cursor-pointer"
                     >
-                      <option value="gemini-3.8-flash" className="bg-[#0f172a]">Gemini 3.8 Flash (Consigliato)</option>
-                      <option value="gemini-2.0-flash" className="bg-[#0f172a]">Gemini 2.0 Flash</option>
-                      <option value="gemini-1.5-flash" className="bg-[#0f172a]">Gemini 1.5 Flash</option>
+                      <option value={VIGILAI_DEFAULT_AI_MODEL} className="bg-[#0f172a]">Gemini 3.8 Flash (Consigliato)</option>
                     </select>
 
                     {/* Chiave API */}
@@ -5959,7 +5963,7 @@ export default function App() {
                   ) : (
                   <div className="space-y-3">
                     <div className="flex justify-between items-end">
-                      <label className="text-[9px] font-black uppercase tracking-widest text-slate-500">Motore AI (Gemini 1.5)</label>
+                      <label className="text-[9px] font-black uppercase tracking-widest text-slate-500">Motore AI (Gemini 3.8)</label>
                       <button type="button" onClick={() => setShowApiKeyModal(true)} className="text-[8px] text-blue-400 hover:text-blue-300 uppercase font-black tracking-widest flex items-center gap-1">Ottieni API Key <ChevronRight size={10}/></button>
                     </div>
                     <div className="bg-blue-500/5 border border-blue-500/10 p-4 rounded-2xl space-y-4">
@@ -5981,9 +5985,7 @@ export default function App() {
                             }}
                             className="w-full bg-black/40 border border-white/10 px-4 py-3 rounded-xl text-xs text-white outline-none focus:border-blue-500/50 transition-all font-bold appearance-none cursor-pointer"
                           >
-                            <option value="gemini-3.8-flash" className="bg-[#0f172a]">Gemini 3.8 Flash (Più veloce & intelligente - Consigliato)</option>
-                            <option value="gemini-2.0-flash" className="bg-[#0f172a]">Gemini 2.0 Flash</option>
-                            <option value="gemini-1.5-flash" className="bg-[#0f172a]">Gemini 1.5 Flash</option>
+                            <option value={VIGILAI_DEFAULT_AI_MODEL} className="bg-[#0f172a]">Gemini 3.8 Flash (Più veloce & intelligente - Consigliato)</option>
                           </select>
                         </div>
                       </div>

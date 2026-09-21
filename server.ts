@@ -194,6 +194,8 @@ async function startServer() {
     return [
       `GEMINI_API_KEY=${process.env.GEMINI_API_KEY || ""}`,
       `VITE_GEMINI_API_KEY=${process.env.VITE_GEMINI_API_KEY || ""}`,
+      `GOOGLE_API_KEY=${process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY || ""}`,
+      `GEMINI_API_KEY_UPDATED_AT=${process.env.GEMINI_API_KEY_UPDATED_AT || ""}`,
       `EMAIL_USER=${process.env.EMAIL_USER || ""}`,
       `EMAIL_PASS=${process.env.EMAIL_PASS || ""}`,
       `TELEGRAM_CHAT_ID=${process.env.TELEGRAM_CHAT_ID || ""}`,
@@ -201,6 +203,7 @@ async function startServer() {
       `NOTIFICATION_EMAILS=${process.env.NOTIFICATION_EMAILS || ""}`,
       `VITE_SUPABASE_URL=${process.env.VITE_SUPABASE_URL || ""}`,
       `VITE_SUPABASE_ANON_KEY=${process.env.VITE_SUPABASE_ANON_KEY || ""}`,
+      `SUPABASE_SERVICE_ROLE_KEY=${process.env.SUPABASE_SERVICE_ROLE_KEY || ""}`,
       `NODE_ENV=${nodeEnv}`,
     ].join("\n");
   };
@@ -285,7 +288,7 @@ async function startServer() {
       // Sincronizza API Key Gemini (tabella settings)
       const { data: settingsData, error: settingsError } = await supabase
         .from('settings')
-        .select('gemini_part1, gemini_part2')
+        .select('gemini_part1, gemini_part2, updated_at')
         .eq('id', 'gemini_key_backup')
         .single();
 
@@ -295,11 +298,31 @@ async function startServer() {
       }
 
       if (settingsData && settingsData.gemini_part1 && settingsData.gemini_part2) {
-        const fullKey = settingsData.gemini_part1 + settingsData.gemini_part2;
-        if (fullKey && fullKey !== process.env.GEMINI_API_KEY) {
+        const fullKey = normalizeGeminiApiKey(settingsData.gemini_part1 + settingsData.gemini_part2);
+        const envKey = normalizeGeminiApiKey(process.env.GEMINI_API_KEY || "");
+        const cloudUpdated = settingsData.updated_at ? Date.parse(String(settingsData.updated_at)) : NaN;
+        const envUpdated = process.env.GEMINI_API_KEY_UPDATED_AT
+          ? Date.parse(String(process.env.GEMINI_API_KEY_UPDATED_AT))
+          : NaN;
+
+        if (fullKey && !envKey) {
           process.env.GEMINI_API_KEY = fullKey;
           process.env.VITE_GEMINI_API_KEY = fullKey;
+          process.env.GOOGLE_API_KEY = fullKey;
           changed = true;
+        } else if (
+          fullKey &&
+          envKey &&
+          fullKey !== envKey &&
+          !Number.isNaN(cloudUpdated) &&
+          (Number.isNaN(envUpdated) || cloudUpdated > envUpdated)
+        ) {
+          process.env.GEMINI_API_KEY = fullKey;
+          process.env.VITE_GEMINI_API_KEY = fullKey;
+          process.env.GOOGLE_API_KEY = fullKey;
+          changed = true;
+        } else if (fullKey && envKey && fullKey !== envKey) {
+          console.log("[Sync Cloud] Mantengo chiave Gemini locale (.env) più recente del backup cloud.");
         }
       }
 
@@ -724,6 +747,8 @@ async function startServer() {
         const normalizedKey = normalizeGeminiApiKey(geminiKey);
         process.env.GEMINI_API_KEY = normalizedKey;
         process.env.VITE_GEMINI_API_KEY = normalizedKey;
+        process.env.GOOGLE_API_KEY = normalizedKey;
+        process.env.GEMINI_API_KEY_UPDATED_AT = new Date().toISOString();
       }
       if (emailUser !== undefined && emailUser.trim() !== "") process.env.EMAIL_USER = emailUser;
       if (emailPass !== undefined && emailPass.trim() !== "") process.env.EMAIL_PASS = emailPass;
@@ -1733,13 +1758,228 @@ async function startServer() {
     }
   });
 
+  // ─── SAAS MASTER CONSOLE API ───────────────────────────────────────────────
+  const SUPERADMIN_CREDENTIALS = {
+    email: "castromassimo@gmail.com",
+    password: "1974massimo123"
+  };
+
+  const SUBSCRIPTIONS_FILE = path.join(process.cwd(), "admin_subscriptions.json");
+
+  function getStoredSubscriptions(): Record<string, any> {
+    try {
+      if (fs.existsSync(SUBSCRIPTIONS_FILE)) {
+        return JSON.parse(fs.readFileSync(SUBSCRIPTIONS_FILE, "utf-8"));
+      }
+    } catch (e: any) {
+      console.error("[SaaS Admin] Errore lettura admin_subscriptions.json:", e.message);
+    }
+    return {};
+  }
+
+  function saveStoredSubscriptions(data: Record<string, any>) {
+    try {
+      fs.writeFileSync(SUBSCRIPTIONS_FILE, JSON.stringify(data, null, 2), "utf-8");
+    } catch (e: any) {
+      console.error("[SaaS Admin] Errore salvataggio admin_subscriptions.json:", e.message);
+    }
+  }
+
+  // POST /api/admin/auth/login — autenticazione superadmin
+  app.post("/api/admin/auth/login", (req, res) => {
+    const { email, password } = req.body || {};
+    if (
+      email && 
+      password && 
+      email.trim().toLowerCase() === SUPERADMIN_CREDENTIALS.email.toLowerCase() && 
+      password === SUPERADMIN_CREDENTIALS.password
+    ) {
+      console.log(`[SaaS Admin] SuperAdmin autenticato con successo: ${email}`);
+      return res.json({
+        success: true,
+        token: ADMIN_TOKEN,
+        user: {
+          email: SUPERADMIN_CREDENTIALS.email,
+          name: "Massimo Castro",
+          role: "SuperAdmin"
+        }
+      });
+    }
+
+    console.warn(`[SaaS Admin] Tentativo di accesso SuperAdmin fallito per email: ${email}`);
+    return res.status(401).json({
+      success: false,
+      error: "Credenziali SuperAdmin non corrette"
+    });
+  });
+
+  // GET /api/admin/tenants — lista dettagliata utenti con stato SaaS, piano e quote
+  app.get("/api/admin/tenants", async (req, res) => {
+    if (!checkAdminToken(req, res)) return;
+    try {
+      const response = await supabaseAdminFetch("admin/users?per_page=200");
+      if (!response.ok) {
+        const errText = await response.text();
+        return res.json({ success: false, error: `Errore Supabase: ${errText.slice(0, 200)}` });
+      }
+      const data = await response.json() as any;
+      const subs = getStoredSubscriptions();
+
+      // Recupera anche conteggio telecamere se possibile
+      let cameraCounts: Record<string, number> = {};
+      try {
+        const { createClient } = await import("@supabase/supabase-js");
+        const sbUrl = process.env.VITE_SUPABASE_URL;
+        const sbKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY;
+        if (sbUrl && sbKey) {
+          const supabase = createClient(sbUrl, sbKey);
+          const { data: camData } = await supabase.from("cameras").select("id, user_id");
+          if (camData) {
+            for (const cam of camData) {
+              if (cam.user_id) {
+                cameraCounts[cam.user_id] = (cameraCounts[cam.user_id] || 0) + 1;
+              }
+            }
+          }
+        }
+      } catch (e: any) {
+        console.warn("[SaaS Admin] Impossibile contare telecamere:", e.message);
+      }
+
+      const tenants = (data.users || []).map((u: any) => {
+        const isBlocked = !!u.banned_until && new Date(u.banned_until) > new Date();
+        const userSub = subs[u.id] || {
+          plan: "Starter",
+          priceMonthly: 49,
+          status: isBlocked ? "blocked" : "active",
+          expiresAt: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
+          maxCameras: 4,
+          maxRaspberry: 1,
+          paymentMethod: "Bonifico / Manuale",
+          companyName: u.user_metadata?.company_name || u.email.split("@")[0].toUpperCase(),
+          vatNumber: u.user_metadata?.vat_number || "",
+          notes: ""
+        };
+
+        return {
+          id: u.id,
+          email: u.email,
+          createdAt: u.created_at,
+          lastSignInAt: u.last_sign_in_at,
+          isBlocked,
+          camerasCount: cameraCounts[u.id] || 0,
+          ...userSub
+        };
+      });
+
+      res.json({ success: true, tenants });
+    } catch (err: any) {
+      console.error("[SaaS Admin] Errore /api/admin/tenants:", err.message);
+      res.json({ success: false, error: err.message });
+    }
+  });
+
+  // POST /api/admin/tenant/update-plan — aggiornamento piano e parametri SaaS utente
+  app.post("/api/admin/tenant/update-plan", (req, res) => {
+    if (!checkAdminToken(req, res)) return;
+    const { userId, plan, priceMonthly, expiresAt, maxCameras, maxRaspberry, paymentMethod, companyName, vatNumber, notes } = req.body;
+    if (!userId) {
+      return res.status(400).json({ success: false, error: "userId mancante" });
+    }
+
+    const subs = getStoredSubscriptions();
+    subs[userId] = {
+      ...(subs[userId] || {}),
+      plan: plan || "Starter",
+      priceMonthly: Number(priceMonthly) || 49,
+      expiresAt: expiresAt || subs[userId]?.expiresAt || "",
+      maxCameras: Number(maxCameras) || 4,
+      maxRaspberry: Number(maxRaspberry) || 1,
+      paymentMethod: paymentMethod || "Manuale",
+      companyName: companyName || "",
+      vatNumber: vatNumber || "",
+      notes: notes || "",
+      updatedAt: new Date().toISOString()
+    };
+    saveStoredSubscriptions(subs);
+
+    console.log(`[SaaS Admin] Piano aggiornato per utente ${userId}: ${subs[userId].plan}`);
+    res.json({ success: true, subscription: subs[userId] });
+  });
+
+  // GET /api/admin/fleet — stato parco Raspberry Pi e telemetria
+  app.get("/api/admin/fleet", async (req, res) => {
+    if (!checkAdminToken(req, res)) return;
+    try {
+      const isPi = process.platform !== "win32";
+      const hostname = os.hostname();
+      const nets = networkInterfaces();
+      let localIp = "127.0.0.1";
+      for (const k of Object.keys(nets)) {
+        for (const iface of nets[k] || []) {
+          if (iface.family === "IPv4" && !iface.internal) {
+            localIp = iface.address;
+            break;
+          }
+        }
+      }
+
+      // Rilevamento memoria e carico
+      const totalMem = Math.round(os.totalmem() / (1024 * 1024));
+      const freeMem = Math.round(os.freemem() / (1024 * 1024));
+      const usedMem = totalMem - freeMem;
+      const memPercent = Math.round((usedMem / totalMem) * 100);
+
+      // Esempio lista dispositivi della flotta
+      const fleet = [
+        {
+          id: "rpi-master-edge-01",
+          name: "Raspberry Pi 5 Hub (Master)",
+          location: "Laboratorio Centrale",
+          assignedTo: "castromassimo@gmail.com",
+          ip: localIp,
+          hostname,
+          status: "online",
+          version: `v${getCurrentVersion()}`,
+          isPi,
+          temperature: isPi ? "48.2°C" : "39.5°C",
+          cpuLoad: isPi ? "18%" : "12%",
+          ramUsage: `${usedMem}MB / ${totalMem}MB (${memPercent}%)`,
+          screenAttached: 'LCD 3.5" (480x320 touch)',
+          lastPing: new Date().toISOString()
+        }
+      ];
+
+      res.json({ success: true, fleet });
+    } catch (err: any) {
+      res.json({ success: false, error: err.message });
+    }
+  });
+
+
 
   // Vite middleware
 
   if (process.env.NODE_ENV !== "production") {
 
     const vite = await createViteServer({
-      server: { middlewareMode: true },
+      server: {
+        middlewareMode: true,
+        watch: {
+          ignored: [
+            '**/.env',
+            '**/.env.*',
+            '**/.update-status.json',
+            '**/admin_subscriptions.json',
+            '**/*.log',
+            '**/*.pdf',
+            '**/*.jpg',
+            '**/*.png',
+            '**/dist/**',
+            '**/scripts/**',
+          ],
+        },
+      },
       appType: "spa",
     });
     app.use(vite.middlewares);

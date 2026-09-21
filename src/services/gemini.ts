@@ -1,7 +1,7 @@
 import { Type } from "@google/genai";
 import { AlertTrigger } from "../types";
 import { createGeminiClient } from "../utils/geminiClient";
-import { formatGeminiAuthError, getGeminiApiKeyFormat, normalizeGeminiApiKey } from "../utils/geminiApiKey";
+import { formatGeminiAuthError, getGeminiApiKeyFormat, normalizeGeminiApiKey, resolveVigilAiModel } from "../utils/geminiApiKey";
 
 export interface DetectionResult {
   threatLevel: "low" | "medium" | "high";
@@ -85,7 +85,7 @@ export const analyzeFrame = async (
     
     CRITERIO EMERGENZA (isEmergency=true): Rapina (volto coperto e armi), violenza, fiamme, o QUALSIASI intrusione di persone o veicoli nelle zone 'restricted' o 'alert'.`;
 
-    const modelName = modelId || "gemini-3.8-flash";
+    const modelName = resolveVigilAiModel(modelId);
 
     const configObj: any = {
       responseMimeType: "application/json",

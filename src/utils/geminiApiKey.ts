@@ -10,6 +10,25 @@ const AQ_GEMINI_KEY = /^AQ\.[A-Za-z0-9_-]{20,}$/;
 
 export type GeminiApiKeyFormat = "legacy" | "aq" | "unknown";
 
+export const VIGILAI_DEFAULT_AI_MODEL = "gemini-3.8-flash";
+
+const DEPRECATED_AI_MODELS = new Set([
+  "gemini-1.5-flash",
+  "gemini-1.5-flash-latest",
+  "gemini-1.5-flash-8b",
+  "gemini-2.0-flash",
+  "gemini-3-flash-preview",
+]);
+
+/** Forza Gemini 3.8 se in localStorage/cloud è rimasto un modello vecchio (es. 1.5). */
+export function resolveVigilAiModel(stored?: string | null): string {
+  const id = (stored || "").trim();
+  if (!id || DEPRECATED_AI_MODELS.has(id) || id.includes("1.5")) {
+    return VIGILAI_DEFAULT_AI_MODEL;
+  }
+  return id;
+}
+
 export function normalizeGeminiApiKey(key: string): string {
   return key
     .replace(/\uFEFF/g, "")
