@@ -1,7 +1,15 @@
 import { Type } from "@google/genai";
 import { AlertTrigger } from "../types";
 import { createGeminiClient } from "../utils/geminiClient";
-import { formatGeminiAuthError, getGeminiApiKeyFormat, normalizeGeminiApiKey, resolveVigilAiModel } from "../utils/geminiApiKey";
+import {
+  formatGeminiAuthError,
+  getGeminiApiKeyFormat,
+  normalizeGeminiApiKey,
+  resolveVigilAiModel,
+  validateGeminiApiKeyOrThrow,
+  VIGILAI_DEFAULT_AI_MODEL,
+} from "../utils/geminiApiKey";
+import { geminiGenerateContentRest } from "../utils/geminiRest";
 
 export interface DetectionResult {
   threatLevel: "low" | "medium" | "high";
@@ -11,6 +19,8 @@ export interface DetectionResult {
   usedModel?: string;
   latencyMs?: number;
 }
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 export const analyzeFrame = async (
   base64Image: string, 
@@ -23,21 +33,18 @@ export const analyzeFrame = async (
   const startTime = Date.now();
   let resolvedApiKey = "";
   try {
-    let rawKey = localStorage.getItem("vigilai_gemini_key") || "";
+    const hasLocalStorage = typeof localStorage !== "undefined" && typeof localStorage?.getItem === "function";
+    let rawKey = hasLocalStorage ? (localStorage.getItem("vigilai_gemini_key") || "") : "";
     if (!rawKey) {
        // @ts-ignore
-       rawKey = import.meta.env.VITE_GEMINI_API_KEY || "";
+       rawKey = (typeof import.meta !== "undefined" && (import.meta as any).env?.VITE_GEMINI_API_KEY) || "";
     }
     if (!rawKey) {
        // @ts-ignore
-       rawKey = process.env.GEMINI_API_KEY || "";
+       rawKey = (typeof process !== "undefined" && (process.env?.GEMINI_API_KEY || process.env?.VITE_GEMINI_API_KEY)) || "";
     }
-    const apiKey = normalizeGeminiApiKey(rawKey);
+    const apiKey = validateGeminiApiKeyOrThrow(rawKey);
     resolvedApiKey = apiKey;
-
-    if (!apiKey) {
-      throw new Error("API Key mancante.");
-    }
 
     const keyFormat = getGeminiApiKeyFormat(apiKey);
     console.log(`[AI Core] Inizializzazione chiave formato ${keyFormat}: ${apiKey.substring(0, 4)}...${apiKey.substring(apiKey.length - 4)}`);
@@ -85,50 +92,150 @@ export const analyzeFrame = async (
     
     CRITERIO EMERGENZA (isEmergency=true): Rapina (volto coperto e armi), violenza, fiamme, o QUALSIASI intrusione di persone o veicoli nelle zone 'restricted' o 'alert'.`;
 
-    const modelName = resolveVigilAiModel(modelId);
+    const primaryModel = resolveVigilAiModel(modelId);
 
-    const configObj: any = {
-      responseMimeType: "application/json",
-      responseSchema: {
-        type: Type.OBJECT,
-        properties: {
-          threatLevel: { type: Type.STRING, enum: ["low", "medium", "high"] },
-          detectedEvents: { type: Type.ARRAY, items: { type: Type.STRING } },
-          description: { type: Type.STRING },
-          isEmergency: { type: Type.BOOLEAN },
-        },
-        required: ["threatLevel", "detectedEvents", "description", "isEmergency"],
+    // Costruiamo la sequenza di modelli: primario (3.8-flash) con fallback intelligente su 2.5-flash e flash-latest
+    const modelsToTry = [
+      primaryModel,
+      ...(primaryModel !== "gemini-2.5-flash" ? ["gemini-2.5-flash"] : []),
+      ...(primaryModel !== "gemini-flash-latest" ? ["gemini-flash-latest"] : [])
+    ];
+
+    const contents = [
+      {
+        role: "user" as const,
+        parts: [
+          { inlineData: { mimeType: "image/jpeg", data: cleanBase64 } },
+          { text: prompt },
+        ],
       },
-    };
+    ];
 
-    if (modelName.includes("3.8")) {
-      configObj.thinkingConfig = { thinkingLevel: "low" };
+    let lastErrorMsg = "";
+    let finalParsed: any = null;
+    let successfulModel = primaryModel;
+
+    for (let i = 0; i < modelsToTry.length; i++) {
+      const candidateModel = modelsToTry[i];
+      const is38 = candidateModel.includes("3.8");
+
+      const configObj: any = {
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            threatLevel: { type: Type.STRING, enum: ["low", "medium", "high"] },
+            detectedEvents: { type: Type.ARRAY, items: { type: Type.STRING } },
+            description: { type: Type.STRING },
+            isEmergency: { type: Type.BOOLEAN },
+          },
+          required: ["threatLevel", "detectedEvents", "description", "isEmergency"],
+        },
+      };
+
+      if (is38) {
+        configObj.thinkingConfig = { thinkingLevel: "low" };
+      }
+
+      // Prova fino a 2 tentativi se 503 (high demand) sul modello primario
+      const maxAttempts = (candidateModel === primaryModel) ? 2 : 1;
+      let attemptSuccess = false;
+
+      for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+        try {
+          let text: string;
+          if (keyFormat === "aq") {
+            const restBody: Record<string, unknown> = {
+              contents,
+              generationConfig: {
+                responseMimeType: configObj.responseMimeType,
+                responseSchema: configObj.responseSchema,
+              },
+            };
+            if (configObj.thinkingConfig) {
+              (restBody.generationConfig as Record<string, unknown>).thinkingConfig = configObj.thinkingConfig;
+            }
+            text = await geminiGenerateContentRest(apiKey, candidateModel, restBody);
+          } else {
+            const response = await ai.models.generateContent({
+              model: candidateModel,
+              contents,
+              config: configObj,
+            });
+            if (!response.text) throw new Error("Risposta AI vuota");
+            text = response.text;
+          }
+
+          finalParsed = JSON.parse(text);
+          successfulModel = candidateModel;
+          attemptSuccess = true;
+          break;
+        } catch (callErr: any) {
+          lastErrorMsg = callErr.message || String(callErr);
+
+          if (lastErrorMsg.startsWith("{")) {
+            try {
+              const p = JSON.parse(lastErrorMsg);
+              lastErrorMsg = p.error?.message || lastErrorMsg;
+            } catch {}
+          }
+
+          if (
+            lastErrorMsg.includes("401") ||
+            lastErrorMsg.includes("UNAUTHENTICATED") ||
+            lastErrorMsg.toLowerCase().includes("api key not valid") ||
+            lastErrorMsg.includes("ACCESS_TOKEN_TYPE_UNSUPPORTED") ||
+            lastErrorMsg.includes("Expected OAuth")
+          ) {
+            throw new Error(formatGeminiAuthError(resolvedApiKey, lastErrorMsg));
+          }
+
+          const isOverloaded = 
+            lastErrorMsg.includes("503") ||
+            lastErrorMsg.includes("UNAVAILABLE") ||
+            lastErrorMsg.includes("high demand") ||
+            lastErrorMsg.includes("RESOURCE_EXHAUSTED") ||
+            lastErrorMsg.includes("quota") ||
+            lastErrorMsg.includes("429");
+
+          if (isOverloaded && attempt < maxAttempts) {
+            console.warn(`[AI Core] ${candidateModel} picco temporaneo (tentativo ${attempt}/${maxAttempts}). Attesa 600ms e riprovo...`);
+            await sleep(600);
+            continue;
+          }
+
+          console.warn(`[AI Core] Modello ${candidateModel} non disponibile al momento (${lastErrorMsg.slice(0, 100)}).`);
+          break;
+        }
+      }
+
+      if (attemptSuccess) {
+        break;
+      }
     }
 
-    const response = await ai.models.generateContent({
-      model: modelName,
-      contents: [
-        {
-          role: "user",
-          parts: [
-            { inlineData: { mimeType: "image/jpeg", data: cleanBase64 } },
-            { text: prompt }
-          ]
-        }
-      ],
-      config: configObj,
-    });
-
-    const text = response.text;
-    if (!text) throw new Error("Risposta AI vuota");
-
-    const parsed = JSON.parse(text);
     const latencyMs = Date.now() - startTime;
-    console.log(`[AI Core] Analisi frame eseguita con successo con modello: ${modelName} (${latencyMs}ms)`);
 
+    if (finalParsed) {
+      if (successfulModel !== primaryModel) {
+        console.log(`[AI Core] Failover automatico attivo: frame analizzato con ${successfulModel} (${latencyMs}ms)`);
+      } else {
+        console.log(`[AI Core] Analisi frame eseguita con successo con ${successfulModel} (${latencyMs}ms)`);
+      }
+      return {
+        ...finalParsed,
+        usedModel: successfulModel,
+        latencyMs,
+      };
+    }
+
+    console.error(`[AI Core] Tutti i modelli sono temporaneamente occupati: ${lastErrorMsg}`);
     return {
-      ...parsed,
-      usedModel: modelName,
+      threatLevel: "low",
+      detectedEvents: [],
+      description: `⚠️ Modelli Gemini temporaneamente occupati da picco di traffico. Nuovo tentativo al prossimo frame.`,
+      isEmergency: false,
+      usedModel: primaryModel,
       latencyMs,
     };
   } catch (error: any) {
@@ -147,26 +254,19 @@ export const analyzeFrame = async (
       msg.includes("401") ||
       msg.includes("UNAUTHENTICATED") ||
       msg.toLowerCase().includes("api key not valid") ||
-      msg.includes("ACCESS_TOKEN_TYPE_UNSUPPORTED")
+      msg.includes("ACCESS_TOKEN_TYPE_UNSUPPORTED") ||
+      msg.includes("Expected OAuth")
     ) {
       throw new Error(formatGeminiAuthError(resolvedApiKey, msg));
     }
 
-    if (cleanErrorMessage.includes("RESOURCE_EXHAUSTED") || cleanErrorMessage.includes("quota")) {
-      return {
-        threatLevel: "low",
-        detectedEvents: [],
-        description: `Quota API Gemini superata per il modello ${modelId || "gemini-3.8-flash"} (Free Tier). Attendi 60s.`,
-        isEmergency: false,
-        usedModel: modelId,
-        latencyMs,
-      };
-    }
-
-    if (cleanErrorMessage.includes("404") || cleanErrorMessage.includes("NOT_FOUND")) {
-      throw new Error("Modello gemini-3.8-flash non disponibile. Verifica API Gemini e il modello selezionato.");
-    }
-
-    throw new Error(cleanErrorMessage);
+    return {
+      threatLevel: "low",
+      detectedEvents: [],
+      description: `⚠️ Servizio AI: ${cleanErrorMessage.slice(0, 120)}`,
+      isEmergency: false,
+      usedModel: modelId || VIGILAI_DEFAULT_AI_MODEL,
+      latencyMs,
+    };
   }
 };

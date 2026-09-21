@@ -880,8 +880,19 @@ export default function App() {
       .then(res => res.json())
       .then(data => {
         if (data.success) {
-          if (data.geminiKey) {
-            localStorage.setItem("vigilai_gemini_key", data.geminiKey);
+          const localKey = localStorage.getItem("vigilai_gemini_key") || "";
+          const localKeyUpdatedAt = localStorage.getItem("vigilai_gemini_key_updated_at") || "";
+          const resolvedGeminiKey = pickPreferredGeminiApiKey(
+            localKey,
+            data.geminiKey || "",
+            localKeyUpdatedAt,
+            data.geminiKeyUpdatedAt || "",
+          );
+          if (resolvedGeminiKey) {
+            localStorage.setItem("vigilai_gemini_key", resolvedGeminiKey);
+            if (resolvedGeminiKey === (data.geminiKey || "") && data.geminiKeyUpdatedAt) {
+              localStorage.setItem("vigilai_gemini_key_updated_at", data.geminiKeyUpdatedAt);
+            }
           }
           if (data.emailUser) {
             localStorage.setItem("vigilai_email_user", data.emailUser);
@@ -896,7 +907,7 @@ export default function App() {
             localStorage.setItem("vigilai_telegram_token", data.telegramToken);
           }
           setAppSettings({
-            geminiKey: data.geminiKey || localStorage.getItem("vigilai_gemini_key") || "",
+            geminiKey: resolvedGeminiKey || localStorage.getItem("vigilai_gemini_key") || "",
             emailUser: data.emailUser || localStorage.getItem("vigilai_email_user") || "",
             emailPass: data.emailPass || localStorage.getItem("vigilai_email_pass") || "",
             telegramChatId: data.telegramChatId || localStorage.getItem("vigilai_telegram_chat_id") || "",
@@ -5902,7 +5913,8 @@ export default function App() {
                       }}
                       className="shrink-0 w-full h-8 bg-black/40 border border-white/10 px-2 rounded-lg text-[10px] text-white outline-none focus:border-blue-500/50 font-bold appearance-none cursor-pointer"
                     >
-                      <option value={VIGILAI_DEFAULT_AI_MODEL} className="bg-[#0f172a]">Gemini 3.8 Flash (Consigliato)</option>
+                      <option value={VIGILAI_DEFAULT_AI_MODEL} className="bg-[#0f172a]">Gemini 3.8 Flash (Auto Failover)</option>
+                      <option value="gemini-2.5-flash" className="bg-[#0f172a]">Gemini 2.5 Flash (Stabile)</option>
                     </select>
 
                     {/* Chiave API */}
@@ -5985,7 +5997,8 @@ export default function App() {
                             }}
                             className="w-full bg-black/40 border border-white/10 px-4 py-3 rounded-xl text-xs text-white outline-none focus:border-blue-500/50 transition-all font-bold appearance-none cursor-pointer"
                           >
-                            <option value={VIGILAI_DEFAULT_AI_MODEL} className="bg-[#0f172a]">Gemini 3.8 Flash (Più veloce & intelligente - Consigliato)</option>
+                            <option value={VIGILAI_DEFAULT_AI_MODEL} className="bg-[#0f172a]">Gemini 3.8 Flash (Consigliato - Auto Failover 24/7)</option>
+                            <option value="gemini-2.5-flash" className="bg-[#0f172a]">Gemini 2.5 Flash (Stabile ad alta disponibilità)</option>
                           </select>
                         </div>
                       </div>

@@ -11,6 +11,7 @@ const AQ_GEMINI_KEY = /^AQ\.[A-Za-z0-9_-]{20,}$/;
 export type GeminiApiKeyFormat = "legacy" | "aq" | "unknown";
 
 export const VIGILAI_DEFAULT_AI_MODEL = "gemini-3.8-flash";
+export const VIGILAI_FALLBACK_AI_MODELS = ["gemini-3.8-flash", "gemini-2.5-flash", "gemini-flash-latest"];
 
 const DEPRECATED_AI_MODELS = new Set([
   "gemini-1.5-flash",
@@ -49,6 +50,12 @@ export function pickPreferredGeminiApiKey(
   if (!cloud) return local;
   if (!local) return cloud;
 
+  const localFmt = getGeminiApiKeyFormat(local);
+  const cloudFmt = getGeminiApiKeyFormat(cloud);
+  // Non ripristinare AIza dal server/cloud se in browser c'è già una chiave AQ. valida
+  if (localFmt === "aq" && cloudFmt === "legacy") return local;
+  if (localFmt === "legacy" && cloudFmt === "aq") return cloud;
+
   if (localUpdatedAt && cloudUpdatedAt) {
     const localTs = Date.parse(localUpdatedAt);
     const cloudTs = Date.parse(cloudUpdatedAt);
@@ -60,19 +67,49 @@ export function pickPreferredGeminiApiKey(
   return local;
 }
 
+/** Rifiuta chiavi troncate (causa tipica del messaggio OAuth su chiavi AQ.) */
+export function validateGeminiApiKeyOrThrow(key: string): string {
+  const normalized = normalizeGeminiApiKey(key);
+  if (!normalized) {
+    throw new Error("API Key mancante. Inseriscila in Impostazioni → AI.");
+  }
+  const format = getGeminiApiKeyFormat(normalized);
+  if (format === "aq" && normalized.length < 40) {
+    throw new Error(
+      "Chiave AQ. incompleta (copia l'intera chiave da AI Studio, senza spazi). " +
+        "Se persiste, salva di nuovo in Impostazioni e riavvia il server.",
+    );
+  }
+  if (format === "legacy" && normalized.length < 35) {
+    throw new Error("Chiave AIza incompleta. Copia di nuovo la chiave da AI Studio.");
+  }
+  if (format === "unknown") {
+    throw new Error(
+      "Formato chiave non riconosciuto (atteso AIza... o AQ....). Verifica copia/incolla in Impostazioni.",
+    );
+  }
+  return normalized;
+}
+
 export function formatGeminiAuthError(apiKey: string, rawMessage = ""): string {
   const format = getGeminiApiKeyFormat(apiKey);
   const base = rawMessage || "Autenticazione Gemini fallita.";
 
   if (
-    format === "aq" &&
-    (base.includes("ACCESS_TOKEN_TYPE_UNSUPPORTED") ||
-      base.includes("OAuth") ||
-      base.includes("Expected OAuth"))
+    base.includes("ACCESS_TOKEN_TYPE_UNSUPPORTED") ||
+    base.includes("OAuth") ||
+    base.includes("Expected OAuth")
   ) {
+    if (format === "aq") {
+      return (
+        "Google non accetta questa chiave AQ. (errore OAuth). Di solito la chiave è troncata o è stata sovrascritta da una vecchia AIza nel .env/server. " +
+        "Incolla di nuovo la chiave AQ. completa in Impostazioni, clicca Salva, riavvia il server e aggiorna GEMINI_API_KEY nel file .env. " +
+        "In AI Studio la chiave deve essere limitata a «Gemini API»."
+      );
+    }
     return (
-      "Chiave AQ. rifiutata da Google per questo progetto. In AI Studio verifica che la chiave sia abilitata per «Gemini API», " +
-      "salva di nuovo la chiave in VigilAI (Impostazioni) e aggiorna il backup Supabase. Se persiste, rigenera la chiave in AI Studio."
+      "Autenticazione Gemini fallita: chiave AIza non valida o revocata. " +
+      "Crea una nuova chiave in AI Studio (formato AQ.) e sostituisci quella nel .env e in Impostazioni."
     );
   }
 

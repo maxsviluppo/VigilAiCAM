@@ -1,7 +1,8 @@
 import { Injectable } from '@angular/core';
 import { Type } from '@google/genai';
 import { createGeminiClient } from '../utils/geminiClient';
-import { normalizeGeminiApiKey, resolveVigilAiModel } from '../utils/geminiApiKey';
+import { getGeminiApiKeyFormat, normalizeGeminiApiKey, resolveVigilAiModel } from '../utils/geminiApiKey';
+import { geminiGenerateContentRest } from '../utils/geminiRest';
 
 @Injectable({
     providedIn: 'root'
@@ -30,43 +31,74 @@ export class GeminiService {
             throw new Error('API_KEY_MISSING');
         }
 
-        const ai = createGeminiClient(apiKey);
-        const modelName = resolveVigilAiModel(localStorage.getItem("vigilai_model"));
+        const primaryModel = resolveVigilAiModel(localStorage.getItem("vigilai_model"));
+        const modelsToTry = [
+            primaryModel,
+            ...(primaryModel !== "gemini-2.5-flash" ? ["gemini-2.5-flash"] : []),
+            ...(primaryModel !== "gemini-flash-latest" ? ["gemini-flash-latest"] : [])
+        ];
 
         const base64Image = await this.fileToBase64(file);
         const prompt = `Agisci come un esperto di tracciabilità alimentare (HACCP). 
           Analizza questa immagine di un'etichetta di un ingrediente. Estrai: productName, lotNumber, expiryDate (YYYY-MM-DD), notes.`;
 
-        const response = await ai.models.generateContent({
-            model: modelName,
-            contents: [
-                {
-                    role: 'user',
-                    parts: [
-                        { inlineData: { mimeType: file.type, data: base64Image.split(',')[1] } },
-                        { text: prompt }
-                    ]
-                }
-            ],
-            config: {
-                responseMimeType: 'application/json',
-                responseSchema: {
-                    type: Type.OBJECT,
-                    properties: {
-                        productName: { type: Type.STRING },
-                        lotNumber: { type: Type.STRING },
-                        expiryDate: { type: Type.STRING },
-                        notes: { type: Type.STRING }
-                    },
-                    required: ["productName", "lotNumber", "expiryDate", "notes"]
-                }
+        const contents = [
+            {
+                role: 'user',
+                parts: [
+                    { inlineData: { mimeType: file.type, data: base64Image.split(',')[1] } },
+                    { text: prompt }
+                ]
             }
-        });
+        ];
 
-        const text = response.text;
-        if (!text) throw new Error('Risposta AI vuota');
+        const schema = {
+            type: Type.OBJECT,
+            properties: {
+                productName: { type: Type.STRING },
+                lotNumber: { type: Type.STRING },
+                expiryDate: { type: Type.STRING },
+                notes: { type: Type.STRING }
+            },
+            required: ["productName", "lotNumber", "expiryDate", "notes"]
+        };
 
-        return JSON.parse(text);
+        const keyFormat = getGeminiApiKeyFormat(apiKey);
+        const ai = createGeminiClient(apiKey);
+        let lastError: any = null;
+
+        for (const candidateModel of modelsToTry) {
+            try {
+                let text: string;
+                if (keyFormat === "aq") {
+                    text = await geminiGenerateContentRest(apiKey, candidateModel, {
+                        contents,
+                        generationConfig: {
+                            responseMimeType: 'application/json',
+                            responseSchema: schema
+                        }
+                    });
+                } else {
+                    const response = await ai.models.generateContent({
+                        model: candidateModel,
+                        contents,
+                        config: {
+                            responseMimeType: 'application/json',
+                            responseSchema: schema
+                        }
+                    });
+                    text = response.text || "";
+                }
+
+                if (!text) throw new Error('Risposta AI vuota');
+                return JSON.parse(text);
+            } catch (err: any) {
+                lastError = err;
+                console.warn(`[HACCP AI] Errore con modello ${candidateModel}: ${err.message}. Tento modello successivo...`);
+            }
+        }
+
+        throw lastError || new Error('Impossibile analizzare immagine HACCP.');
     }
 
     private fileToBase64(file: File): Promise<string> {
