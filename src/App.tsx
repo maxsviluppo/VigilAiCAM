@@ -74,7 +74,7 @@ import {
   getTriggerScheduleBadgeText,
 } from "./utils/cameraNetwork";
 import { User } from "@supabase/supabase-js";
-import { GEMINI_API_KEY_MODAL_PLACEHOLDER, GEMINI_API_KEY_PLACEHOLDER, normalizeGeminiApiKey } from "./utils/geminiApiKey";
+import { GEMINI_API_KEY_MODAL_PLACEHOLDER, GEMINI_API_KEY_PLACEHOLDER, normalizeGeminiApiKey, pickPreferredGeminiApiKey } from "./utils/geminiApiKey";
 import { AdminLogin } from "./components/AdminLogin";
 import { AdminConsole } from "./components/AdminConsole";
 
@@ -1207,7 +1207,10 @@ export default function App() {
     // 1. Salva sempre anche nei metadati dell'utente per un ripristino sicuro ed immediato senza tabelle
     try {
       await supabase.auth.updateUser({
-        data: { gemini_key: key }
+        data: {
+          gemini_key: key,
+          gemini_key_updated_at: new Date().toISOString(),
+        }
       });
       console.log("[Backup API Key] Sincronizzato con successo nei metadati utente Supabase Auth.");
     } catch (authErr) {
@@ -1921,6 +1924,8 @@ export default function App() {
 
         const metadata = user.user_metadata || {};
         const cloudKey = metadata.gemini_key || "";
+        const cloudKeyUpdatedAt = metadata.gemini_key_updated_at || "";
+        const localKeyUpdatedAt = localStorage.getItem("vigilai_gemini_key_updated_at") || "";
         const cloudEmailUser = metadata.email_user || "";
         const cloudEmailPass = metadata.email_pass || "";
         const cloudTelegramChatId = metadata.telegram_chat_id || "";
@@ -1935,8 +1940,15 @@ export default function App() {
           }
         }
 
+        const resolvedGeminiKey = pickPreferredGeminiApiKey(
+          localKey,
+          cloudKey,
+          localKeyUpdatedAt,
+          cloudKeyUpdatedAt,
+        );
+
         const needsLocalUpdate = 
-          (cloudKey && cloudKey !== localKey) || 
+          (resolvedGeminiKey && resolvedGeminiKey !== localKey) || 
           (cloudEmailUser && cloudEmailUser !== localEmailUser) || 
           (cloudEmailPass && cloudEmailPass !== localEmailPass) || 
           (cloudTelegramChatId && cloudTelegramChatId !== localTelegramChatId) ||
@@ -1966,7 +1978,7 @@ export default function App() {
         if (needsLocalUpdate) {
           console.log("[VigilAI Sync] Rilevate impostazioni differenti o più recenti nel cloud. Sincronizzazione locale...");
           
-          const finalKey = cloudKey || localKey;
+          const finalKey = resolvedGeminiKey || localKey || cloudKey;
           const finalEmailUser = cloudEmailUser || localEmailUser;
           const finalEmailPass = cloudEmailPass || localEmailPass;
           const finalTelegramChatId = cloudTelegramChatId || localTelegramChatId;
@@ -1999,8 +2011,16 @@ export default function App() {
             message: 'Le impostazioni (API Key, SMTP e Telegram) sono state allineate con successo con il tuo account cloud.'
           });
         } else {
+          const localKeyIsNewer =
+            !!localKey &&
+            !!cloudKey &&
+            localKey !== cloudKey &&
+            !!localKeyUpdatedAt &&
+            (!cloudKeyUpdatedAt || new Date(localKeyUpdatedAt) >= new Date(cloudKeyUpdatedAt));
+
           const needsCloudUpdate = 
             (!cloudKey && localKey) || 
+            localKeyIsNewer ||
             (!cloudEmailUser && localEmailUser) || 
             (!cloudEmailPass && localEmailPass) ||
             (!cloudTelegramChatId && localTelegramChatId) ||
@@ -2013,6 +2033,7 @@ export default function App() {
               await supabase.auth.updateUser({
                 data: {
                   gemini_key: localKey,
+                  gemini_key_updated_at: localKeyUpdatedAt || new Date().toISOString(),
                   email_user: localEmailUser,
                   email_pass: localEmailPass,
                   telegram_chat_id: localTelegramChatId,

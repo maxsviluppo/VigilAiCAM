@@ -1,6 +1,7 @@
-import { GoogleGenAI, Type } from "@google/genai";
+import { Type } from "@google/genai";
 import { AlertTrigger } from "../types";
-import { getGeminiApiKeyFormat, normalizeGeminiApiKey } from "../utils/geminiApiKey";
+import { createGeminiClient } from "../utils/geminiClient";
+import { formatGeminiAuthError, getGeminiApiKeyFormat, normalizeGeminiApiKey } from "../utils/geminiApiKey";
 
 export interface DetectionResult {
   threatLevel: "low" | "medium" | "high";
@@ -39,8 +40,7 @@ export const analyzeFrame = async (
     const keyFormat = getGeminiApiKeyFormat(apiKey);
     console.log(`[AI Core] Inizializzazione chiave formato ${keyFormat}: ${apiKey.substring(0, 4)}...${apiKey.substring(apiKey.length - 4)}`);
 
-    // Inizializzazione con SDK ufficiale @google/genai
-    const ai = new GoogleGenAI({ apiKey });
+    const ai = createGeminiClient(apiKey);
 
     // Clean base64 data if it contains the prefix
     const cleanBase64 = base64Image.includes(",") ? base64Image.split(",")[1] : base64Image;
@@ -142,9 +142,22 @@ export const analyzeFrame = async (
           latencyMs,
         };
       } catch (err: any) {
-        lastError = err.message;
-        if (!err.message.includes("404")) break; // Se l'errore non è 404, fermati
-        console.warn(`Modello ${modelName} non trovato, provo il prossimo...`);
+        lastError = err.message || String(err);
+        const msg = lastError;
+        if (
+          msg.includes("401") ||
+          msg.includes("UNAUTHENTICATED") ||
+          msg.toLowerCase().includes("api key not valid") ||
+          msg.includes("ACCESS_TOKEN_TYPE_UNSUPPORTED")
+        ) {
+          throw new Error(formatGeminiAuthError(apiKey, msg));
+        }
+        const isModelMissing =
+          msg.includes("404") ||
+          msg.includes("NOT_FOUND") ||
+          msg.toLowerCase().includes("not found");
+        if (!isModelMissing) break;
+        console.warn(`Modello ${modelName} non disponibile, provo il prossimo...`);
       }
     }
 
