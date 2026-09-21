@@ -2694,20 +2694,16 @@ export default function App() {
         }
 
         const result = await analyzeFrame(base64Image, activeTriggersNow, cam.location, aiModel, cam.zones, triggerDescriptionsMap);
-        
-        // Aggiorna stato indicatore LED del modello AI
+
         const used = result.usedModel || aiModel;
-        const isPrimary = used === "gemini-3.8-flash" || used === aiModel;
         setActiveAiModelStatus({
           model: used,
           latencyMs: result.latencyMs,
-          status: isPrimary ? "active" : "fallback",
+          status: "active",
           lastUpdated: new Date(),
         });
 
-        if (cam.id === activeCameraId || result.isEmergency) {
-          setLastAnalysis(result);
-        }
+        setLastAnalysis(result);
         if (result.isEmergency) {
           handleDetectionAlert(cam, result, canvas);
         }
@@ -2718,11 +2714,20 @@ export default function App() {
           status: "error",
           lastUpdated: new Date(),
         }));
+        const errMsg = err.message || "Errore analisi AI";
         if (err.message?.includes("quota") || err.message?.includes("RESOURCE_EXHAUSTED")) {
           setLastAnalysis({
             description: "⚠️ Limite API raggiunto. Il sistema sta attendendo il ripristino della quota (solitamente 60s). Il monitoraggio continua...",
             isEmergency: false,
-            threatLevel: "low"
+            threatLevel: "low",
+            detectedEvents: [],
+          });
+        } else {
+          setLastAnalysis({
+            description: `⚠️ ${errMsg}`,
+            isEmergency: false,
+            threatLevel: "low",
+            detectedEvents: [],
           });
         }
       } finally {

@@ -21,6 +21,7 @@ export const analyzeFrame = async (
   triggerDescriptionsMap?: Record<string, string>
 ): Promise<DetectionResult> => {
   const startTime = Date.now();
+  let resolvedApiKey = "";
   try {
     let rawKey = localStorage.getItem("vigilai_gemini_key") || "";
     if (!rawKey) {
@@ -32,7 +33,8 @@ export const analyzeFrame = async (
        rawKey = process.env.GEMINI_API_KEY || "";
     }
     const apiKey = normalizeGeminiApiKey(rawKey);
-    
+    resolvedApiKey = apiKey;
+
     if (!apiKey) {
       throw new Error("API Key mancante.");
     }
@@ -83,108 +85,88 @@ export const analyzeFrame = async (
     
     CRITERIO EMERGENZA (isEmergency=true): Rapina (volto coperto e armi), violenza, fiamme, o QUALSIASI intrusione di persone o veicoli nelle zone 'restricted' o 'alert'.`;
 
-    // Prova prima il modello 3.8 Flash, poi 3.0 e fallback veloci 2.0 / 1.5
-    const modelsToTry = Array.from(new Set([
-      modelId,
-      "gemini-3.8-flash",
-      "gemini-3-flash-preview",
-      "gemini-2.0-flash",
-      "gemini-1.5-flash"
-    ]));
-    let lastError = "";
+    const modelName = modelId || "gemini-3.8-flash";
 
-    for (const modelName of modelsToTry) {
-      try {
-        const isModel38 = modelName.includes("3.8");
-        const configObj: any = {
-          responseMimeType: "application/json",
-          responseSchema: {
-            type: Type.OBJECT,
-            properties: {
-              threatLevel: { type: Type.STRING, enum: ["low", "medium", "high"] },
-              detectedEvents: { type: Type.ARRAY, items: { type: Type.STRING } },
-              description: { type: Type.STRING },
-              isEmergency: { type: Type.BOOLEAN },
-            },
-            required: ["threatLevel", "detectedEvents", "description", "isEmergency"],
-          },
-        };
+    const configObj: any = {
+      responseMimeType: "application/json",
+      responseSchema: {
+        type: Type.OBJECT,
+        properties: {
+          threatLevel: { type: Type.STRING, enum: ["low", "medium", "high"] },
+          detectedEvents: { type: Type.ARRAY, items: { type: Type.STRING } },
+          description: { type: Type.STRING },
+          isEmergency: { type: Type.BOOLEAN },
+        },
+        required: ["threatLevel", "detectedEvents", "description", "isEmergency"],
+      },
+    };
 
-        // Su Gemini 3.8 Flash ottimizziamo la latenza per videoanalisi continua
-        if (isModel38) {
-          configObj.thinkingConfig = { thinkingLevel: "low" };
-        }
-
-        const response = await ai.models.generateContent({
-          model: modelName,
-          contents: [
-            {
-              role: "user",
-              parts: [
-                { inlineData: { mimeType: "image/jpeg", data: cleanBase64 } },
-                { text: prompt }
-              ]
-            }
-          ],
-          config: configObj,
-        });
-
-        const text = response.text;
-        if (!text) throw new Error("Risposta AI vuota");
-        
-        const parsed = JSON.parse(text);
-        const latencyMs = Date.now() - startTime;
-        console.log(`[AI Core] Analisi frame eseguita con successo con modello: ${modelName} (${latencyMs}ms)`);
-        
-        return {
-          ...parsed,
-          usedModel: modelName,
-          latencyMs,
-        };
-      } catch (err: any) {
-        lastError = err.message || String(err);
-        const msg = lastError;
-        if (
-          msg.includes("401") ||
-          msg.includes("UNAUTHENTICATED") ||
-          msg.toLowerCase().includes("api key not valid") ||
-          msg.includes("ACCESS_TOKEN_TYPE_UNSUPPORTED")
-        ) {
-          throw new Error(formatGeminiAuthError(apiKey, msg));
-        }
-        const isModelMissing =
-          msg.includes("404") ||
-          msg.includes("NOT_FOUND") ||
-          msg.toLowerCase().includes("not found");
-        if (!isModelMissing) break;
-        console.warn(`Modello ${modelName} non disponibile, provo il prossimo...`);
-      }
+    if (modelName.includes("3.8")) {
+      configObj.thinkingConfig = { thinkingLevel: "low" };
     }
 
-    throw new Error(lastError);
+    const response = await ai.models.generateContent({
+      model: modelName,
+      contents: [
+        {
+          role: "user",
+          parts: [
+            { inlineData: { mimeType: "image/jpeg", data: cleanBase64 } },
+            { text: prompt }
+          ]
+        }
+      ],
+      config: configObj,
+    });
+
+    const text = response.text;
+    if (!text) throw new Error("Risposta AI vuota");
+
+    const parsed = JSON.parse(text);
+    const latencyMs = Date.now() - startTime;
+    console.log(`[AI Core] Analisi frame eseguita con successo con modello: ${modelName} (${latencyMs}ms)`);
+
+    return {
+      ...parsed,
+      usedModel: modelName,
+      latencyMs,
+    };
   } catch (error: any) {
     let cleanErrorMessage = error.message || "Errore sconosciuto durante l'analisi.";
     const latencyMs = Date.now() - startTime;
-    
-    // Se l'errore è una stringa JSON (come spesso accade con gli errori 429), estraiamo solo il messaggio
-    if (cleanErrorMessage.includes("RESOURCE_EXHAUSTED") || cleanErrorMessage.includes("quota")) {
-      cleanErrorMessage = `Quota API Gemini superata per il modello ${modelId} (Free Tier). Attendi 60s o prova un modello diverso.`;
-    } else if (cleanErrorMessage.includes("404")) {
-      cleanErrorMessage = "Modello non trovato. Verifica le impostazioni API Gemini.";
-    } else if (cleanErrorMessage.startsWith("{")) {
+
+    if (cleanErrorMessage.startsWith("{")) {
       try {
         const parsed = JSON.parse(cleanErrorMessage);
         cleanErrorMessage = parsed.error?.message || cleanErrorMessage;
       } catch (e) {}
     }
 
-    return {
-      threatLevel: "low",
-      detectedEvents: [],
-      description: cleanErrorMessage,
-      isEmergency: false,
-      usedModel: modelId,
-      latencyMs,
-    };
+    const msg = cleanErrorMessage;
+    if (
+      msg.includes("401") ||
+      msg.includes("UNAUTHENTICATED") ||
+      msg.toLowerCase().includes("api key not valid") ||
+      msg.includes("ACCESS_TOKEN_TYPE_UNSUPPORTED")
+    ) {
+      throw new Error(formatGeminiAuthError(resolvedApiKey, msg));
+    }
+
+    if (cleanErrorMessage.includes("RESOURCE_EXHAUSTED") || cleanErrorMessage.includes("quota")) {
+      return {
+        threatLevel: "low",
+        detectedEvents: [],
+        description: `Quota API Gemini superata per il modello ${modelId || "gemini-3.8-flash"} (Free Tier). Attendi 60s.`,
+        isEmergency: false,
+        usedModel: modelId,
+        latencyMs,
+      };
+    }
+
+    if (cleanErrorMessage.includes("404") || cleanErrorMessage.includes("NOT_FOUND")) {
+      throw new Error("Modello gemini-3.8-flash non disponibile. Verifica API Gemini e il modello selezionato.");
+    }
+
+    throw new Error(cleanErrorMessage);
   }
 };

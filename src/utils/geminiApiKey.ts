@@ -11,7 +11,11 @@ const AQ_GEMINI_KEY = /^AQ\.[A-Za-z0-9_-]{20,}$/;
 export type GeminiApiKeyFormat = "legacy" | "aq" | "unknown";
 
 export function normalizeGeminiApiKey(key: string): string {
-  return key.trim().replace(/^["']|["']$/g, "").replace(/\s+/g, "");
+  return key
+    .replace(/\uFEFF/g, "")
+    .trim()
+    .replace(/^["']|["']$/g, "")
+    .replace(/\s+/g, "");
 }
 
 /** Sceglie la chiave più recente tra locale e cloud (evita rollback a AIza vecchia) */
