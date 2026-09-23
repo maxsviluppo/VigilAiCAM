@@ -45,7 +45,9 @@ import {
   RefreshCw,
   Pencil,
   Download,
-  Check
+  Check,
+  Timer,
+  Network
 } from "lucide-react";
 import * as Lucide from "lucide-react";
 import { motion, AnimatePresence, Reorder } from "framer-motion";
@@ -734,12 +736,14 @@ export default function App() {
     detectedEvents: []
   });
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [analyzingCameraId, setAnalyzingCameraId] = useState<string | null>(null);
   const [showSettings, setShowSettings] = useState(false);
   const [showPlans, setShowPlans] = useState(false);
   const [showCameraModal, setShowCameraModal] = useState(false);
   const [editingCameraNumber, setEditingCameraNumber] = useState<number | null>(null);
   const [editingCamera, setEditingCamera] = useState<Camera | null>(null);
-  const [activeCameraTab, setActiveCameraTab] = useState<'info' | 'source' | 'triggers' | 'client'>('info');
+  const [activeCameraTab, setActiveCameraTab] = useState<'info' | 'source' | 'triggers' | 'frequency' | 'client'>('info');
+  const [scheduledActiveCameraId, setScheduledActiveCameraId] = useState<string | null>(null);
   const [schedulingTrigger, setSchedulingTrigger] = useState<{
     trigger: AlertTriggerItem;
     schedule: TriggerSchedule;
@@ -812,7 +816,21 @@ export default function App() {
     hasInternet: boolean;
     currentSsid: string | null;
     checking: boolean;
-  }>({ online: true, hasLocalNetwork: true, hasInternet: true, currentSsid: null, checking: true });
+    lanIp?: string | null;
+    wifiIp?: string | null;
+    hasLan?: boolean;
+    hasWifi?: boolean;
+    connectionType?: 'lan' | 'wifi' | 'both' | 'none';
+    lanInterfaceName?: string | null;
+  }>({ online: true, hasLocalNetwork: true, hasInternet: true, currentSsid: null, checking: true, hasLan: false, hasWifi: false, connectionType: 'wifi' });
+  const [networkModeTab, setNetworkModeTab] = useState<'wifi' | 'lan'>('wifi');
+  const [lanIp, setLanIp] = useState("");
+  const [lanGateway, setLanGateway] = useState("");
+  const [lanUsername, setLanUsername] = useState("");
+  const [lanPassword, setLanPassword] = useState("");
+  const [showLanPassword, setShowLanPassword] = useState(false);
+  const [lanTesting, setLanTesting] = useState(false);
+  const [lanStatusMessage, setLanStatusMessage] = useState<{ type: 'error' | 'success' | 'info'; message: string } | null>(null);
   const [wifiNetworks, setWifiNetworks] = useState<{ ssid: string; signal: number; security: string }[]>([]);
   const [selectedWifiSsid, setSelectedWifiSsid] = useState("");
   const [wifiPassword, setWifiPassword] = useState("");
@@ -933,8 +951,17 @@ export default function App() {
         hasLocalNetwork: !!data.hasLocalNetwork,
         hasInternet: !!data.hasInternet,
         currentSsid: data.currentSsid || null,
-        checking: false
+        checking: false,
+        lanIp: data.lanIp || null,
+        wifiIp: data.wifiIp || null,
+        hasLan: !!data.hasLan,
+        hasWifi: !!data.hasWifi,
+        connectionType: data.connectionType || (data.currentSsid ? 'wifi' : data.hasLan ? 'lan' : 'none'),
+        lanInterfaceName: data.lanInterfaceName || null
       });
+      if (data.lanIp) {
+        setLanIp(prev => prev || data.lanIp);
+      }
       return data;
     } catch {
       setNetworkStatus(prev => ({
@@ -948,6 +975,29 @@ export default function App() {
     }
   }, []);
 
+  const confirmLanConnection = useCallback(async () => {
+    setLanTesting(true);
+    setLanStatusMessage(null);
+    try {
+      const res = await fetch("/api/lan/confirm", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ip: lanIp, gateway: lanGateway, username: lanUsername, password: lanPassword })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setLanStatusMessage({ type: 'success', message: data.message || 'Connessione LAN confermata con successo!' });
+        await checkNetworkStatus();
+      } else {
+        setLanStatusMessage({ type: 'error', message: data.error || 'Errore configurazione LAN.' });
+      }
+    } catch (err: any) {
+      setLanStatusMessage({ type: 'error', message: err.message || 'Errore verifica LAN.' });
+    } finally {
+      setLanTesting(false);
+    }
+  }, [lanIp, lanGateway, lanUsername, lanPassword, checkNetworkStatus]);
+
   const scanWifiNetworks = useCallback(async () => {
     setWifiScanning(true);
     setWifiStatusMessage(null);
@@ -957,7 +1007,13 @@ export default function App() {
       if (data.success && Array.isArray(data.networks)) {
         setWifiNetworks(data.networks);
         setWifiNetworkPage(0);
-        if (data.networks.length > 0) {
+        // Priorità: seleziona la rete già connessa, altrimenti la prima rilevata
+        const activeNet = data.networks.find((n: any) => n.connected || (networkStatus.currentSsid && n.ssid === networkStatus.currentSsid));
+        if (activeNet) {
+          const idx = data.networks.findIndex((n: any) => n.ssid === activeNet.ssid);
+          setWifiSelectedIndex(idx >= 0 ? idx : 0);
+          setSelectedWifiSsid(activeNet.ssid);
+        } else if (data.networks.length > 0) {
           setWifiSelectedIndex(0);
           setSelectedWifiSsid(data.networks[0].ssid);
         } else {
@@ -974,7 +1030,7 @@ export default function App() {
     } finally {
       setWifiScanning(false);
     }
-  }, []);
+  }, [networkStatus.currentSsid]);
 
   const connectToWifi = useCallback(async () => {
     if (!selectedWifiSsid) {
@@ -993,10 +1049,11 @@ export default function App() {
       if (data.success) {
         setWifiStatusMessage({ type: 'success', message: 'Connesso! Verifica connessione internet...' });
         setWifiPassword("");
-        await new Promise(r => setTimeout(r, 3000));
+        await new Promise(r => setTimeout(r, 2500));
         const status = await checkNetworkStatus();
         if (status?.online) {
-          setWifiStatusMessage({ type: 'success', message: 'Connesso!' });
+          setWifiStatusMessage({ type: 'success', message: `Connesso con successo a "${selectedWifiSsid}"!` });
+          scanWifiNetworks();
         } else {
           setWifiStatusMessage({ type: 'error', message: 'Wi-Fi connesso ma internet non raggiungibile. Verifica router o password.' });
         }
@@ -1008,7 +1065,7 @@ export default function App() {
     } finally {
       setWifiConnecting(false);
     }
-  }, [selectedWifiSsid, wifiPassword, checkNetworkStatus]);
+  }, [selectedWifiSsid, wifiPassword, checkNetworkStatus, scanWifiNetworks]);
 
   const cycleWifiNetwork = useCallback((delta: number) => {
     if (wifiNetworks.length === 0) return;
@@ -1124,10 +1181,10 @@ export default function App() {
   });
   const [analysisInterval, setAnalysisInterval] = useState<number>(() => {
     const stored = localStorage.getItem("vigilai_analysis_interval");
-    return stored ? Math.max(5, Math.min(120, parseInt(stored, 10))) : 15;
+    return stored ? Math.max(2, Math.min(120, parseInt(stored, 10))) : 5;
   });
   const updateAnalysisInterval = (val: number) => {
-    const newVal = Math.max(5, Math.min(120, val));
+    const newVal = Math.max(2, Math.min(120, val));
     setAnalysisInterval(newVal);
     localStorage.setItem("vigilai_analysis_interval", newVal.toString());
   };
@@ -1140,7 +1197,13 @@ export default function App() {
     telegramChatId: localStorage.getItem("vigilai_telegram_chat_id") || "",
     telegramToken: localStorage.getItem("vigilai_telegram_token") || "",
   });
-  const [disabledAiCameraIds, setDisabledAiCameraIds] = useState<string[]>([]);
+  const [disabledAiCameraIds, setDisabledAiCameraIds] = useState<string[]>(() => {
+    try {
+      return JSON.parse(localStorage.getItem("vigilai_disabled_ai_cameras") || "[]");
+    } catch {
+      return [];
+    }
+  });
   const [activeSettingsTab, setActiveSettingsTab] = useState<"ai" | "email" | "telegram" | "sleep" | "test" | "log" | "network">("ai");
   const [logStartIndex, setLogStartIndex] = useState(0);
 
@@ -1155,11 +1218,15 @@ export default function App() {
   }, [showSettings, activeSettingsTab, isMobile35, scanWifiNetworks]);
 
   const toggleCameraAi = (camId: string) => {
-    setDisabledAiCameraIds(prev => 
-      prev.includes(camId) 
+    setDisabledAiCameraIds(prev => {
+      const next = prev.includes(camId) 
         ? prev.filter(id => id !== camId) 
-        : [...prev, camId]
-    );
+        : [...prev, camId];
+      try {
+        localStorage.setItem("vigilai_disabled_ai_cameras", JSON.stringify(next));
+      } catch {}
+      return next;
+    });
   };
 
   // State della tastiera virtuale e del rilevamento tastiera fisica
@@ -1704,6 +1771,30 @@ export default function App() {
         setValue: setWifiPassword
       };
     }
+    if (id === 'lanIp') {
+      return {
+        value: lanIp,
+        setValue: setLanIp
+      };
+    }
+    if (id === 'lanGateway') {
+      return {
+        value: lanGateway,
+        setValue: setLanGateway
+      };
+    }
+    if (id === 'lanUsername') {
+      return {
+        value: lanUsername,
+        setValue: setLanUsername
+      };
+    }
+    if (id === 'lanPassword') {
+      return {
+        value: lanPassword,
+        setValue: setLanPassword
+      };
+    }
     if (id === 'modalGeminiKey') {
       return {
         value: modalGeminiKey,
@@ -2221,11 +2312,21 @@ export default function App() {
   const streamsRef = useRef<Map<string, MediaStream>>(new Map());
   const wakeLockRef = useRef<any>(null);
   const analysisIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const cameraLastAnalyzedRef = useRef<Map<string, number>>(new Map());
+  const isAnalyzingRef = useRef(false);
+  useEffect(() => { isAnalyzingRef.current = isAnalyzing; }, [isAnalyzing]);
   const camRotationIndexRef = useRef<number>(0);
   const lastNotificationTimeRef = useRef<number>(0);
   const alertSequenceCountRef = useRef<number>(0);
 
   const activeCamera = cameras.find(c => c.id === activeCameraId);
+  const currentAnalysisSeconds = (
+    (scheduledActiveCameraId ? cameras.find(c => c.id === scheduledActiveCameraId)?.analysisInterval : null) ??
+    (activeCameraId ? cameras.find(c => c.id === activeCameraId)?.analysisInterval : null) ??
+    (cameras[0]?.analysisInterval) ??
+    analysisInterval ??
+    5
+  );
 
   // Helper: capture a frame from a webcam/browser camera robustly
   const captureFromWebcam = async (camId: string): Promise<HTMLVideoElement | null> => {
@@ -2615,26 +2716,32 @@ export default function App() {
     alertSequenceCountRef.current = 0;
   };
 
-  const captureAndAnalyze = useCallback(async () => {
+  const captureAndAnalyze = useCallback(async (targetCam?: Camera) => {
     if (isAnalyzing || !canvasRef.current || cameras.length === 0) return;
     const canvas = canvasRef.current;
     const context = canvas.getContext("2d");
     if (!context) return;
 
-    // Logic: If we are in single view, prioritize the active camera. 
+    // Logic: If targetCam is passed from fair scheduler, use it.
+    // Otherwise, if single view, prioritize the active camera. 
     // In multi-view or if no active cam, use rotation.
-    let cam;
-    if (!isMultiView && activeCameraId) {
-      cam = cameras.find(c => c.id === activeCameraId);
-    } 
-    
+    let cam = targetCam;
     if (!cam) {
-      const camIndex = camRotationIndexRef.current % cameras.length;
-      cam = cameras[camIndex];
-      camRotationIndexRef.current += 1;
+      if (!isMultiView && activeCameraId) {
+        cam = cameras.find(c => c.id === activeCameraId);
+      } 
+      if (!cam) {
+        const camIndex = camRotationIndexRef.current % cameras.length;
+        cam = cameras[camIndex];
+        camRotationIndexRef.current += 1;
+      }
     }
 
     if (!cam) return;
+
+    setScheduledActiveCameraId(cam.id);
+    setAnalyzingCameraId(cam.id);
+    cameraLastAnalyzedRef.current.set(cam.id, Date.now());
 
     const img = imgRefs.current.get(cam.id);
     const video = videoRefs.current.get(cam.id);
@@ -2686,6 +2793,7 @@ export default function App() {
       }
 
       setIsAnalyzing(true);
+      setAnalyzingCameraId(cam.id);
       try {
         const triggerDescriptionsMap: Record<string, string> = {};
         availableTriggers.forEach(t => {
@@ -2731,7 +2839,6 @@ export default function App() {
           status: "error",
           lastUpdated: new Date(),
         }));
-        const errMsg = err.message || "Errore analisi AI";
         if (err.message?.includes("quota") || err.message?.includes("RESOURCE_EXHAUSTED")) {
           setLastAnalysis({
             description: "⚠️ Limite API raggiunto. Il sistema sta attendendo il ripristino della quota (solitamente 60s). Il monitoraggio continua...",
@@ -2741,7 +2848,7 @@ export default function App() {
           });
         } else {
           setLastAnalysis({
-            description: `⚠️ ${errMsg}`,
+            description: `⚠️ ${err.message || "Errore analisi AI"}`,
             isEmergency: false,
             threatLevel: "low",
             detectedEvents: [],
@@ -2768,19 +2875,73 @@ export default function App() {
   const analysisFnRef = useRef(captureAndAnalyze);
   useEffect(() => { analysisFnRef.current = captureAndAnalyze; }, [captureAndAnalyze]);
 
+  // Motore di schedulazione ad alternanza equa (Fair Alternation Scheduler)
   useEffect(() => {
-    if (isMonitoring) {
+    if (!isMonitoring) {
       if (analysisIntervalRef.current) clearInterval(analysisIntervalRef.current);
-      analysisIntervalRef.current = setInterval(() => {
-        analysisFnRef.current();
-      }, analysisInterval * 1000); 
-    } else {
-      if (analysisIntervalRef.current) clearInterval(analysisIntervalRef.current);
+      return;
     }
+
+    if (analysisIntervalRef.current) clearInterval(analysisIntervalRef.current);
+
+    // Heartbeat a 1000ms per calcolare scadenze ed equità tra le telecamere
+    analysisIntervalRef.current = setInterval(() => {
+      if (isAnalyzingRef.current) return;
+      if (!cameras || cameras.length === 0) return;
+
+      const now = Date.now();
+
+      // Modalità Vista Singola: analizza solo la telecamera selezionata
+      if (!isMultiView && activeCameraId) {
+        const activeCam = cameras.find(c => c.id === activeCameraId);
+        if (!activeCam || disabledAiCameraIds.includes(activeCam.id)) return;
+
+        const targetSec = activeCam.analysisInterval ?? analysisInterval ?? 5;
+        const lastTime = cameraLastAnalyzedRef.current.get(activeCam.id) || 0;
+        if (now - lastTime >= targetSec * 1000) {
+          analysisFnRef.current(activeCam);
+        }
+        return;
+      }
+
+      // Modalità Multi-Telecamera: alternanza equa e bilanciata
+      const eligibleCameras = cameras.filter(c => !disabledAiCameraIds.includes(c.id));
+      if (eligibleCameras.length === 0) return;
+
+      if (eligibleCameras.length === 1) {
+        const onlyCam = eligibleCameras[0];
+        const targetSec = onlyCam.analysisInterval ?? analysisInterval ?? 5;
+        const lastTime = cameraLastAnalyzedRef.current.get(onlyCam.id) || 0;
+        if (now - lastTime >= targetSec * 1000) {
+          analysisFnRef.current(onlyCam);
+        }
+        return;
+      }
+
+      // Calcolo urgenza per ciascuna telecamera: urgency = elapsed / (targetSec * 1000)
+      // Se due telecamere sono prossime alla scadenza, una anticipa leggermente (es. urgency >= 0.88)
+      // o ritarda di poco il passaggio, bilanciando in modo equo e fluido l'alternanza.
+      const ranked = eligibleCameras.map(cam => {
+        const targetSec = cam.analysisInterval ?? analysisInterval ?? 5;
+        const lastTime = cameraLastAnalyzedRef.current.get(cam.id) || 0;
+        const elapsed = now - lastTime;
+        const urgency = elapsed / (targetSec * 1000);
+        return { cam, urgency, elapsed, targetSec };
+      });
+
+      // Ordina per urgenza decrescente (la più urgente ha precedenza)
+      ranked.sort((a, b) => b.urgency - a.urgency);
+
+      const top = ranked[0];
+      if (top && (top.urgency >= 1.0 || (top.urgency >= 0.88 && top.elapsed >= 3000))) {
+        analysisFnRef.current(top.cam);
+      }
+    }, 1000);
+
     return () => {
       if (analysisIntervalRef.current) clearInterval(analysisIntervalRef.current);
     };
-  }, [isMonitoring, analysisInterval]);
+  }, [isMonitoring, isMultiView, activeCameraId, cameras, analysisInterval, disabledAiCameraIds]);
 
   // ── SMART ZONE DRAWING HANDLERS ──────────────────────────────────────────
 
@@ -2916,19 +3077,54 @@ export default function App() {
   };
 
   const saveCamera = async (cam: Camera) => {
-    if (!user) return;
     setIsSaving(true);
     setSaveStatus(null);
+    const latestCam = editingCameraRef.current && editingCameraRef.current.id === cam.id
+      ? editingCameraRef.current
+      : cam;
+    const persisted = latestCam.id && !latestCam.id.startsWith('cam-')
+      ? cameras.find(c => c.id === latestCam.id)
+      : undefined;
+    const subnet = getPrimaryNetworkIp();
+    const finalized = finalizeCameraForSave(latestCam, persisted, subnet);
+    const streamOk = !requiresStreamUrl(finalized.type) || hasValidStreamConfig(finalized, subnet);
+
+    if (!user) {
+      persistLocalCameraSettings(finalized.id, {
+        enabledTriggers: finalized.enabledTriggers,
+        triggerSchedules: finalized.triggerSchedules,
+        analysisInterval: finalized.analysisInterval ?? 5,
+      });
+      setCameras(prev => {
+        const idx = prev.findIndex(c => c.id === finalized.id);
+        if (idx >= 0) {
+          const next = [...prev];
+          next[idx] = finalized;
+          return next;
+        }
+        return [...prev, finalized];
+      });
+      setActiveCameraId(finalized.id);
+      setActiveCamStatuses(prev => ({ ...prev, [finalized.id]: true }));
+      setAnalysisInterval(finalized.analysisInterval ?? 5);
+      localStorage.setItem("vigilai_analysis_interval", String(finalized.analysisInterval ?? 5));
+      setIsSaving(false);
+      setSaveStatus({
+        type: 'success',
+        message: streamOk
+          ? `Camera salvata (${finalized.enabledTriggers.length} trigger attivi).`
+          : `Salvato (${finalized.enabledTriggers.length} trigger). Configura IP in Sorgente per lo stream.`,
+      });
+      setTimeout(() => {
+        setShowCameraModal(false);
+        setEditingCamera(null);
+        setEditingCameraNumber(null);
+        setSaveStatus(null);
+      }, 1200);
+      return;
+    }
+
     try {
-      const latestCam = editingCameraRef.current && editingCameraRef.current.id === cam.id
-        ? editingCameraRef.current
-        : cam;
-      const persisted = latestCam.id && !latestCam.id.startsWith('cam-')
-        ? cameras.find(c => c.id === latestCam.id)
-        : undefined;
-      const subnet = getPrimaryNetworkIp();
-      const finalized = finalizeCameraForSave(latestCam, persisted, subnet);
-      const streamOk = !requiresStreamUrl(finalized.type) || hasValidStreamConfig(finalized, subnet);
       const isNewCamera = !persisted;
       const dbPayload = toDbCameraRecord(finalized, user.id, isNewCamera ? cameras.length : undefined);
 
@@ -2943,6 +3139,10 @@ export default function App() {
       if (error) throw error;
 
       let savedCam = mapDbCamera(data as Record<string, unknown>, subnet);
+      // Ensure newly chosen analysisInterval is carried over from finalized!
+      if (typeof finalized.analysisInterval === 'number') {
+        savedCam.analysisInterval = finalized.analysisInterval;
+      }
       const savedTriggers = parseEnabledTriggers((data as Record<string, unknown>).enabled_triggers);
 
       if (savedTriggers.length === 0 && finalized.enabledTriggers.length > 0) {
@@ -2959,7 +3159,12 @@ export default function App() {
       persistLocalCameraSettings(savedCam.id, {
         enabledTriggers: savedCam.enabledTriggers,
         triggerSchedules: savedCam.triggerSchedules,
+        analysisInterval: savedCam.analysisInterval ?? 5,
       });
+
+      // Update current camera analysisInterval in state and local storage fallback
+      setAnalysisInterval(savedCam.analysisInterval ?? 5);
+      localStorage.setItem("vigilai_analysis_interval", String(savedCam.analysisInterval ?? 5));
 
       setCameras(prev => {
         const idx = prev.findIndex(c => c.id === savedCam.id);
@@ -2986,16 +3191,42 @@ export default function App() {
         setEditingCamera(null);
         setEditingCameraNumber(null);
         setSaveStatus(null);
-      }, 1500);
+      }, 1200);
 
     } catch (err: any) {
       console.error("Errore salvataggio camera:", err);
-      setSaveStatus({ 
-        type: 'error', 
-        message: err.message?.includes('PGRST205') 
-          ? 'Errore: Tabella "cameras" non trovata nel database. Crea la tabella su Supabase.' 
-          : `Errore: ${err.message || 'Errore nel salvataggio'}`
+      // Fallback: salva comunque localmente per garantire continuità
+      const fallbackCam: Camera = {
+        ...finalized,
+        analysisInterval: finalized.analysisInterval ?? 5,
+      };
+      persistLocalCameraSettings(fallbackCam.id, {
+        enabledTriggers: fallbackCam.enabledTriggers,
+        triggerSchedules: fallbackCam.triggerSchedules,
+        analysisInterval: fallbackCam.analysisInterval,
       });
+      setCameras(prev => {
+        const idx = prev.findIndex(c => c.id === fallbackCam.id);
+        if (idx >= 0) {
+          const next = [...prev];
+          next[idx] = fallbackCam;
+          return next;
+        }
+        return [...prev, fallbackCam];
+      });
+      setAnalysisInterval(fallbackCam.analysisInterval ?? 5);
+      localStorage.setItem("vigilai_analysis_interval", String(fallbackCam.analysisInterval ?? 5));
+
+      setSaveStatus({
+        type: 'success',
+        message: 'Camera salvata localmente.'
+      });
+      setTimeout(() => {
+        setShowCameraModal(false);
+        setEditingCamera(null);
+        setEditingCameraNumber(null);
+        setSaveStatus(null);
+      }, 1200);
     } finally {
       setIsSaving(false);
     }
@@ -3020,7 +3251,7 @@ export default function App() {
       const editUrl =
         editIp !== ip && subnet && parseIpFromRtspUrl(url) === subnet ? '' : url;
       setEditingCameraNumber(displayNumber ?? getCameraOrderNumber(cameras, cam.id));
-      setEditingCamera({ ...cam, ip: editIp, url: editUrl });
+      setEditingCamera({ ...cam, ip: editIp, url: editUrl, analysisInterval: cam.analysisInterval ?? 5 });
       setActiveCameraTab('info');
       setShowCameraModal(true);
       return;
@@ -3038,6 +3269,7 @@ export default function App() {
       password: "12345678",
       rtspPath: "/stream1",
       status: "online",
+      analysisInterval: 5,
       enabledTriggers: availableTriggers.slice(0, 3).map(t => t.id)
     });
     setActiveCameraTab('info');
@@ -3107,434 +3339,787 @@ export default function App() {
   ]);
 
   const renderWifiScreen35 = (embedded = false) => {
-    const isKeyboardOpen = keyboardTarget?.id === 'wifiPassword';
-    const primaryIp = getPrimaryNetworkIp();
-    const currentNetwork = wifiNetworks[wifiSelectedIndex] ?? null;
-    const btnSm = "h-7 flex-1 min-w-0 flex items-center justify-center gap-1 rounded-lg border text-[8px] font-black uppercase tracking-wide active:scale-95 px-1";
-
-    if (embedded) {
-      return (
-        <div className="w-full flex flex-col gap-1 overflow-hidden touch-manipulation flex-1 min-h-0">
-          {!isKeyboardOpen && (
-            <>
-              {/* Riga 3: stato connessione + cerca reti (compatti, stessa riga) */}
-              <div className="shrink-0 flex gap-1 items-stretch">
-                <div
-                  className={`${btnSm} flex-[1.2] ${
-                    networkStatus.online
-                      ? "bg-green-600/90 border-green-400/60 text-white"
-                      : "bg-amber-600 border-amber-400/60 text-white"
-                  }`}
-                  title={networkStatus.online ? "Connesso" : "Non connesso"}
-                >
-                  {networkStatus.online ? <Wifi size={11} /> : <WifiOff size={11} className="animate-pulse" />}
-                  <span className="truncate max-w-[5rem]">
-                    {networkStatus.online ? (primaryIp ? primaryIp.split(".").slice(-1)[0] : "OK") : "OFF"}
-                  </span>
-                </div>
-                <button
-                  type="button"
-                  onClick={scanWifiNetworks}
-                  disabled={wifiScanning}
-                  className={`${btnSm} flex-[1.8] bg-blue-600 border-blue-400 text-white disabled:opacity-60`}
-                >
-                  <RefreshCw size={11} className={wifiScanning ? "animate-spin shrink-0" : "shrink-0"} />
-                  {wifiScanning ? "..." : "Cerca Reti"}
-                </button>
-              </div>
-
-              {/* Riga 4: selettore rete — una alla volta, frecce su/giù a sinistra */}
-              <div className="shrink-0 flex gap-1 items-stretch h-9">
-                <div className="flex flex-col gap-0.5 shrink-0 w-8">
-                  <button
-                    type="button"
-                    disabled={wifiNetworks.length === 0}
-                    onClick={() => cycleWifiNetwork(-1)}
-                    className="flex-1 flex items-center justify-center bg-white/5 border border-white/10 rounded-md text-slate-300 active:scale-95 disabled:opacity-30 min-h-[14px]"
-                    title="Rete precedente"
-                  >
-                    <ChevronUp size={12} />
-                  </button>
-                  <button
-                    type="button"
-                    disabled={wifiNetworks.length === 0}
-                    onClick={() => cycleWifiNetwork(1)}
-                    className="flex-1 flex items-center justify-center bg-white/5 border border-white/10 rounded-md text-slate-300 active:scale-95 disabled:opacity-30 min-h-[14px]"
-                    title="Rete successiva"
-                  >
-                    <ChevronDown size={12} />
-                  </button>
-                </div>
-                <div className="flex-1 flex items-center gap-1.5 px-2 bg-black/40 border border-white/10 rounded-lg min-w-0">
-                  {currentNetwork ? (
-                    <>
-                      <Wifi size={11} className="text-blue-400 shrink-0" />
-                      <span className="text-[9px] font-bold text-white truncate flex-1">{currentNetwork.ssid}</span>
-                      <span className="text-[7px] text-slate-500 font-mono shrink-0">{currentNetwork.signal}%</span>
-                      {wifiNetworks.length > 1 && (
-                        <span className="text-[7px] text-slate-600 shrink-0">{wifiSelectedIndex + 1}/{wifiNetworks.length}</span>
-                      )}
-                    </>
-                  ) : (
-                    <span className="text-[8px] text-slate-500 font-bold uppercase">Premi Cerca Reti</span>
-                  )}
-                </div>
-              </div>
-
-              {wifiStatusMessage && (
-                <p className={`shrink-0 text-[7px] font-bold uppercase px-1 truncate ${
-                  wifiStatusMessage.type === "error" ? "text-red-400" : wifiStatusMessage.type === "success" ? "text-green-400" : "text-amber-400"
-                }`}>
-                  {wifiStatusMessage.message}
-                </p>
-              )}
-            </>
-          )}
-
-          {isKeyboardOpen && selectedWifiSsid && (
-            <div className="shrink-0 px-1 py-0.5">
-              <span className="text-[8px] text-blue-400 font-black uppercase tracking-widest">Rete: {selectedWifiSsid}</span>
-            </div>
-          )}
-
-          {/* Password Wi-Fi */}
-          <div className={`shrink-0 relative ${isKeyboardOpen ? "mb-[210px]" : ""}`}>
-            <input
-              type={showWifiPassword ? "text" : "password"}
-              value={wifiPassword}
-              onChange={(e) => setWifiPassword(e.target.value)}
-              onFocus={() => { if (useVirtualKeyboard) setKeyboardTarget({ id: 'wifiPassword', title: 'Password Wi-Fi' }); }}
-              placeholder={selectedWifiSsid ? `Password ${selectedWifiSsid}` : 'Password Wi-Fi'}
-              autoComplete="off"
-              className="w-full h-8 bg-white/5 border border-white/10 pl-2 pr-[4.5rem] rounded-lg text-[10px] text-white outline-none focus:border-blue-500 transition-colors"
-            />
-            <button
-              type="button"
-              onClick={() => setShowWifiPassword(!showWifiPassword)}
-              className="absolute right-9 top-1/2 -translate-y-1/2 w-7 h-6 flex items-center justify-center rounded active:scale-95 text-slate-400 hover:text-white"
-            >
-              {showWifiPassword ? <EyeOff size={13} /> : <Eye size={13} />}
-            </button>
-            <button
-              type="button"
-              onClick={() => setKeyboardTarget({ id: 'wifiPassword', title: 'Password Wi-Fi' })}
-              className={`absolute right-1 top-1/2 -translate-y-1/2 w-7 h-6 flex items-center justify-center rounded active:scale-95 ${
-                keyboardTarget?.id === 'wifiPassword' ? 'bg-blue-600 text-white' : 'bg-white/10 text-slate-400'
-              }`}
-            >
-              <Keyboard size={14} />
-            </button>
-          </div>
-        </div>
-      );
-    }
-
-    const perPage = WIFI_NETWORKS_PER_PAGE_35;
-    const totalPages = Math.max(1, Math.ceil(wifiNetworks.length / perPage));
-    const pageNetworks = wifiNetworks.slice(
-      wifiNetworkPage * perPage,
-      wifiNetworkPage * perPage + perPage
-    );
-    const emptySlots = pageNetworks.length > 0 ? perPage - pageNetworks.length : 0;
+    const isKeyboardOpen = keyboardTarget?.id === 'wifiPassword' || keyboardTarget?.id === 'lanIp' || keyboardTarget?.id === 'lanGateway' || keyboardTarget?.id === 'lanPassword' || keyboardTarget?.id === 'lanUsername';
+    const primaryIp = getPrimaryNetworkIp() || networkStatus.lanIp || networkStatus.wifiIp;
+    const activeSsid = networkStatus.currentSsid || wifiNetworks.find(n => n.connected)?.ssid || null;
+    const isLanActive = !!networkStatus.lanIp || networkStatus.connectionType === 'lan' || networkStatus.connectionType === 'both';
 
     return (
-      <div className={`w-full flex flex-col gap-1 overflow-hidden touch-manipulation ${embedded ? 'flex-1 min-h-0' : 'h-full bg-[#050810] p-1.5'}`}>
-        {/* Banner stato rete */}
-        <div className={`shrink-0 flex items-center gap-1.5 rounded-lg px-2 py-1.5 border ${
+      <div className={`w-full flex flex-col gap-1.5 touch-manipulation ${embedded ? 'flex-1 min-h-0 overflow-y-auto custom-scrollbar p-0.5' : 'h-full bg-[#050810] p-2 overflow-y-auto custom-scrollbar'}`}>
+        
+        {/* 1. SCHEDA STATO RETE CON LED EVIDENTE */}
+        <div className={`shrink-0 flex items-center justify-between px-2.5 py-1.5 rounded-xl border transition-all ${
           networkStatus.online
-            ? 'bg-green-600/90 border-green-400/60'
-            : 'bg-amber-600 border-amber-400/60'
+            ? "bg-emerald-950/80 border-emerald-500/50 text-emerald-300 shadow-[0_0_15px_rgba(16,185,129,0.2)]"
+            : "bg-amber-950/80 border-amber-500/50 text-amber-300"
         }`}>
-          {networkStatus.online ? (
-            <Wifi size={13} className="text-white shrink-0" />
-          ) : (
-            <WifiOff size={13} className="text-white shrink-0 animate-pulse" />
-          )}
-          <span className="text-[8px] font-black text-white uppercase tracking-wide leading-tight flex-1">
-            {wifiStatusMessage?.message
-              || (networkStatus.online
-                ? `Connesso${primaryIp ? ` — ${primaryIp}` : ''}`
-                : 'Connessione assente — inserire credenziali')}
-          </span>
+          <div className="flex items-center gap-2 min-w-0 flex-1">
+            {/* LED ad alta visibilità con glow */}
+            <div className="relative flex items-center justify-center shrink-0 w-3.5 h-3.5">
+              <span className={`w-2.5 h-2.5 rounded-full ${
+                networkStatus.online ? 'bg-emerald-400 shadow-[0_0_10px_#10b981]' : 'bg-amber-500 shadow-[0_0_10px_#f59e0b]'
+              }`} />
+              {networkStatus.online && (
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-60" />
+              )}
+            </div>
+
+            <div className="flex flex-col min-w-0">
+              <div className="flex items-center gap-1.5">
+                <span className="text-[7.5px] font-black uppercase tracking-widest text-slate-400">
+                  {networkStatus.online ? "Connesso:" : "Stato:"}
+                </span>
+                <span className="text-[9px] font-black text-white truncate font-mono">
+                  {networkStatus.online 
+                    ? (activeSsid ? `Wi-Fi: ${activeSsid}` : isLanActive ? `LAN: ${networkStatus.lanInterfaceName || 'eth0'}` : 'Online')
+                    : "Non Connesso"}
+                </span>
+              </div>
+              {primaryIp && networkStatus.online && (
+                <div className="flex items-center gap-2">
+                  <span className="text-[7.5px] text-emerald-400 font-mono font-bold">
+                    IP: {primaryIp}
+                  </span>
+                  {networkStatus.lanIp && activeSsid && (
+                    <span className="text-[7px] text-blue-300 font-mono">
+                      (LAN: {networkStatus.lanIp})
+                    </span>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={checkNetworkStatus}
+            disabled={networkStatus.checking}
+            className="p-1.5 bg-white/10 hover:bg-white/15 active:scale-95 rounded-lg border border-white/10 text-white shrink-0 ml-1.5 cursor-pointer"
+            title="Verifica Connessione"
+          >
+            <RefreshCw size={11} className={networkStatus.checking ? "animate-spin" : ""} />
+          </button>
         </div>
 
-        {!isKeyboardOpen && (
-          <>
-        {/* Cerca Reti */}
-        <button
-          type="button"
-          onClick={scanWifiNetworks}
-          disabled={wifiScanning}
-          className="shrink-0 w-full h-8 flex items-center justify-center gap-1.5 bg-blue-600 border border-blue-400 rounded-lg text-white text-[9px] font-black uppercase tracking-widest active:scale-95 disabled:opacity-60"
-        >
-          <RefreshCw size={12} className={wifiScanning ? 'animate-spin' : ''} />
-          {wifiScanning ? 'Ricerca...' : 'Cerca Reti'}
-        </button>
+        {/* 2. SUB-TABS: WI-FI / CAVO LAN */}
+        <div className="shrink-0 flex items-center gap-1 bg-black/40 p-0.5 rounded-xl border border-white/10">
+          <button
+            type="button"
+            onClick={() => setNetworkModeTab('wifi')}
+            className={`flex-1 py-1 flex items-center justify-center gap-1.5 rounded-lg text-[8.5px] font-black uppercase tracking-wider transition-all cursor-pointer ${
+              networkModeTab === 'wifi'
+                ? 'bg-blue-600 border border-blue-400 text-white shadow-md'
+                : 'text-slate-400 hover:text-white'
+            }`}
+          >
+            <Wifi size={11} />
+            <span>Wi-Fi</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setNetworkModeTab('lan')}
+            className={`flex-1 py-1 flex items-center justify-center gap-1.5 rounded-lg text-[8.5px] font-black uppercase tracking-wider transition-all cursor-pointer ${
+              networkModeTab === 'lan'
+                ? 'bg-amber-600 border border-amber-400 text-white shadow-md'
+                : 'text-slate-400 hover:text-white'
+            }`}
+          >
+            <Network size={11} />
+            <span>Cavo LAN</span>
+          </button>
+        </div>
 
-        {/* Elenco reti — 3 righe fisse, senza scroll */}
-        <div className="shrink-0 flex flex-col gap-0.5">
-          {pageNetworks.length === 0 ? (
-            <div className={`flex items-center justify-center bg-black/40 border border-white/5 rounded-lg ${embedded ? 'h-[56px]' : 'h-[84px]'}`}>
-              <span className="text-[8px] text-slate-500 font-bold uppercase tracking-widest text-center px-2">
-                {wifiScanning ? 'Ricerca in corso...' : 'Premi Cerca Reti'}
+        {/* 3. SEZIONE WI-FI */}
+        {networkModeTab === 'wifi' && (
+          <div className="flex flex-col gap-1.5 min-h-0 flex-1">
+            {/* Ricerca Reti Reali */}
+            <button
+              type="button"
+              onClick={scanWifiNetworks}
+              disabled={wifiScanning}
+              className="shrink-0 h-7.5 w-full flex items-center justify-center gap-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 active:scale-95 disabled:opacity-50 text-white rounded-xl text-[8.5px] font-black uppercase tracking-wider border border-blue-400/40 shadow-[0_0_12px_rgba(59,130,246,0.2)] transition-all cursor-pointer"
+            >
+              <RefreshCw size={11} className={wifiScanning ? "animate-spin shrink-0" : "shrink-0"} />
+              <span>{wifiScanning ? "Scansione Reti Reali..." : "Cerca Reti Wi-Fi"}</span>
+            </button>
+
+            {/* Lista delle reti disponibili */}
+            <div className="shrink-0 flex flex-col gap-1">
+              <div className="flex items-center justify-between px-1">
+                <span className="text-[7.5px] font-black uppercase tracking-wider text-slate-400">
+                  Reti Rilevate ({wifiNetworks.length})
+                </span>
+                {wifiNetworks.length > 0 && (
+                  <span className="text-[7px] font-bold text-slate-500">
+                    Seleziona per collegarti
+                  </span>
+                )}
+              </div>
+
+              <div className="max-h-[85px] overflow-y-auto space-y-1 custom-scrollbar pr-0.5 bg-black/40 border border-white/5 rounded-xl p-1">
+                {wifiNetworks.length === 0 ? (
+                  <div className="py-2.5 text-center">
+                    <p className="text-[7.5px] font-bold uppercase tracking-wider text-slate-500">
+                      {wifiScanning ? "Ricerca delle reti Wi-Fi reali..." : "Nessuna rete scansionata. Premi 'Cerca Reti Wi-Fi'"}
+                    </p>
+                  </div>
+                ) : (
+                  wifiNetworks.map((net) => {
+                    const isSelected = selectedWifiSsid === net.ssid;
+                    const isConnected = net.connected || (activeSsid && net.ssid === activeSsid);
+                    return (
+                      <button
+                        key={net.ssid}
+                        type="button"
+                        onClick={() => {
+                          setSelectedWifiSsid(net.ssid);
+                          setWifiPassword("");
+                          setWifiStatusMessage(null);
+                        }}
+                        className={`w-full min-h-[28px] flex items-center justify-between px-2 py-1 rounded-lg border text-left transition-all active:scale-[0.98] cursor-pointer ${
+                          isSelected
+                            ? "bg-blue-600/35 border-blue-400 text-white shadow-[0_0_10px_rgba(59,130,246,0.3)] ring-1 ring-blue-400/40"
+                            : isConnected
+                            ? "bg-emerald-950/40 border-emerald-500/40 text-emerald-200"
+                            : "bg-white/5 border-white/5 text-slate-300 hover:bg-white/10"
+                        }`}
+                      >
+                        <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                          <Wifi size={10} className={isSelected ? "text-blue-300" : isConnected ? "text-emerald-400" : "text-slate-400"} />
+                          <span className="text-[8.5px] font-bold truncate">{net.ssid}</span>
+                          {isConnected && (
+                            <span className="px-1 py-0.2 rounded bg-emerald-500/25 border border-emerald-500/40 text-emerald-300 text-[6px] font-black uppercase tracking-wider shrink-0">
+                              Attiva
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-1 shrink-0 ml-1.5">
+                          {net.security && (
+                            <span className="text-[6.5px] text-slate-500 uppercase font-mono">
+                              {net.security.includes("WPA2") ? "WPA2" : net.security.includes("WPA3") ? "WPA3" : "SEC"}
+                            </span>
+                          )}
+                          <span className="text-[7px] font-mono font-bold text-slate-400">
+                            {net.signal}%
+                          </span>
+                        </div>
+                      </button>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+
+            {/* Campo Password Wi-Fi */}
+            {selectedWifiSsid && (
+              <div className="shrink-0 flex flex-col gap-1">
+                <div className="flex items-center justify-between px-1">
+                  <span className="text-[7.5px] font-black uppercase tracking-wider text-slate-300">
+                    Password per <span className="text-blue-400 font-mono">"{selectedWifiSsid}"</span>:
+                  </span>
+                  <span className="text-[6.5px] text-slate-500 uppercase font-bold">
+                    {showWifiPassword ? "In chiaro" : "Oscurata"}
+                  </span>
+                </div>
+
+                <div className="relative w-full">
+                  <input
+                    type={showWifiPassword ? "text" : "password"}
+                    value={wifiPassword}
+                    onChange={(e) => setWifiPassword(e.target.value)}
+                    onFocus={() => { if (useVirtualKeyboard) setKeyboardTarget({ id: 'wifiPassword', title: `Password ${selectedWifiSsid}` }); }}
+                    placeholder={`Inserisci password per ${selectedWifiSsid}...`}
+                    autoComplete="off"
+                    className="w-full h-7.5 bg-black/50 border border-white/15 pl-2.5 pr-14 rounded-xl text-[9.5px] text-white outline-none focus:border-blue-400 font-mono transition-colors"
+                  />
+                  <div className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => setShowWifiPassword(!showWifiPassword)}
+                      className="w-5.5 h-5.5 flex items-center justify-center rounded-lg bg-white/5 hover:bg-white/15 text-slate-400 hover:text-white transition-all active:scale-95 cursor-pointer"
+                      title={showWifiPassword ? "Oscura Password" : "Mostra Password"}
+                    >
+                      {showWifiPassword ? <EyeOff size={11} /> : <Eye size={11} />}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setKeyboardTarget({ id: 'wifiPassword', title: `Password ${selectedWifiSsid}` })}
+                      className={`w-5.5 h-5.5 flex items-center justify-center rounded-lg transition-all active:scale-95 cursor-pointer ${
+                        keyboardTarget?.id === 'wifiPassword' ? "bg-blue-600 text-white" : "bg-white/10 text-slate-400 hover:text-white"
+                      }`}
+                      title="Apri Tastiera Touch"
+                    >
+                      <Keyboard size={11} />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Messaggio di stato Wi-Fi */}
+            {wifiStatusMessage && (
+              <div className={`shrink-0 p-1.5 rounded-lg border text-[7.5px] font-bold uppercase tracking-wide text-center leading-tight ${
+                wifiStatusMessage.type === "success" ? "bg-emerald-950/80 border-emerald-500/40 text-emerald-300" :
+                wifiStatusMessage.type === "error" ? "bg-rose-950/80 border-rose-500/40 text-rose-300" :
+                "bg-blue-950/80 border-blue-500/40 text-blue-300"
+              }`}>
+                {wifiStatusMessage.message}
+              </div>
+            )}
+
+            {/* Tasto Connetti Wi-Fi */}
+            {selectedWifiSsid && (
+              <button
+                type="button"
+                onClick={connectToWifi}
+                disabled={wifiConnecting}
+                className="shrink-0 h-7.5 w-full flex items-center justify-center gap-1.5 bg-emerald-600 hover:bg-emerald-500 active:scale-95 disabled:opacity-40 text-white rounded-xl text-[8.5px] font-black uppercase tracking-wider border border-emerald-400/50 shadow-[0_0_12px_rgba(16,185,129,0.3)] transition-all cursor-pointer"
+              >
+                {wifiConnecting ? (
+                  <>
+                    <div className="w-3 h-3 border-2 border-white/20 border-t-white rounded-full animate-spin shrink-0" />
+                    <span>Connessione in corso...</span>
+                  </>
+                ) : (
+                  <>
+                    <Wifi size={11} className="shrink-0" />
+                    <span>Connetti a "{selectedWifiSsid}"</span>
+                  </>
+                )}
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* 4. SEZIONE CAVO LAN (ETHERNET) */}
+        {networkModeTab === 'lan' && (
+          <div className="flex flex-col gap-1.5 min-h-0 flex-1">
+            {/* Badge Scheda LAN rilevata */}
+            <div className="shrink-0 p-2 rounded-xl bg-slate-900/80 border border-white/10 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Network size={14} className="text-amber-400 shrink-0" />
+                <div className="flex flex-col">
+                  <span className="text-[8px] font-black text-white uppercase tracking-wider">
+                    Interfaccia: {networkStatus.lanInterfaceName || 'eth0 / Ethernet'}
+                  </span>
+                  <span className="text-[7px] text-slate-400 font-mono">
+                    {networkStatus.lanIp ? `IP Assegnato: ${networkStatus.lanIp}` : 'Nessun IP automatico'}
+                  </span>
+                </div>
+              </div>
+              <span className={`px-1.5 py-0.5 rounded text-[7px] font-bold uppercase ${
+                networkStatus.hasLan ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' : 'bg-white/5 text-slate-400'
+              }`}>
+                {networkStatus.hasLan ? 'Cavo Inserito' : 'In attesa'}
               </span>
             </div>
-          ) : (
-            pageNetworks.map((net) => (
-              <button
-                key={net.ssid}
-                type="button"
-                onClick={() => {
-                  setSelectedWifiSsid(net.ssid);
-                  setWifiPassword("");
-                  setWifiStatusMessage(null);
-                }}
-                className={`h-7 w-full flex items-center justify-between px-2 rounded-lg border active:scale-[0.98] ${
-                  selectedWifiSsid === net.ssid
-                    ? 'bg-blue-600/30 border-blue-400 text-white'
-                    : 'bg-white/5 border-white/10 text-slate-300'
-                }`}
-              >
-                <div className="flex items-center gap-1.5 min-w-0 flex-1">
-                  <Wifi size={11} className={selectedWifiSsid === net.ssid ? 'text-blue-300 shrink-0' : 'text-slate-500 shrink-0'} />
-                  <span className="text-[9px] font-bold truncate">{net.ssid}</span>
+
+            {/* Input IP LAN */}
+            <div className="shrink-0 flex flex-col gap-0.5">
+              <span className="text-[7.5px] font-black uppercase tracking-wider text-slate-300 px-1">Indirizzo IP LAN:</span>
+              <div className="relative w-full">
+                <input
+                  type="text"
+                  value={lanIp}
+                  onChange={(e) => setLanIp(e.target.value)}
+                  onFocus={() => { if (useVirtualKeyboard) setKeyboardTarget({ id: 'lanIp', title: 'Indirizzo IP LAN' }); }}
+                  placeholder="Es. 192.168.1.100"
+                  className="w-full h-7.5 bg-black/50 border border-white/15 pl-2.5 pr-8 rounded-xl text-[9.5px] text-white outline-none focus:border-amber-400 font-mono transition-colors"
+                />
+                <button
+                  type="button"
+                  onClick={() => setKeyboardTarget({ id: 'lanIp', title: 'Indirizzo IP LAN' })}
+                  className={`absolute right-1 top-1/2 -translate-y-1/2 w-5.5 h-5.5 flex items-center justify-center rounded-lg transition-all active:scale-95 cursor-pointer ${
+                    keyboardTarget?.id === 'lanIp' ? "bg-amber-600 text-white" : "bg-white/10 text-slate-400 hover:text-white"
+                  }`}
+                  title="Tastiera Touch"
+                >
+                  <Keyboard size={11} />
+                </button>
+              </div>
+            </div>
+
+            {/* Input Gateway LAN */}
+            <div className="shrink-0 flex flex-col gap-0.5">
+              <span className="text-[7.5px] font-black uppercase tracking-wider text-slate-300 px-1">Gateway / Router IP:</span>
+              <div className="relative w-full">
+                <input
+                  type="text"
+                  value={lanGateway}
+                  onChange={(e) => setLanGateway(e.target.value)}
+                  onFocus={() => { if (useVirtualKeyboard) setKeyboardTarget({ id: 'lanGateway', title: 'Gateway / Router LAN' }); }}
+                  placeholder="Es. 192.168.1.1"
+                  className="w-full h-7.5 bg-black/50 border border-white/15 pl-2.5 pr-8 rounded-xl text-[9.5px] text-white outline-none focus:border-amber-400 font-mono transition-colors"
+                />
+                <button
+                  type="button"
+                  onClick={() => setKeyboardTarget({ id: 'lanGateway', title: 'Gateway / Router LAN' })}
+                  className={`absolute right-1 top-1/2 -translate-y-1/2 w-5.5 h-5.5 flex items-center justify-center rounded-lg transition-all active:scale-95 cursor-pointer ${
+                    keyboardTarget?.id === 'lanGateway' ? "bg-amber-600 text-white" : "bg-white/10 text-slate-400 hover:text-white"
+                  }`}
+                  title="Tastiera Touch"
+                >
+                  <Keyboard size={11} />
+                </button>
+              </div>
+            </div>
+
+            {/* Credenziali LAN (Opzionali) */}
+            <div className="shrink-0 grid grid-cols-2 gap-1.5">
+              <div className="flex flex-col gap-0.5">
+                <span className="text-[7px] font-black uppercase tracking-wider text-slate-400 px-1">Utente LAN (opz.):</span>
+                <input
+                  type="text"
+                  value={lanUsername}
+                  onChange={(e) => setLanUsername(e.target.value)}
+                  onFocus={() => { if (useVirtualKeyboard) setKeyboardTarget({ id: 'lanUsername', title: 'Utente Accesso LAN' }); }}
+                  placeholder="admin"
+                  className="w-full h-7 bg-black/50 border border-white/15 px-2 rounded-lg text-[9px] text-white outline-none focus:border-amber-400 font-mono"
+                />
+              </div>
+              <div className="flex flex-col gap-0.5">
+                <span className="text-[7px] font-black uppercase tracking-wider text-slate-400 px-1">Password LAN (opz.):</span>
+                <div className="relative w-full">
+                  <input
+                    type={showLanPassword ? "text" : "password"}
+                    value={lanPassword}
+                    onChange={(e) => setLanPassword(e.target.value)}
+                    onFocus={() => { if (useVirtualKeyboard) setKeyboardTarget({ id: 'lanPassword', title: 'Password Accesso LAN' }); }}
+                    placeholder="••••••••"
+                    className="w-full h-7 bg-black/50 border border-white/15 pl-2 pr-7 rounded-lg text-[9px] text-white outline-none focus:border-amber-400 font-mono"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowLanPassword(!showLanPassword)}
+                    className="absolute right-1 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white"
+                  >
+                    {showLanPassword ? <EyeOff size={10} /> : <Eye size={10} />}
+                  </button>
                 </div>
-                <span className="text-[7px] text-slate-500 font-mono shrink-0 ml-1">{net.signal}%</span>
-              </button>
-            ))
-          )}
-          {pageNetworks.length > 0 && emptySlots > 0 && Array.from({ length: emptySlots }).map((_, i) => (
-            <div key={`empty-${i}`} className="h-7 rounded-lg border border-transparent" />
-          ))}
-        </div>
+              </div>
+            </div>
 
-        {/* Paginazione reti (solo se > 3) */}
-        {wifiNetworks.length > perPage && (
-          <div className="shrink-0 flex items-center justify-between px-1">
+            {/* Messaggio di stato LAN */}
+            {lanStatusMessage && (
+              <div className={`shrink-0 p-1.5 rounded-lg border text-[7.5px] font-bold uppercase tracking-wide text-center leading-tight ${
+                lanStatusMessage.type === "success" ? "bg-emerald-950/80 border-emerald-500/40 text-emerald-300" :
+                lanStatusMessage.type === "error" ? "bg-rose-950/80 border-rose-500/40 text-rose-300" :
+                "bg-blue-950/80 border-blue-500/40 text-blue-300"
+              }`}>
+                {lanStatusMessage.message}
+              </div>
+            )}
+
+            {/* Tasto Conferma Connessione LAN */}
             <button
               type="button"
-              disabled={wifiNetworkPage === 0}
-              onClick={() => setWifiNetworkPage(p => Math.max(0, p - 1))}
-              className="w-8 h-6 flex items-center justify-center bg-white/5 border border-white/10 rounded text-slate-400 active:scale-95 disabled:opacity-30"
+              onClick={confirmLanConnection}
+              disabled={lanTesting}
+              className="shrink-0 h-8 w-full flex items-center justify-center gap-1.5 bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-500 hover:to-amber-400 active:scale-95 disabled:opacity-40 text-white rounded-xl text-[8.5px] font-black uppercase tracking-wider border border-amber-400/50 shadow-[0_0_12px_rgba(245,158,11,0.3)] transition-all cursor-pointer"
             >
-              <ChevronLeft size={14} />
-            </button>
-            <span className="text-[7px] text-slate-600 font-bold uppercase">{wifiNetworkPage + 1}/{totalPages}</span>
-            <button
-              type="button"
-              disabled={wifiNetworkPage >= totalPages - 1}
-              onClick={() => setWifiNetworkPage(p => Math.min(totalPages - 1, p + 1))}
-              className="w-8 h-6 flex items-center justify-center bg-white/5 border border-white/10 rounded text-slate-400 active:scale-95 disabled:opacity-30"
-            >
-              <ChevronRight size={14} />
+              {lanTesting ? (
+                <>
+                  <div className="w-3 h-3 border-2 border-white/20 border-t-white rounded-full animate-spin shrink-0" />
+                  <span>Verifica Connessione LAN in corso...</span>
+                </>
+              ) : (
+                <>
+                  <Check size={12} className="shrink-0" />
+                  <span>Conferma Connessione LAN</span>
+                </>
+              )}
             </button>
           </div>
         )}
-          </>
-        )}
-
-        {isKeyboardOpen && selectedWifiSsid && (
-          <div className="shrink-0 px-1 py-1">
-            <span className="text-[8px] text-blue-400 font-black uppercase tracking-widest">Rete: {selectedWifiSsid}</span>
-          </div>
-        )}
-
-        {/* Password Wi-Fi — tastiera fisica USB, virtuale touch, mostra/nascondi */}
-        <div className="shrink-0 relative">
-          <input
-            type={showWifiPassword ? "text" : "password"}
-            value={wifiPassword}
-            onChange={(e) => setWifiPassword(e.target.value)}
-            onFocus={() => { if (useVirtualKeyboard) setKeyboardTarget({ id: 'wifiPassword', title: 'Password Wi-Fi' }); }}
-            placeholder={selectedWifiSsid ? `Password ${selectedWifiSsid}` : 'Password Wi-Fi'}
-            autoComplete="off"
-            className="w-full h-8 bg-white/5 border border-white/10 pl-2 pr-[4.5rem] rounded-lg text-[10px] text-white outline-none focus:border-blue-500 transition-colors"
-          />
-          <button
-            type="button"
-            onClick={() => setShowWifiPassword(!showWifiPassword)}
-            className="absolute right-9 top-1/2 -translate-y-1/2 w-7 h-6 flex items-center justify-center rounded active:scale-95 text-slate-400 hover:text-white"
-            title={showWifiPassword ? 'Nascondi password' : 'Mostra password'}
-          >
-            {showWifiPassword ? <EyeOff size={13} /> : <Eye size={13} />}
-          </button>
-          <button
-            type="button"
-            onClick={() => setKeyboardTarget({ id: 'wifiPassword', title: 'Password Wi-Fi' })}
-            className={`absolute right-1 top-1/2 -translate-y-1/2 w-7 h-6 flex items-center justify-center rounded active:scale-95 ${
-              keyboardTarget?.id === 'wifiPassword' ? 'bg-blue-600 text-white' : 'bg-white/10 text-slate-400'
-            }`}
-            title="Tastiera virtuale"
-          >
-            <Keyboard size={14} />
-          </button>
-        </div>
-
-        {/* Connetti — visibile sopra la tastiera virtuale */}
-        <button
-          type="button"
-          onClick={connectToWifi}
-          disabled={!selectedWifiSsid || wifiConnecting}
-          className={`shrink-0 w-full h-8 flex items-center justify-center gap-1.5 bg-green-600 border border-green-400 rounded-lg text-white text-[9px] font-black uppercase tracking-widest active:scale-95 disabled:opacity-40 ${
-            isKeyboardOpen ? 'mb-[210px]' : ''
-          }`}
-        >
-          {wifiConnecting ? (
-            <>
-              <div className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-              Connessione...
-            </>
-          ) : (
-            <>
-              <Wifi size={12} />
-              Connetti
-            </>
-          )}
-        </button>
       </div>
     );
   };
 
-  const renderWifiConfigPanel = (compact = false) => (
-    <div className={`space-y-3 ${compact ? '' : 'p-1'}`}>
-      <div className={`flex items-center justify-between gap-2 p-3 rounded-xl border ${networkStatus.online ? 'bg-green-500/10 border-green-500/20' : 'bg-amber-500/10 border-amber-500/20'}`}>
-        <div className="flex items-center gap-2">
-          {networkStatus.online ? <Wifi size={16} className="text-green-400" /> : <WifiOff size={16} className="text-amber-400 animate-pulse" />}
-          <div>
-            <p className={`text-[9px] font-black uppercase tracking-widest ${networkStatus.online ? 'text-green-400' : 'text-amber-400'}`}>
-              {networkStatus.checking ? 'Verifica rete...' : networkStatus.online ? 'Internet Attivo' : 'Connessione Assente'}
-            </p>
-            {networkStatus.currentSsid && (
-              <p className="text-[8px] text-slate-500 font-bold uppercase mt-0.5">Rete: {networkStatus.currentSsid}</p>
-            )}
-          </div>
-        </div>
-        <button
-          type="button"
-          onClick={checkNetworkStatus}
-          className="p-2 bg-white/5 border border-white/10 rounded-lg text-slate-400 hover:text-white active:scale-95"
-          title="Ricontrolla connessione"
-        >
-          <RefreshCw size={14} className={networkStatus.checking ? 'animate-spin' : ''} />
-        </button>
-      </div>
+  const renderWifiConfigPanel = (compact = false) => {
+    const primaryIp = getPrimaryNetworkIp() || networkStatus.lanIp || networkStatus.wifiIp;
+    const isLanActive = !!networkStatus.lanIp || networkStatus.connectionType === 'lan' || networkStatus.connectionType === 'both';
+    const activeSsid = networkStatus.currentSsid || wifiNetworks.find(n => n.connected)?.ssid || null;
 
-      <div className="flex items-center justify-between">
-        <label className="text-[9px] font-black uppercase tracking-widest text-slate-500">Reti Wi-Fi Disponibili</label>
-        <button
-          type="button"
-          onClick={scanWifiNetworks}
-          disabled={wifiScanning}
-          className="text-[8px] text-blue-400 hover:text-blue-300 uppercase font-black tracking-widest flex items-center gap-1 disabled:opacity-50"
-        >
-          <RefreshCw size={10} className={wifiScanning ? 'animate-spin' : ''} />
-          {wifiScanning ? 'Scansione...' : 'Cerca Reti'}
-        </button>
-      </div>
+    return (
+      <div className={`space-y-3.5 ${compact ? '' : 'p-1'}`}>
+        {/* Banner Stato Connessione con LED evidente */}
+        <div className={`flex items-center justify-between gap-3 p-3 sm:p-4 rounded-2xl border transition-all ${
+          networkStatus.online 
+            ? 'bg-emerald-950/40 border-emerald-500/40 text-emerald-300 shadow-[0_0_20px_rgba(16,185,129,0.15)]' 
+            : 'bg-amber-950/40 border-amber-500/40 text-amber-300'
+        }`}>
+          <div className="flex items-center gap-3">
+            {/* LED ad alta luminosità */}
+            <div className="relative flex items-center justify-center shrink-0 w-4 h-4">
+              <span className={`w-3 h-3 rounded-full ${
+                networkStatus.online ? 'bg-emerald-400 shadow-[0_0_12px_#10b981]' : 'bg-amber-500 shadow-[0_0_12px_#f59e0b]'
+              }`} />
+              {networkStatus.online && (
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-60" />
+              )}
+            </div>
 
-      <div className={`overflow-y-auto custom-scrollbar space-y-1.5 bg-black/30 rounded-xl border border-white/5 p-2 ${compact ? 'max-h-[100px]' : 'max-h-[140px]'}`}>
-        {wifiNetworks.length === 0 ? (
-          <p className="text-center text-[9px] text-slate-500 py-4 font-bold uppercase tracking-widest">
-            {wifiScanning ? 'Ricerca reti in corso...' : 'Premi "Cerca Reti" per iniziare'}
-          </p>
-        ) : (
-          wifiNetworks.map((net) => (
-            <button
-              key={net.ssid}
-              type="button"
-              onClick={() => {
-                setSelectedWifiSsid(net.ssid);
-                setWifiPassword("");
-                setWifiStatusMessage(null);
-              }}
-              className={`w-full flex items-center justify-between p-2.5 rounded-lg border text-left transition-all active:scale-[0.98] ${
-                selectedWifiSsid === net.ssid
-                  ? 'bg-blue-600/20 border-blue-500/40 text-white'
-                  : 'bg-white/5 border-white/5 text-slate-300 hover:bg-white/10'
-              }`}
-            >
-              <div className="flex items-center gap-2 min-w-0">
-                <Wifi size={12} className={selectedWifiSsid === net.ssid ? 'text-blue-400' : 'text-slate-500'} />
-                <span className="text-[10px] font-bold truncate">{net.ssid}</span>
+            <div>
+              <div className="flex items-center gap-2">
+                <p className={`text-[10px] sm:text-xs font-black uppercase tracking-widest ${networkStatus.online ? 'text-emerald-400' : 'text-amber-400'}`}>
+                  {networkStatus.checking ? 'Verifica connessione...' : networkStatus.online ? 'Internet Connesso & Attivo' : 'Nessuna Connessione Rete'}
+                </p>
+                {networkStatus.online && (
+                  <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-[8px] font-black uppercase tracking-wider">
+                    {activeSsid && isLanActive ? 'Wi-Fi + Cavo LAN' : activeSsid ? 'Rete Wi-Fi' : 'Cavo LAN (Ethernet)'}
+                  </span>
+                )}
               </div>
-              <div className="flex items-center gap-2 shrink-0">
-                {net.security && <span className="text-[7px] text-slate-600 uppercase">{net.security}</span>}
-                <span className="text-[8px] text-slate-500 font-mono">{net.signal}%</span>
+              <div className="flex items-center gap-3 text-[9px] text-slate-400 font-bold uppercase mt-1 flex-wrap">
+                {activeSsid && (
+                  <span>SSID: <span className="text-white font-mono">{activeSsid}</span></span>
+                )}
+                {primaryIp && (
+                  <span className="text-emerald-400 font-mono">IP: {primaryIp}</span>
+                )}
+                {networkStatus.lanIp && activeSsid && (
+                  <span className="text-blue-300 font-mono">LAN IP: {networkStatus.lanIp}</span>
+                )}
               </div>
-            </button>
-          ))
-        )}
-      </div>
-
-      {selectedWifiSsid && (
-        <div className="space-y-1">
-          <div className="flex justify-between items-center">
-            <label className="text-[9px] font-black uppercase tracking-widest text-slate-500 px-1">
-              Password Wi-Fi {selectedWifiSsid && <span className="text-blue-400">({selectedWifiSsid})</span>}
-            </label>
-            {keyboardTarget?.id === 'wifiPassword' && <Keyboard size={12} className="text-blue-400 animate-pulse" />}
-          </div>
-          <div className="relative">
-            <input
-              type={showWifiPassword ? "text" : "password"}
-              value={wifiPassword}
-              onChange={(e) => setWifiPassword(e.target.value)}
-              onFocus={() => { if (useVirtualKeyboard) setKeyboardTarget({ id: 'wifiPassword', title: 'Password Wi-Fi' }); }}
-              placeholder="Inserisci password Wi-Fi"
-              className="w-full bg-white/5 border border-white/10 px-4 py-3 pr-20 rounded-xl text-xs text-white outline-none focus:border-blue-500 transition-colors"
-            />
-            <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1.5">
-              <button
-                type="button"
-                onClick={() => setShowWifiPassword(!showWifiPassword)}
-                className="text-slate-500 hover:text-white transition-colors"
-                title={showWifiPassword ? 'Nascondi password' : 'Mostra password'}
-              >
-                {showWifiPassword ? <EyeOff size={16} /> : <Eye size={16} />}
-              </button>
-              <button
-                type="button"
-                onClick={() => { if (useVirtualKeyboard) setKeyboardTarget({ id: 'wifiPassword', title: 'Password Wi-Fi' }); }}
-                className="text-slate-500 hover:text-white transition-colors"
-                title="Tastiera virtuale"
-              >
-                <Keyboard size={16} />
-              </button>
             </div>
           </div>
-        </div>
-      )}
 
-      {wifiStatusMessage && (
-        <div className={`p-3 rounded-xl border text-[9px] font-bold uppercase tracking-wide text-center ${
-          wifiStatusMessage.type === 'success' ? 'bg-green-500/10 border-green-500/20 text-green-400' :
-          wifiStatusMessage.type === 'error' ? 'bg-red-500/10 border-red-500/20 text-red-400' :
-          'bg-blue-500/10 border-blue-500/20 text-blue-400'
-        }`}>
-          {wifiStatusMessage.message}
+          <button
+            type="button"
+            onClick={checkNetworkStatus}
+            disabled={networkStatus.checking}
+            className="p-2.5 bg-white/5 border border-white/10 hover:bg-white/10 rounded-xl text-slate-300 hover:text-white active:scale-95 transition-all cursor-pointer"
+            title="Ricontrolla connessione"
+          >
+            <RefreshCw size={14} className={networkStatus.checking ? 'animate-spin' : ''} />
+          </button>
         </div>
-      )}
 
-      <button
-        type="button"
-        onClick={connectToWifi}
-        disabled={!selectedWifiSsid || wifiConnecting}
-        className="w-full py-3 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-xl text-[10px] font-black uppercase tracking-widest transition-all shadow-lg flex items-center justify-center gap-2"
-      >
-        {wifiConnecting ? (
-          <>
-            <div className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin" />
-            Connessione...
-          </>
-        ) : (
-          <>
+        {/* Sub-Tabs: Wi-Fi vs LAN */}
+        <div className="flex items-center gap-2 p-1 bg-black/40 rounded-xl border border-white/10">
+          <button
+            type="button"
+            onClick={() => setNetworkModeTab('wifi')}
+            className={`flex-1 py-2 flex items-center justify-center gap-2 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer ${
+              networkModeTab === 'wifi'
+                ? 'bg-blue-600 border border-blue-400 text-white shadow-md'
+                : 'text-slate-400 hover:text-white'
+            }`}
+          >
             <Wifi size={14} />
-            Connetti a Internet
-          </>
+            <span>Connessione Wi-Fi</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setNetworkModeTab('lan')}
+            className={`flex-1 py-2 flex items-center justify-center gap-2 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer ${
+              networkModeTab === 'lan'
+                ? 'bg-amber-600 border border-amber-400 text-white shadow-md'
+                : 'text-slate-400 hover:text-white'
+            }`}
+          >
+            <Network size={14} />
+            <span>Connessione LAN (Cavo Ethernet)</span>
+          </button>
+        </div>
+
+        {/* Tab Wi-Fi */}
+        {networkModeTab === 'wifi' && (
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <label className="text-[9px] font-black uppercase tracking-widest text-slate-400">Reti Wi-Fi Rilevate</label>
+              <button
+                type="button"
+                onClick={scanWifiNetworks}
+                disabled={wifiScanning}
+                className="text-[9px] text-blue-400 hover:text-blue-300 uppercase font-black tracking-widest flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
+              >
+                <RefreshCw size={11} className={wifiScanning ? 'animate-spin' : ''} />
+                {wifiScanning ? 'Scansione in corso...' : 'Cerca Reti Wi-Fi'}
+              </button>
+            </div>
+
+            <div className={`overflow-y-auto custom-scrollbar space-y-1.5 bg-black/40 rounded-xl border border-white/10 p-2 ${compact ? 'max-h-[110px]' : 'max-h-[150px]'}`}>
+              {wifiNetworks.length === 0 ? (
+                <p className="text-center text-[9px] text-slate-500 py-4 font-bold uppercase tracking-widest">
+                  {wifiScanning ? 'Ricerca reti in corso...' : 'Nessuna rete in memoria. Premi "Cerca Reti Wi-Fi"'}
+                </p>
+              ) : (
+                wifiNetworks.map((net) => (
+                  <button
+                    key={net.ssid}
+                    type="button"
+                    onClick={() => {
+                      setSelectedWifiSsid(net.ssid);
+                      setWifiPassword("");
+                      setWifiStatusMessage(null);
+                    }}
+                    className={`w-full flex items-center justify-between p-2.5 rounded-xl border text-left transition-all active:scale-[0.98] cursor-pointer ${
+                      selectedWifiSsid === net.ssid
+                        ? 'bg-blue-600/30 border-blue-500/60 text-white shadow-sm ring-1 ring-blue-500/40'
+                        : (net.connected || (networkStatus.currentSsid && net.ssid === networkStatus.currentSsid))
+                        ? 'bg-emerald-950/40 border-emerald-500/40 text-emerald-200'
+                        : 'bg-white/5 border-white/5 text-slate-300 hover:bg-white/10'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2 min-w-0 flex-1">
+                      <Wifi size={13} className={selectedWifiSsid === net.ssid ? 'text-blue-400' : (net.connected || (networkStatus.currentSsid && net.ssid === networkStatus.currentSsid)) ? 'text-emerald-400' : 'text-slate-500'} />
+                      <span className="text-[10px] font-bold truncate">{net.ssid}</span>
+                      {(net.connected || (networkStatus.currentSsid && net.ssid === networkStatus.currentSsid)) && (
+                        <span className="px-2 py-0.5 rounded bg-emerald-500/20 border border-emerald-500/30 text-emerald-300 text-[7.5px] font-black uppercase tracking-wider shrink-0">
+                          Attiva
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0 ml-2">
+                      {net.security && <span className="text-[7.5px] text-slate-400 uppercase font-mono">{net.security}</span>}
+                      <span className="text-[8.5px] text-slate-300 font-mono font-bold">{net.signal}%</span>
+                    </div>
+                  </button>
+                ))
+              )}
+            </div>
+
+            {selectedWifiSsid && (
+              <div className="space-y-1.5">
+                <div className="flex justify-between items-center px-1">
+                  <label className="text-[9px] font-black uppercase tracking-widest text-slate-400">
+                    Password per <span className="text-blue-400 font-mono">"{selectedWifiSsid}"</span>:
+                  </label>
+                  {keyboardTarget?.id === 'wifiPassword' && <Keyboard size={12} className="text-blue-400 animate-pulse" />}
+                </div>
+                <div className="relative">
+                  <input
+                    type={showWifiPassword ? "text" : "password"}
+                    value={wifiPassword}
+                    onChange={(e) => setWifiPassword(e.target.value)}
+                    onFocus={() => { if (useVirtualKeyboard) setKeyboardTarget({ id: 'wifiPassword', title: `Password ${selectedWifiSsid}` }); }}
+                    placeholder="Inserisci password Wi-Fi..."
+                    className="w-full bg-white/5 border border-white/15 px-3.5 py-2.5 pr-20 rounded-xl text-xs text-white outline-none focus:border-blue-400 transition-colors font-mono"
+                  />
+                  <div className="absolute right-2.5 top-1/2 -translate-y-1/2 flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => setShowWifiPassword(!showWifiPassword)}
+                      className="p-1.5 text-slate-400 hover:text-white transition-colors cursor-pointer"
+                      title={showWifiPassword ? 'Nascondi password' : 'Mostra password'}
+                    >
+                      {showWifiPassword ? <EyeOff size={15} /> : <Eye size={15} />}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { if (useVirtualKeyboard) setKeyboardTarget({ id: 'wifiPassword', title: `Password ${selectedWifiSsid}` }); }}
+                      className="p-1.5 text-slate-400 hover:text-white transition-colors cursor-pointer"
+                      title="Tastiera virtuale"
+                    >
+                      <Keyboard size={15} />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {wifiStatusMessage && (
+              <div className={`p-2.5 rounded-xl border text-[9px] font-bold uppercase tracking-wide text-center ${
+                wifiStatusMessage.type === 'success' ? 'bg-emerald-950/80 border-emerald-500/40 text-emerald-300' :
+                wifiStatusMessage.type === 'error' ? 'bg-rose-950/80 border-rose-500/40 text-rose-300' :
+                'bg-blue-950/80 border-blue-500/40 text-blue-300'
+              }`}>
+                {wifiStatusMessage.message}
+              </div>
+            )}
+
+            <button
+              type="button"
+              onClick={connectToWifi}
+              disabled={!selectedWifiSsid || wifiConnecting}
+              className="w-full py-3 bg-blue-600 hover:bg-blue-500 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-xl text-[10px] font-black uppercase tracking-widest transition-all shadow-lg flex items-center justify-center gap-2 cursor-pointer active:scale-95"
+            >
+              {wifiConnecting ? (
+                <>
+                  <div className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin" />
+                  Connessione a "{selectedWifiSsid}" in corso...
+                </>
+              ) : (
+                <>
+                  <Wifi size={14} />
+                  <span>Connetti a "{selectedWifiSsid || 'Wi-Fi'}"</span>
+                </>
+              )}
+            </button>
+          </div>
         )}
-      </button>
-    </div>
-  );
+
+        {/* Tab LAN (Ethernet) */}
+        {networkModeTab === 'lan' && (
+          <div className="space-y-3">
+            {/* Scheda stato hardware LAN */}
+            <div className="p-3.5 rounded-xl bg-slate-900/90 border border-white/10 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-lg bg-amber-500/20 border border-amber-500/30 text-amber-400">
+                  <Network size={18} />
+                </div>
+                <div>
+                  <p className="text-[10px] font-black text-white uppercase tracking-wider">
+                    Interfaccia: {networkStatus.lanInterfaceName || 'eth0 (Ethernet)'}
+                  </p>
+                  <p className="text-[9px] text-slate-400 font-mono mt-0.5">
+                    {networkStatus.lanIp ? `IP Assegnato: ${networkStatus.lanIp}` : 'Nessun indirizzo IP DHCP rilevato'}
+                  </p>
+                </div>
+              </div>
+              <span className={`px-2.5 py-1 rounded-lg text-[8px] font-black uppercase tracking-wider border ${
+                networkStatus.hasLan 
+                  ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' 
+                  : 'bg-white/5 text-slate-400 border-white/10'
+              }`}>
+                {networkStatus.hasLan ? 'Cavo Connesso' : 'Cavo Non Rilevato'}
+              </span>
+            </div>
+
+            {/* Input Configurazione Parametri LAN */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {/* Indirizzo IP LAN */}
+              <div className="space-y-1">
+                <label className="text-[9px] font-black uppercase tracking-widest text-slate-400 px-1">
+                  Indirizzo IP LAN / Host:
+                </label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={lanIp}
+                    onChange={(e) => setLanIp(e.target.value)}
+                    onFocus={() => { if (useVirtualKeyboard) setKeyboardTarget({ id: 'lanIp', title: 'Indirizzo IP LAN' }); }}
+                    placeholder="Es. 192.168.1.100"
+                    className="w-full bg-white/5 border border-white/15 px-3 py-2.5 pr-10 rounded-xl text-xs text-white outline-none focus:border-amber-400 transition-colors font-mono"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => { if (useVirtualKeyboard) setKeyboardTarget({ id: 'lanIp', title: 'Indirizzo IP LAN' }); }}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white"
+                  >
+                    <Keyboard size={14} />
+                  </button>
+                </div>
+              </div>
+
+              {/* Gateway LAN */}
+              <div className="space-y-1">
+                <label className="text-[9px] font-black uppercase tracking-widest text-slate-400 px-1">
+                  Gateway / Router IP:
+                </label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={lanGateway}
+                    onChange={(e) => setLanGateway(e.target.value)}
+                    onFocus={() => { if (useVirtualKeyboard) setKeyboardTarget({ id: 'lanGateway', title: 'Gateway / Router LAN' }); }}
+                    placeholder="Es. 192.168.1.1"
+                    className="w-full bg-white/5 border border-white/15 px-3 py-2.5 pr-10 rounded-xl text-xs text-white outline-none focus:border-amber-400 transition-colors font-mono"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => { if (useVirtualKeyboard) setKeyboardTarget({ id: 'lanGateway', title: 'Gateway / Router LAN' }); }}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white"
+                  >
+                    <Keyboard size={14} />
+                  </button>
+                </div>
+              </div>
+
+              {/* Credenziali Utente LAN */}
+              <div className="space-y-1">
+                <label className="text-[9px] font-black uppercase tracking-widest text-slate-400 px-1">
+                  Utente Accesso Rete (opzionale):
+                </label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={lanUsername}
+                    onChange={(e) => setLanUsername(e.target.value)}
+                    onFocus={() => { if (useVirtualKeyboard) setKeyboardTarget({ id: 'lanUsername', title: 'Utente LAN' }); }}
+                    placeholder="Es. admin"
+                    className="w-full bg-white/5 border border-white/15 px-3 py-2.5 pr-10 rounded-xl text-xs text-white outline-none focus:border-amber-400 transition-colors font-mono"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => { if (useVirtualKeyboard) setKeyboardTarget({ id: 'lanUsername', title: 'Utente LAN' }); }}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white"
+                  >
+                    <Keyboard size={14} />
+                  </button>
+                </div>
+              </div>
+
+              {/* Credenziali Password LAN */}
+              <div className="space-y-1">
+                <label className="text-[9px] font-black uppercase tracking-widest text-slate-400 px-1">
+                  Password LAN / Router (opzionale):
+                </label>
+                <div className="relative">
+                  <input
+                    type={showLanPassword ? "text" : "password"}
+                    value={lanPassword}
+                    onChange={(e) => setLanPassword(e.target.value)}
+                    onFocus={() => { if (useVirtualKeyboard) setKeyboardTarget({ id: 'lanPassword', title: 'Password LAN' }); }}
+                    placeholder="••••••••"
+                    className="w-full bg-white/5 border border-white/15 px-3 py-2.5 pr-16 rounded-xl text-xs text-white outline-none focus:border-amber-400 transition-colors font-mono"
+                  />
+                  <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => setShowLanPassword(!showLanPassword)}
+                      className="p-1 text-slate-400 hover:text-white"
+                    >
+                      {showLanPassword ? <EyeOff size={14} /> : <Eye size={14} />}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { if (useVirtualKeyboard) setKeyboardTarget({ id: 'lanPassword', title: 'Password LAN' }); }}
+                      className="p-1 text-slate-400 hover:text-white"
+                    >
+                      <Keyboard size={14} />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Messaggio di stato test LAN */}
+            {lanStatusMessage && (
+              <div className={`p-2.5 rounded-xl border text-[9px] font-bold uppercase tracking-wide text-center ${
+                lanStatusMessage.type === 'success' ? 'bg-emerald-950/80 border-emerald-500/40 text-emerald-300' :
+                lanStatusMessage.type === 'error' ? 'bg-rose-950/80 border-rose-500/40 text-rose-300' :
+                'bg-blue-950/80 border-blue-500/40 text-blue-300'
+              }`}>
+                {lanStatusMessage.message}
+              </div>
+            )}
+
+            {/* Tasto Conferma Connessione LAN */}
+            <button
+              type="button"
+              onClick={confirmLanConnection}
+              disabled={lanTesting}
+              className="w-full py-3 bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-500 hover:to-amber-400 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-xl text-[10px] font-black uppercase tracking-widest transition-all shadow-lg flex items-center justify-center gap-2 cursor-pointer active:scale-95"
+            >
+              {lanTesting ? (
+                <>
+                  <div className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin" />
+                  Verifica Connessione LAN in corso...
+                </>
+              ) : (
+                <>
+                  <Check size={14} />
+                  <span>Conferma Connessione LAN</span>
+                </>
+              )}
+            </button>
+          </div>
+        )}
+      </div>
+    );
+  };
 
   if (authLoading) return (
     <div className="min-h-screen bg-[#050810] flex items-center justify-center">
@@ -3591,9 +4176,18 @@ export default function App() {
                 <ShieldCheck size={20} className="text-blue-400 drop-shadow-[0_0_8px_rgba(96,165,250,0.5)] sm:w-6 sm:h-6" />
               </div>
               <div className="flex flex-col min-w-0">
-                <h2 className="text-sm sm:text-xl lg:text-2xl font-black text-white uppercase tracking-tighter flex items-center gap-1">
-                  VIGIL.<span className="text-blue-400 drop-shadow-[0_0_10px_rgba(96,165,250,0.8)]">AI</span>
-                </h2>
+                <div className="flex items-center gap-2">
+                  <h2 className="text-sm sm:text-xl lg:text-2xl font-black text-white uppercase tracking-tighter flex items-center gap-1">
+                    VIGIL.<span className="text-blue-400 drop-shadow-[0_0_10px_rgba(96,165,250,0.8)]">AI</span>
+                  </h2>
+                  <span 
+                    className="px-1.5 sm:px-2 py-0.5 rounded-lg bg-blue-500/15 border border-blue-500/30 text-blue-400 font-mono font-black text-[10px] sm:text-xs flex items-center gap-1 shadow-sm shrink-0"
+                    title={`Frequenza di analisi attiva: ${currentAnalysisSeconds} secondi`}
+                  >
+                    <Timer size={11} className="text-blue-400 shrink-0" />
+                    <span>{currentAnalysisSeconds}s</span>
+                  </span>
+                </div>
                 <div className="flex flex-wrap items-center gap-2 mt-0.5 text-[9px] lg:text-[10px] font-bold text-slate-500 uppercase tracking-widest">
                   {/* Mobile view (< md): AI Model + Green LED replaces "Sistema Attivo" */}
                   <div className="flex md:hidden items-center gap-1.5">
@@ -3918,22 +4512,7 @@ export default function App() {
 
         {/* Content Scrolling Area */}
         {isMobile35 ? (
-          <div className="w-full h-full flex flex-col bg-black p-1 gap-0.5 text-slate-300">
-            <div className="flex items-center gap-2 shrink-0 bg-slate-900/90 border border-white/10 rounded-xl px-2 py-1">
-              <div className="w-7 h-7 glass rounded-lg flex items-center justify-center bg-blue-600/10 border border-blue-500/20 shrink-0">
-                <ShieldCheck size={14} className="text-blue-400" />
-              </div>
-              <div className="flex flex-col min-w-0 leading-tight">
-                <span className="text-[9px] font-black text-white uppercase tracking-tighter">
-                  VIGIL.<span className="text-blue-400">AI</span>
-                </span>
-                <div className="flex items-center gap-1.5 text-[8px] font-bold text-slate-500 uppercase tracking-widest">
-                  <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${isMonitoring ? 'bg-green-500 shadow-[0_0_8px_#22c55e]' : 'bg-slate-700'}`} />
-                  {isMonitoring ? 'Sistema Attivo' : 'In Attesa'}
-                </div>
-                {displayAccountEmail && <AccountEmailLine email={displayAccountEmail} />}
-              </div>
-            </div>
+          <div className="w-full h-full flex flex-col bg-black p-1 gap-1 text-slate-300">
             <div className="flex flex-row flex-1 min-h-0 gap-1">
             {cameras.length > 0 && activeCameraId ? (
               (() => {
@@ -3942,42 +4521,87 @@ export default function App() {
                   <>
                     {/* Left Section: Top Bar + Video Player */}
                     <div className="flex-1 flex flex-col h-full gap-1 overflow-hidden">
-                      {/* Top Bar for Camera Navigation */}
-                      <div className="flex items-center justify-between bg-slate-900/90 border border-white/10 rounded-xl p-1 shrink-0">
-                        <button
-                          type="button"
-                          onClick={goToPrevCamera}
-                          className="px-3 py-1.5 bg-white/5 border border-white/5 text-white rounded-lg active:scale-95 cursor-pointer"
-                        >
-                          <ChevronLeft size={16} />
-                        </button>
-                        
-                        <button
-                          type="button"
-                          onClick={openActiveCameraConfig}
-                          className="flex items-center gap-1.5 px-2 py-1 rounded-lg hover:bg-white/5 active:scale-95 cursor-pointer"
-                          title="Setup di questa camera"
-                        >
-                          <span className="text-[9px] font-black text-blue-400 uppercase tracking-widest">
-                            #{getCameraOrderNumber(cameras, activeCamera.id) ?? 1}
+                      {/* Top Bar: Logo, LED di linea (verde/rosso), Email a SX | Navigazione e Nome Cam a DX */}
+                      <div className="flex items-center justify-between bg-slate-900/90 border border-white/10 rounded-xl px-2 py-1 shrink-0 gap-1.5 h-[34px]">
+                        {/* A SINISTRA: Logo Vigil.AI + LED di stato (Verde = Online / Rosso = Non attivo) + Email utente */}
+                        <div className="flex items-center gap-1.5 min-w-0 shrink">
+                          <div className="w-5 h-5 rounded-md flex items-center justify-center bg-blue-600/15 border border-blue-500/25 shrink-0">
+                            <ShieldCheck size={12} className="text-blue-400" />
+                          </div>
+                          <span className="text-[10px] font-black text-white uppercase tracking-tighter shrink-0">
+                            VIGIL.<span className="text-blue-400">AI</span>
                           </span>
-                          <span className={`w-1.5 h-1.5 rounded-full ${isMonitoring ? 'bg-red-500 animate-pulse' : 'bg-slate-500'}`} />
-                          <span className="text-[10px] font-black text-white uppercase tracking-wider">{activeCamera.name}</span>
-                          <Settings size={12} className="text-slate-400" />
-                        </button>
 
-                        <button
-                          type="button"
-                          onClick={goToNextCamera}
-                          className="px-3 py-1.5 bg-white/5 border border-white/5 text-white rounded-lg active:scale-95 cursor-pointer"
-                        >
-                          <ChevronRight size={16} />
-                        </button>
+                          {/* Badge frequenza d'analisi (solo numeretto) */}
+                          <span 
+                            className="px-1.5 py-0.5 rounded bg-blue-500/20 border border-blue-500/30 text-blue-300 font-mono font-bold text-[8.5px] shrink-0"
+                            title={`Frequenza di analisi: ${currentAnalysisSeconds}s`}
+                          >
+                            {currentAnalysisSeconds}s
+                          </span>
+                          
+                          {/* LED Stato Sistema: Solo verde (in linea/attivo) o rosso (non attivo) */}
+                          <span 
+                            className={`w-2 h-2 rounded-full shrink-0 ${
+                              isMonitoring 
+                                ? 'bg-emerald-500 shadow-[0_0_8px_#10b981]' 
+                                : 'bg-red-500 shadow-[0_0_8px_#ef4444]'
+                            }`}
+                            title={isMonitoring ? "Sistema in linea" : "Sistema non attivo"}
+                          />
+
+                          {/* Email account */}
+                          {displayAccountEmail && (
+                            <span className="text-[8px] text-blue-400 font-semibold truncate max-w-[100px] sm:max-w-[150px] drop-shadow-[0_0_6px_rgba(96,165,250,0.3)]">
+                              {displayAccountEmail}
+                            </span>
+                          )}
+                        </div>
+
+                        {/* A DESTRA: Navigazione e Nome Telecamera */}
+                        <div className="flex items-center gap-1 shrink-0">
+                          <button
+                            type="button"
+                            onClick={goToPrevCamera}
+                            className="p-1 bg-white/5 hover:bg-white/10 border border-white/5 text-white rounded-lg active:scale-95 cursor-pointer"
+                            title="Camera precedente"
+                          >
+                            <ChevronLeft size={14} />
+                          </button>
+                          
+                          <button
+                            type="button"
+                            onClick={openActiveCameraConfig}
+                            className="flex items-center gap-1 px-1.5 py-1 rounded-lg bg-white/5 hover:bg-white/10 border border-white/5 active:scale-95 cursor-pointer max-w-[120px] sm:max-w-[160px] truncate"
+                            title="Setup di questa camera"
+                          >
+                            <span className="text-[8.5px] font-black text-blue-400 uppercase tracking-widest shrink-0">
+                              #{getCameraOrderNumber(cameras, activeCamera.id) ?? 1}
+                            </span>
+                            <span className="text-[9.5px] font-black text-white uppercase tracking-wider truncate">
+                              {activeCamera.name}
+                            </span>
+                            <Settings size={11} className="text-slate-400 shrink-0" />
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={goToNextCamera}
+                            className="p-1 bg-white/5 hover:bg-white/10 border border-white/5 text-white rounded-lg active:scale-95 cursor-pointer"
+                            title="Camera successiva"
+                          >
+                            <ChevronRight size={14} />
+                          </button>
+                        </div>
                       </div>
 
                       {/* Video Feed Box */}
                       <div 
-                        className="flex-1 bg-slate-950 rounded-xl overflow-hidden relative border border-white/5"
+                        className={`flex-1 bg-slate-950 rounded-xl overflow-hidden relative transition-all duration-300 ${
+                          cameras.length > 1 && (analyzingCameraId ? analyzingCameraId === activeCamera.id : activeCameraId === activeCamera.id)
+                            ? 'border-2 border-cyan-400 shadow-[0_0_15px_rgba(34,211,238,0.6)] ring-1 ring-cyan-400/50'
+                            : 'border border-white/5'
+                        }`}
                         onMouseDown={(e) => handleZoneStart(e as any, activeCamera.id)}
                         onTouchStart={(e) => handleZoneStart(e as any, activeCamera.id)}
                         onMouseMove={(e) => handleZoneMove(e as any)}
@@ -3986,6 +4610,15 @@ export default function App() {
                         onTouchEnd={handleZoneEnd}
                         onMouseLeave={handleZoneEnd}
                       >
+                        {/* Badge In Analisi AI per Raspberry quando ci sono più telecamere */}
+                        {cameras.length > 1 && (analyzingCameraId ? analyzingCameraId === activeCamera.id : activeCameraId === activeCamera.id) && (
+                          <div className="absolute top-1.5 left-1.5 z-30 pointer-events-none flex items-center gap-1 bg-slate-950/90 backdrop-blur-md border border-cyan-400/80 text-cyan-300 px-1.5 py-0.5 rounded-lg shadow-[0_0_10px_rgba(34,211,238,0.4)]">
+                            <span className={`w-1.5 h-1.5 rounded-full bg-cyan-400 ${isAnalyzing ? 'animate-ping' : 'shadow-[0_0_8px_#22d3ee]'}`} />
+                            <span className="text-[7.5px] font-black uppercase font-mono tracking-wider">
+                              {isAnalyzing ? 'In Analisi...' : 'Camera in Analisi'}
+                            </span>
+                          </div>
+                        )}
                         {/* Drag / Swipe camera view wrapper */}
                         <motion.div
                           key={activeCamera.id}
@@ -4024,6 +4657,30 @@ export default function App() {
                             </div>
                           )}
                         </motion.div>
+
+                        {/* Overlay Controllo AI ON/OFF in sovraimpressione al monitor della camera attiva */}
+                        {isMonitoring && isAiEnabled && (
+                          <div className="absolute top-1.5 right-1.5 z-30 pointer-events-auto">
+                            <button 
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                toggleCameraAi(activeCamera.id);
+                              }}
+                              className={`px-2 py-0.5 rounded-lg backdrop-blur-md flex items-center gap-1.5 border transition-all active:scale-95 shadow-xl cursor-pointer ${
+                                disabledAiCameraIds.includes(activeCamera.id)
+                                  ? 'bg-slate-900/90 border-slate-700/70 text-slate-400 hover:bg-slate-800'
+                                  : 'bg-blue-950/85 border-blue-500/50 text-blue-300 hover:bg-blue-900/80 shadow-[0_0_12px_rgba(59,130,246,0.35)]'
+                              }`}
+                              title={disabledAiCameraIds.includes(activeCamera.id) ? "Attiva AI su questa camera" : "Disattiva AI su questa camera (esclusione manuale)"}
+                            >
+                              <Cpu size={11} className={disabledAiCameraIds.includes(activeCamera.id) ? 'text-slate-500' : 'text-blue-400 animate-pulse'} />
+                              <span className="text-[7.5px] font-black uppercase tracking-wider font-mono">
+                                {disabledAiCameraIds.includes(activeCamera.id) ? 'AI OFF' : 'AI ON'}
+                              </span>
+                            </button>
+                          </div>
+                        )}
 
                         {/* UI Overlays for Video (DRAWING MODE in mobile) */}
                         {isEditingZones && activeCameraId === activeCamera.id && (
@@ -4372,7 +5029,9 @@ export default function App() {
               onMouseLeave={handleZoneEnd}
             >
               <AnimatePresence mode="popLayout">
-                {cameras.map((cam, index) => (
+                {cameras.map((cam, index) => {
+                  const isCamUnderAnalysis = cameras.length > 1 && (analyzingCameraId ? analyzingCameraId === cam.id : (scheduledActiveCameraId ? scheduledActiveCameraId === cam.id : activeCameraId === cam.id));
+                  return (
                   <motion.div 
                     key={cam.id}
                     layout
@@ -4396,7 +5055,7 @@ export default function App() {
                         setIsMultiView(false); 
                       }
                     }}
-                    className={`relative glass rounded-2xl sm:rounded-[48px] overflow-hidden group shadow-2xl ${
+                    className={`relative glass rounded-2xl sm:rounded-[48px] overflow-hidden group shadow-2xl transition-all duration-300 ${
                       isReordering ? 'border-blue-500/50 bg-blue-500/5 shadow-blue-500/10' : 'cursor-pointer'
                     } ${
                       !isMultiView && cam.id !== activeCameraId ? 'hidden' : ''
@@ -4405,9 +5064,18 @@ export default function App() {
                     } ${
                       isEditingZones && activeCameraId === cam.id
                         ? 'ring-4 ring-amber-500/60 ring-inset touch-none'
+                        : isCamUnderAnalysis
+                        ? 'border-2 border-cyan-400 shadow-[0_0_25px_rgba(34,211,238,0.7)] ring-2 ring-cyan-400/50 opacity-100'
                         : 'border-white/5 opacity-80 hover:opacity-100'
                     }`}
                   >
+                    {/* Badge In Analisi AI per Desktop/Tablet quando ci sono più telecamere */}
+                    {isCamUnderAnalysis && (
+                      <div className="absolute top-4 left-4 z-30 pointer-events-none flex items-center gap-2 bg-slate-950/85 backdrop-blur-md border border-cyan-400/80 text-cyan-300 px-3 py-1.5 rounded-xl shadow-[0_0_15px_rgba(34,211,238,0.4)] animate-pulse">
+                        <span className="w-2 h-2 rounded-full bg-cyan-400 animate-ping" />
+                        <span className="text-[10px] font-black uppercase font-mono tracking-widest">In Analisi AI</span>
+                      </div>
+                    )}
                     <div className="absolute inset-0 bg-slate-900/40 z-0 animate-pulse" />
                     
                     {isMonitoring && activeCamStatuses[cam.id] ? (
@@ -4730,8 +5398,9 @@ export default function App() {
                       )}
                     </AnimatePresence>
                   </motion.div>
-                ))}
-              </AnimatePresence>
+                    );
+                  })}
+                </AnimatePresence>
             </div>
             </div> {/* Fine Colonna Destra */}
 
@@ -4919,66 +5588,107 @@ export default function App() {
           >
             <motion.div 
               initial={{ scale: 0.9, y: 20, opacity: 0 }} animate={{ scale: 1, y: 0, opacity: 1 }} exit={{ scale: 0.9, y: 20, opacity: 0 }}
-              className="glass bg-slate-900/95 lg:bg-slate-900/60 rounded-none sm:rounded-[32px] lg:rounded-[40px] w-full h-full sm:h-auto sm:max-h-[90vh] max-w-lg flex flex-col overflow-hidden shadow-2xl border-white/5"
+              className={`glass bg-slate-900/95 lg:bg-slate-900/60 rounded-none sm:rounded-[32px] lg:rounded-[40px] w-full ${isMobile35 ? 'h-full max-h-screen p-0 m-0' : 'h-full sm:h-auto sm:max-h-[90vh] max-w-lg'} flex flex-col overflow-hidden shadow-2xl border-white/5`}
             >
-              <div className="flex-shrink-0 px-4 sm:px-6 lg:px-10 pt-4 sm:pt-6 lg:pt-10 pb-3 border-b border-white/5">
-                <div>
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <h2 className="text-xl font-black text-white uppercase tracking-tight">Setup Camera</h2>
-                    <span className="px-2.5 py-1 rounded-lg bg-blue-600/20 border border-blue-500/30 text-blue-400 text-[10px] font-black uppercase tracking-widest">
-                      #{editingCameraNumber ?? '?'}
-                    </span>
+              <div className={`flex-shrink-0 border-b border-white/5 ${isMobile35 ? 'px-3 py-1.5' : 'px-4 sm:px-6 lg:px-10 pt-4 sm:pt-6 lg:pt-10 pb-3'}`}>
+                {isMobile35 ? (
+                  /* Layout Raspberry Pi 3.5": Ingranaggio + Telecamera stilizzata, numero e nome su prima riga */
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <div className="flex items-center gap-1 px-1.5 py-0.5 rounded-lg bg-blue-600/20 border border-blue-500/30 shrink-0 shadow-[0_0_10px_rgba(59,130,246,0.2)]">
+                        <Settings size={12} className="text-blue-400" />
+                        <Video size={12} className="text-blue-300" />
+                      </div>
+                      <span className="px-1.5 py-0.5 rounded-md bg-blue-500/20 border border-blue-400/30 text-blue-400 text-[9px] font-black uppercase shrink-0">
+                        #{editingCameraNumber ?? '?'}
+                      </span>
+                      <span className="text-[10px] font-black text-white uppercase tracking-wider truncate">
+                        {editingCamera.name} {editingCamera.model ? `• ${editingCamera.model}` : ''}
+                      </span>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => setShowCameraModal(false)}
+                      className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 active:scale-95 cursor-pointer"
+                      title="Chiudi"
+                    >
+                      <X size={14} />
+                    </button>
                   </div>
-                  <p className="text-[9px] font-black uppercase tracking-[0.3em] text-blue-500 mt-1">
-                    {editingCamera.name} — {editingCamera.location || 'Posizione non impostata'}
-                  </p>
-                  <p className="text-[8px] font-bold uppercase tracking-widest text-slate-500 mt-0.5">
-                    Impostazioni solo per questa camera
-                  </p>
-                </div>
-                <div className="grid grid-cols-4 gap-1.5 mt-3">
+                ) : (
+                  <div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h2 className="text-xl font-black text-white uppercase tracking-tight">
+                        Setup Camera
+                      </h2>
+                      <span className="px-2.5 py-1 rounded-lg bg-blue-600/20 border border-blue-500/30 text-blue-400 text-[10px] font-black uppercase tracking-widest">
+                        #{editingCameraNumber ?? '?'}
+                      </span>
+                    </div>
+                    <p className="text-[9px] font-black uppercase tracking-[0.3em] text-blue-500 mt-1">
+                      {editingCamera.name} — {editingCamera.location || 'Posizione non impostata'}
+                    </p>
+                    <p className="text-[8px] font-bold uppercase tracking-widest text-slate-500 mt-0.5">
+                      Impostazioni solo per questa camera
+                    </p>
+                  </div>
+                )}
+
+                <div className={`grid grid-cols-5 ${isMobile35 ? 'gap-0.5 mt-1.5' : 'gap-1 mt-3'}`}>
                   <button
                     type="button"
                     onClick={() => setActiveCameraTab('info')}
-                    className={`flex flex-row items-center justify-center gap-1 py-1.5 px-1 rounded-xl border text-[8px] font-black uppercase tracking-tight transition-all active:scale-95 cursor-pointer min-w-0 ${
+                    className={`flex flex-row items-center justify-center gap-0.5 ${isMobile35 ? 'py-1 text-[7px]' : 'py-1.5 text-[8px]'} px-0.5 rounded-xl border font-black uppercase tracking-tight transition-all active:scale-95 cursor-pointer min-w-0 ${
                       activeCameraTab === 'info' ? 'bg-blue-600 border-blue-400 text-white shadow-lg' : 'bg-white/5 border-white/5 text-slate-400 hover:border-white/20'
                     }`}
                     title="Info Generale"
                   >
-                    <Monitor size={12} className="shrink-0" />
+                    <Monitor size={isMobile35 ? 9 : 11} className="shrink-0" />
                     <span className="truncate">Info</span>
                   </button>
                   <button
                     type="button"
                     onClick={() => setActiveCameraTab('source')}
-                    className={`flex flex-row items-center justify-center gap-1 py-1.5 px-1 rounded-xl border text-[8px] font-black uppercase tracking-tight transition-all active:scale-95 cursor-pointer min-w-0 ${
+                    className={`flex flex-row items-center justify-center gap-0.5 ${isMobile35 ? 'py-1 text-[7px]' : 'py-1.5 text-[8px]'} px-0.5 rounded-xl border font-black uppercase tracking-tight transition-all active:scale-95 cursor-pointer min-w-0 ${
                       activeCameraTab === 'source' ? 'bg-blue-600 border-blue-400 text-white shadow-lg' : 'bg-white/5 border-white/5 text-slate-400 hover:border-white/20'
                     }`}
                     title="Configura Sorgente"
                   >
-                    <Video size={12} className="shrink-0" />
+                    <Video size={isMobile35 ? 9 : 11} className="shrink-0" />
                     <span className="truncate">Sorgente</span>
                   </button>
                   <button
                     type="button"
                     onClick={() => setActiveCameraTab('triggers')}
-                    className={`flex flex-row items-center justify-center gap-1 py-1.5 px-1 rounded-xl border text-[8px] font-black uppercase tracking-tight transition-all active:scale-95 cursor-pointer min-w-0 ${
+                    className={`flex flex-row items-center justify-center gap-0.5 ${isMobile35 ? 'py-1 text-[7px]' : 'py-1.5 text-[8px]'} px-0.5 rounded-xl border font-black uppercase tracking-tight transition-all active:scale-95 cursor-pointer min-w-0 ${
                       activeCameraTab === 'triggers' ? 'bg-blue-600 border-blue-400 text-white shadow-lg' : 'bg-white/5 border-white/5 text-slate-400 hover:border-white/20'
                     }`}
                     title="Trigger AI"
                   >
-                    <Cpu size={12} className="shrink-0" />
+                    <Cpu size={isMobile35 ? 9 : 11} className="shrink-0" />
                     <span className="truncate">Trigger</span>
                   </button>
                   <button
                     type="button"
+                    onClick={() => setActiveCameraTab('frequency')}
+                    className={`flex flex-row items-center justify-center gap-0.5 ${isMobile35 ? 'py-1 text-[7px]' : 'py-1.5 text-[8px]'} px-0.5 rounded-xl border font-black uppercase tracking-tight transition-all active:scale-95 cursor-pointer min-w-0 ${
+                      activeCameraTab === 'frequency' ? 'bg-blue-600 border-blue-400 text-white shadow-lg' : 'bg-white/5 border-white/5 text-slate-400 hover:border-white/20'
+                    }`}
+                    title="Frequenza di Analisi"
+                  >
+                    <Timer size={isMobile35 ? 9 : 11} className="shrink-0" />
+                    <span className="truncate">Frequenza</span>
+                  </button>
+                  <button
+                    type="button"
                     onClick={() => setActiveCameraTab('client')}
-                    className={`flex flex-row items-center justify-center gap-1 py-1.5 px-1 rounded-xl border text-[8px] font-black uppercase tracking-tight transition-all active:scale-95 cursor-pointer min-w-0 ${
+                    className={`flex flex-row items-center justify-center gap-0.5 ${isMobile35 ? 'py-1 text-[7px]' : 'py-1.5 text-[8px]'} px-0.5 rounded-xl border font-black uppercase tracking-tight transition-all active:scale-95 cursor-pointer min-w-0 ${
                       activeCameraTab === 'client' ? 'bg-blue-600 border-blue-400 text-white shadow-lg' : 'bg-white/5 border-white/5 text-slate-400 hover:border-white/20'
                     }`}
                     title="Connessione Tablet"
                   >
-                    <Scan size={12} className="shrink-0" />
+                    <Scan size={isMobile35 ? 9 : 11} className="shrink-0" />
                     <span className="truncate">Client</span>
                   </button>
                 </div>
@@ -4986,8 +5696,9 @@ export default function App() {
 
               <div
                 ref={cameraModalScrollRef}
-                className="flex-1 min-h-0 px-4 sm:px-6 lg:px-10 py-2 sm:py-3 custom-scrollbar overflow-y-auto relative"
+                className={`flex-1 min-h-0 ${isMobile35 ? 'px-2 py-1' : 'px-4 sm:px-6 lg:px-10 py-2 sm:py-3'} custom-scrollbar ${isMobile35 && activeCameraTab === 'triggers' ? 'overflow-hidden' : 'overflow-y-auto'} relative`}
               >
+                {!isMobile35 && (
                 <div className="sticky top-0 z-10 flex justify-end gap-1 mb-2">
                   <button
                     type="button"
@@ -5006,6 +5717,7 @@ export default function App() {
                     <ChevronDown size={14} />
                   </button>
                 </div>
+                )}
 
                 <div className="space-y-4">
                   {/* GENERAL INFO FIELDS */}
@@ -5217,11 +5929,13 @@ export default function App() {
                   {/* AI TRIGGERS CONFIGURATION */}
                   {activeCameraTab === 'triggers' && (
                     <div className="animate-fade-in">
-                      <label className="text-[9px] font-black uppercase tracking-widest text-slate-500 px-1 block mb-2">
-                        Trigger Allarmi AI — Camera #{editingCameraNumber ?? '?'}
-                        {' '}({editingCamera.enabledTriggers.length} attivi)
-                      </label>
-                      <div className="grid grid-cols-4 gap-x-5 gap-y-3 w-full place-items-center px-0.5">
+                      {!isMobile35 && (
+                        <label className="text-[9px] font-black uppercase tracking-widest text-slate-500 px-1 block mb-2">
+                          Trigger Allarmi AI — Camera #{editingCameraNumber ?? '?'}
+                          {' '}({editingCamera.enabledTriggers.length} attivi)
+                        </label>
+                      )}
+                      <div className={`grid grid-cols-4 ${isMobile35 ? 'gap-x-2 gap-y-1.5 py-1 px-1' : 'gap-x-5 gap-y-3 px-0.5'} w-full place-items-center`}>
                         {availableTriggers.map(trigger => {
                           const isActive = editingCamera.enabledTriggers.includes(trigger.id as AlertTrigger);
                           const LucideIcon = (Lucide as any)[trigger.icon_name] || Lucide.AlertTriangle;
@@ -5231,7 +5945,7 @@ export default function App() {
                           return (
                             <div
                               key={trigger.id}
-                              className="flex flex-col items-center gap-1 w-full min-w-0"
+                              className="flex flex-col items-center gap-0.5 w-full min-w-0"
                             >
                               <button
                                 type="button"
@@ -5250,25 +5964,25 @@ export default function App() {
                                     setSchedulingTrigger({ trigger, schedule: existing });
                                   }
                                 }}
-                                className={`flex flex-col items-center gap-1.5 w-full min-w-0 transition-all active:scale-95 cursor-pointer ${
-                                  isActive ? 'opacity-100' : 'opacity-55 hover:opacity-85'
+                                className={`flex flex-col items-center gap-1 w-full min-w-0 transition-all active:scale-95 cursor-pointer ${
+                                  isActive ? 'opacity-100' : 'opacity-40 hover:opacity-75'
                                 }`}
                               >
                                 <div
-                                  className={`relative w-[58px] h-[58px] shrink-0 rounded-[13px] flex items-center justify-center bg-gradient-to-br shadow-md transition-all ${
+                                  className={`relative ${isMobile35 ? 'w-10 h-10 rounded-xl' : 'w-[58px] h-[58px] rounded-[13px]'} shrink-0 flex items-center justify-center bg-gradient-to-br shadow-md transition-all ${
                                     isActive
-                                      ? `${iconGradient} ring-2 ring-white/25`
+                                      ? `${iconGradient} ring-2 ring-white/30 shadow-[0_0_12px_rgba(59,130,246,0.3)]`
                                       : 'from-white/10 to-white/5 border border-white/10'
                                   }`}
                                 >
                                   <LucideIcon
-                                    size={24}
+                                    size={isMobile35 ? 18 : 24}
                                     strokeWidth={2}
-                                    className={`${isActive ? 'text-white drop-shadow-sm' : 'text-slate-400'} ${isActive && schedBadge ? '-translate-y-1' : ''}`}
+                                    className={`${isActive ? 'text-white drop-shadow-sm' : 'text-slate-400'} ${isActive && schedBadge ? '-translate-y-0.5' : ''}`}
                                   />
                                   {isActive && (
-                                    <span className="absolute -top-1 -right-1 w-4 h-4 bg-blue-500 rounded-full flex items-center justify-center border-2 border-slate-900 shadow-md">
-                                      <Check size={9} strokeWidth={3} className="text-white" />
+                                    <span className={`absolute -top-1 -right-1 ${isMobile35 ? 'w-3.5 h-3.5' : 'w-4 h-4'} bg-blue-500 rounded-full flex items-center justify-center border border-slate-900 shadow-md`}>
+                                      <Check size={isMobile35 ? 8 : 9} strokeWidth={3} className="text-white" />
                                     </span>
                                   )}
 
@@ -5280,7 +5994,7 @@ export default function App() {
                                         const existing = editingCamera.triggerSchedules?.[trigger.id] || { allDay: true, startTime: "08:00", endTime: "20:00" };
                                         setSchedulingTrigger({ trigger, schedule: existing });
                                       }}
-                                      className="absolute bottom-1 inset-x-1 bg-black/85 backdrop-blur-md text-[6px] font-black uppercase text-white tracking-tight text-center py-0.5 rounded border border-white/20 shadow-md truncate hover:bg-blue-600 transition-colors"
+                                      className="absolute bottom-0.5 inset-x-0.5 bg-black/90 backdrop-blur-md text-[5.5px] font-black uppercase text-white tracking-tight text-center py-0.5 rounded border border-white/20 shadow-md truncate hover:bg-blue-600 transition-colors"
                                       title="Tocca per modificare orario"
                                     >
                                       {schedBadge}
@@ -5288,7 +6002,7 @@ export default function App() {
                                   )}
                                 </div>
                                 <span
-                                  className={`text-[8px] font-bold uppercase tracking-tight text-center leading-tight line-clamp-2 w-full max-w-[72px] ${
+                                  className={`${isMobile35 ? 'text-[7px]' : 'text-[8px]'} font-bold uppercase tracking-tight text-center leading-tight truncate w-full max-w-[70px] ${
                                     isActive ? 'text-white' : 'text-slate-500'
                                   }`}
                                 >
@@ -5369,6 +6083,128 @@ export default function App() {
                       )}
                     </div>
                   )}
+
+                  {/* FREQUENCY TAB */}
+                  {activeCameraTab === 'frequency' && (
+                    <div className="animate-fade-in space-y-3.5 py-1">
+
+                      {/* Card Grande Centrale con Selettore e Frecce */}
+                      <div className="p-4 sm:p-5 bg-gradient-to-b from-blue-950/40 via-slate-900/80 to-black/70 rounded-3xl border border-blue-500/30 shadow-[0_0_30px_rgba(59,130,246,0.15)] flex flex-col items-center justify-center space-y-3.5 relative overflow-hidden">
+                        <div className="absolute inset-0 bg-blue-500/5 backdrop-blur-sm pointer-events-none" />
+                        
+                        {/* Selettore Principale: Freccia SX, Numero Grande, Freccia DX */}
+                        <div className="relative z-10 flex items-center justify-center gap-4 sm:gap-6 w-full max-w-xs">
+                          {/* Tasto Freccia Decremento */}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const curr = editingCamera.analysisInterval ?? 5;
+                              const step = curr <= 10 ? 1 : 5;
+                              const next = Math.max(2, curr - step);
+                              setEditingCamera({ ...editingCamera, analysisInterval: next });
+                              if (editingCameraRef.current) editingCameraRef.current.analysisInterval = next;
+                            }}
+                            disabled={(editingCamera.analysisInterval ?? 5) <= 2}
+                            className="w-12 h-12 rounded-2xl bg-blue-600/10 hover:bg-blue-600/25 active:bg-blue-600 border border-blue-500/30 hover:border-blue-400 text-white flex items-center justify-center transition-all active:scale-90 disabled:opacity-20 disabled:pointer-events-none shadow-lg cursor-pointer group"
+                            title="Diminuisci secondi"
+                          >
+                            <ChevronLeft size={22} className="text-blue-300 group-hover:-translate-x-0.5 transition-transform" />
+                          </button>
+
+                          {/* Numero al Centro in Grande */}
+                          <div className="flex flex-col items-center justify-center min-w-[110px] sm:min-w-[130px] py-1.5 px-3 bg-black/60 border border-blue-500/40 rounded-2xl shadow-[inset_0_0_20px_rgba(59,130,246,0.2)]">
+                            <div className="flex items-baseline justify-center gap-1">
+                              <span className="font-mono text-4xl sm:text-5xl font-black text-white tracking-tight drop-shadow-[0_0_15px_rgba(96,165,250,0.65)]">
+                                {editingCamera.analysisInterval ?? 5}
+                              </span>
+                              <span className="font-mono text-lg sm:text-xl font-bold text-blue-400">
+                                s
+                              </span>
+                            </div>
+                            <span className="text-[7.5px] uppercase font-black tracking-widest text-slate-400 mt-0.5">
+                              {(editingCamera.analysisInterval ?? 5) === 5 ? 'Consigliato (5s)' : 'Intervallo'}
+                            </span>
+                          </div>
+
+                          {/* Tasto Freccia Incremento */}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const curr = editingCamera.analysisInterval ?? 5;
+                              const step = curr < 10 ? 1 : 5;
+                              const next = Math.min(120, curr + step);
+                              setEditingCamera({ ...editingCamera, analysisInterval: next });
+                              if (editingCameraRef.current) editingCameraRef.current.analysisInterval = next;
+                            }}
+                            disabled={(editingCamera.analysisInterval ?? 5) >= 120}
+                            className="w-12 h-12 rounded-2xl bg-blue-600/10 hover:bg-blue-600/25 active:bg-blue-600 border border-blue-500/30 hover:border-blue-400 text-white flex items-center justify-center transition-all active:scale-90 disabled:opacity-20 disabled:pointer-events-none shadow-lg cursor-pointer group"
+                            title="Aumenta secondi"
+                          >
+                            <ChevronRight size={22} className="text-blue-300 group-hover:translate-x-0.5 transition-transform" />
+                          </button>
+                        </div>
+
+                        {/* Slider di precisione */}
+                        <div className="relative z-10 w-full max-w-xs space-y-1">
+                          <input
+                            type="range"
+                            min="2"
+                            max="120"
+                            step="1"
+                            value={editingCamera.analysisInterval ?? 5}
+                            onChange={(e) => {
+                              const val = parseInt(e.target.value, 10);
+                              setEditingCamera({ ...editingCamera, analysisInterval: val });
+                              if (editingCameraRef.current) editingCameraRef.current.analysisInterval = val;
+                            }}
+                            className="w-full accent-blue-500 cursor-pointer h-2 bg-slate-800 rounded-lg border border-white/10"
+                          />
+                          <div className="flex justify-between text-[7px] font-mono text-slate-400 px-0.5 font-bold">
+                            <span>2s (Ultra rapido)</span>
+                            <span>30s</span>
+                            <span>120s (Eco)</span>
+                          </div>
+                        </div>
+
+                        {/* Preset Rapidi */}
+                        <div className="relative z-10 flex flex-wrap items-center justify-center gap-1.5 w-full pt-0.5">
+                          {[2, 5, 10, 15, 30, 60].map((presetSec) => {
+                            const isSelected = (editingCamera.analysisInterval ?? 5) === presetSec;
+                            return (
+                              <button
+                                key={presetSec}
+                                type="button"
+                                onClick={() => {
+                                  setEditingCamera({ ...editingCamera, analysisInterval: presetSec });
+                                  if (editingCameraRef.current) editingCameraRef.current.analysisInterval = presetSec;
+                                }}
+                                className={`px-2.5 py-1 rounded-xl font-mono text-[9px] font-black transition-all active:scale-95 cursor-pointer ${
+                                  isSelected
+                                    ? 'bg-blue-600 border border-blue-400 text-white shadow-md shadow-blue-600/40 ring-2 ring-blue-500/20'
+                                    : 'bg-white/5 hover:bg-white/10 border border-white/10 text-slate-400 hover:text-white'
+                                }`}
+                              >
+                                {presetSec}s {presetSec === 5 ? '★' : ''}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      {/* Box informativo sull'alternanza equa multi-telecamera */}
+                      <div className="p-2.5 sm:p-3 bg-white/5 border border-white/10 rounded-2xl space-y-1">
+                        <div className="flex items-center gap-1.5">
+                          <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                          <span className="text-[8.5px] font-black uppercase tracking-wider text-slate-300">
+                            Alternanza Equa Intelligente
+                          </span>
+                        </div>
+                        <p className="text-[8px] text-slate-400 leading-relaxed font-medium">
+                          Se colleghi più telecamere con frequenze differenti (es. 5s, 15s, 30s), VigilAI bilancia automaticamente i turni di analisi con lievi anticipi o ritardi controllati, evitando collisioni e garantendo la scansione continua di ogni sorgente.
+                        </p>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 {saveStatus && (
@@ -5384,13 +6220,13 @@ export default function App() {
                 )}
               </div>
 
-              <div className="flex-shrink-0 border-t border-white/10 bg-slate-900/95 px-4 sm:px-6 lg:px-10 py-4 sm:py-5">
-                <div className="flex gap-3">
+              <div className={`flex-shrink-0 border-t border-white/10 bg-slate-900/95 ${isMobile35 ? 'px-2.5 py-1.5' : 'px-4 sm:px-6 lg:px-10 py-4 sm:py-5'}`}>
+                <div className={`flex ${isMobile35 ? 'gap-1.5' : 'gap-3'}`}>
                   <button 
                     type="button"
                     disabled={isSaving}
                     onClick={() => setShowCameraModal(false)} 
-                    className="flex-1 py-3 bg-white/5 hover:bg-white/10 text-slate-400 rounded-xl text-[10px] sm:text-xs font-black uppercase tracking-widest transition-all disabled:opacity-30"
+                    className={`flex-1 ${isMobile35 ? 'py-1.5 text-[8.5px] rounded-lg' : 'py-3 text-[10px] sm:text-xs rounded-xl'} bg-white/5 hover:bg-white/10 text-slate-400 font-black uppercase tracking-widest transition-all disabled:opacity-30`}
                   >
                     Annulla
                   </button>
@@ -5398,7 +6234,7 @@ export default function App() {
                     type="button"
                     disabled={isSaving}
                     onClick={() => {
-                      const latest = editingCameraRef.current;
+                      const latest = editingCameraRef.current || editingCamera;
                       if (!latest) return;
                       const persisted = cameras.find(
                         c => c.id === latest.id && !latest.id.startsWith('cam-')
@@ -5411,10 +6247,10 @@ export default function App() {
                       setEditingCamera(toSave);
                       saveCamera(toSave);
                     }} 
-                    className="flex-1 py-3 bg-blue-600 hover:bg-blue-500 rounded-xl text-[10px] sm:text-xs font-black uppercase tracking-widest text-white shadow-lg shadow-blue-500/25 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                    className={`flex-1 ${isMobile35 ? 'py-1.5 text-[8.5px] rounded-lg' : 'py-3 text-[10px] sm:text-xs rounded-xl'} bg-blue-600 hover:bg-blue-500 font-black uppercase tracking-widest text-white shadow-lg shadow-blue-500/25 transition-all disabled:opacity-50 flex items-center justify-center gap-1.5`}
                   >
-                    {isSaving && <div className="w-3 h-3 border-2 border-white/20 border-t-white rounded-full animate-spin" />}
-                    {isSaving ? 'Salvataggio...' : 'Salva Impostazioni'}
+                    {isSaving && <div className="w-2.5 h-2.5 border-2 border-white/20 border-t-white rounded-full animate-spin" />}
+                    {isSaving ? 'Salvataggio...' : (isMobile35 ? 'Salva' : 'Salva Impostazioni')}
                   </button>
                 </div>
               </div>
@@ -5426,57 +6262,101 @@ export default function App() {
       {/* Trigger Schedule Modal (Programmazione Oraria Allarmi) */}
       <AnimatePresence>
         {schedulingTrigger && editingCamera && (
-          <div className="fixed inset-0 z-[250] bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-2 sm:p-4 pointer-events-auto">
+          <div 
+            onClick={() => setSchedulingTrigger(null)}
+            className="fixed inset-0 z-[250] bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-2 sm:p-4 pointer-events-auto"
+          >
             <motion.div
               initial={{ scale: 0.92, opacity: 0, y: 10 }}
               animate={{ scale: 1, opacity: 1, y: 0 }}
               exit={{ scale: 0.92, opacity: 0, y: 10 }}
-              className="w-full max-w-[340px] max-h-[295px] sm:max-h-[90vh] bg-[#0c101d] border-2 border-blue-500/50 rounded-2xl p-3 sm:p-4 shadow-2xl flex flex-col gap-2.5 text-white overflow-y-auto custom-scrollbar my-auto mx-auto"
+              onClick={(e) => e.stopPropagation()}
+              className="w-full max-w-[340px] max-h-[295px] sm:max-h-[90vh] bg-[#0c101d] border-2 border-blue-500/50 rounded-2xl p-3 sm:p-4 shadow-2xl flex flex-col gap-2.5 text-white overflow-hidden my-auto mx-auto"
             >
-              {/* Header */}
-              <div className="flex items-center gap-2.5 pb-2 border-b border-white/10 shrink-0">
-                <div className={`w-8 h-8 rounded-xl flex items-center justify-center bg-gradient-to-br ${TRIGGER_ICON_GRADIENTS[schedulingTrigger.trigger.color_class] || 'from-blue-600 to-indigo-700'} text-white shadow-md shrink-0`}>
-                  {(() => {
-                    const Icon = (Lucide as any)[schedulingTrigger.trigger.icon_name] || Lucide.Bell;
-                    return <Icon size={16} strokeWidth={2.5} />;
-                  })()}
+              {/* Header: Icona Scena + Nome Scena a sinistra | Interruttore ON/OFF 24H + Chiudi a destra */}
+              <div className="flex items-center justify-between gap-2 pb-2 border-b border-white/10 shrink-0">
+                <div className="flex items-center gap-2 min-w-0">
+                  <div className={`w-8 h-8 rounded-xl flex items-center justify-center bg-gradient-to-br ${TRIGGER_ICON_GRADIENTS[schedulingTrigger.trigger.color_class] || 'from-blue-600 to-indigo-700'} text-white shadow-md shrink-0`}>
+                    {(() => {
+                      const Icon = (Lucide as any)[schedulingTrigger.trigger.icon_name] || Lucide.Bell;
+                      return <Icon size={16} strokeWidth={2.5} />;
+                    })()}
+                  </div>
+                  <div className="flex flex-col min-w-0">
+                    <span className="text-[10px] font-black text-white uppercase tracking-wider truncate">
+                      {schedulingTrigger.trigger.label}
+                    </span>
+                    <span className="text-[7.5px] font-bold text-slate-400 uppercase tracking-widest">
+                      {schedulingTrigger.schedule.allDay ? 'Modalità 24/7' : 'Fascia Oraria'}
+                    </span>
+                  </div>
                 </div>
-                <div className="flex flex-col min-w-0">
-                  <span className="text-[10px] font-black text-white uppercase tracking-wider truncate">
-                    {schedulingTrigger.trigger.label}
-                  </span>
-                  <span className="text-[7.5px] font-bold text-slate-400 uppercase tracking-widest">
-                    Programmazione Oraria
-                  </span>
+
+                {/* Interruttore ON/OFF con icona 24H sulla destra + Tasto Chiudi */}
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setSchedulingTrigger(prev => prev ? {
+                      ...prev,
+                      schedule: { ...prev.schedule, allDay: !prev.schedule.allDay }
+                    } : null)}
+                    className={`flex items-center gap-1.5 px-2 py-1 rounded-xl border transition-all cursor-pointer active:scale-95 select-none ${
+                      schedulingTrigger.schedule.allDay
+                        ? 'bg-blue-600/25 border-blue-500/60 text-blue-300 shadow-[0_0_12px_rgba(37,99,235,0.25)]'
+                        : 'bg-white/5 border-white/15 text-slate-400 hover:text-white'
+                    }`}
+                    title={schedulingTrigger.schedule.allDay ? '24H Attivo (Tocca per orari)' : 'Riattiva 24H (Tutto il giorno)'}
+                  >
+                    <div className="flex items-center gap-1">
+                      <History size={12} className={schedulingTrigger.schedule.allDay ? 'text-blue-400' : 'text-slate-400'} />
+                      <span className="text-[8px] font-black tracking-tight">24H</span>
+                    </div>
+
+                    {/* Switch Toggle */}
+                    <div className={`w-6 h-3.5 rounded-full p-0.5 transition-colors duration-200 flex items-center ${
+                      schedulingTrigger.schedule.allDay ? 'bg-blue-600 justify-end' : 'bg-slate-700 justify-start'
+                    }`}>
+                      <div className={`w-2.5 h-2.5 rounded-full shadow transition-all ${
+                        schedulingTrigger.schedule.allDay ? 'bg-white' : 'bg-slate-400'
+                      }`} />
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setSchedulingTrigger(null)}
+                    className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 active:scale-95 cursor-pointer"
+                    title="Chiudi"
+                  >
+                    <X size={14} />
+                  </button>
                 </div>
               </div>
 
-              {/* Opzione 1: Tutto il giorno (spuntato di default) */}
-              <button
-                type="button"
-                onClick={() => setSchedulingTrigger(prev => prev ? {
-                  ...prev,
-                  schedule: { ...prev.schedule, allDay: !prev.schedule.allDay }
-                } : null)}
-                className={`w-full flex items-center justify-between p-2.5 rounded-xl border transition-all cursor-pointer ${
-                  schedulingTrigger.schedule.allDay
-                    ? 'bg-blue-600/20 border-blue-500/60 text-white shadow-[0_0_15px_rgba(37,99,235,0.15)]'
-                    : 'bg-white/5 border-white/10 text-slate-400 hover:text-white'
-                }`}
-              >
-                <div className="flex items-center gap-2">
-                  <div className={`w-5 h-5 rounded-lg flex items-center justify-center border transition-all ${
-                    schedulingTrigger.schedule.allDay ? 'bg-blue-600 border-blue-400 text-white' : 'border-white/20 bg-white/5'
-                  }`}>
-                    {schedulingTrigger.schedule.allDay && <Check size={12} strokeWidth={3} />}
+              {/* CORPO DELLA MODALE */}
+              {schedulingTrigger.schedule.allDay ? (
+                /* MODALE DELLA CONFERMA 24H (TUTTO IL GIORNO ATTIVO) */
+                <button
+                  type="button"
+                  onClick={() => setSchedulingTrigger(prev => prev ? {
+                    ...prev,
+                    schedule: { ...prev.schedule, allDay: false }
+                  } : null)}
+                  className="w-full flex items-center justify-between p-2.5 rounded-xl border transition-all cursor-pointer bg-blue-600/20 border-blue-500/60 text-white shadow-[0_0_15px_rgba(37,99,235,0.15)] hover:border-blue-400 text-left group"
+                >
+                  <div className="flex items-center gap-2">
+                    <div className="w-5 h-5 rounded-lg flex items-center justify-center border transition-all bg-blue-600 border-blue-400 text-white">
+                      <Check size={12} strokeWidth={3} />
+                    </div>
+                    <div className="flex flex-col">
+                      <span className="text-[9.5px] font-black uppercase tracking-wider">Tutto il giorno</span>
+                      <span className="text-[7px] text-blue-300 font-bold group-hover:text-white transition-colors">Tocca qui per programmare orari</span>
+                    </div>
                   </div>
-                  <span className="text-[9.5px] font-black uppercase tracking-wider">Tutto il giorno</span>
-                </div>
-                <span className="text-[8px] font-mono text-blue-400 font-bold bg-blue-500/10 px-1.5 py-0.5 rounded">24/7</span>
-              </button>
-
-              {/* Opzione 2: Fascia oraria personalizzata se non tutto il giorno */}
-              {!schedulingTrigger.schedule.allDay && (
+                  <span className="text-[8px] font-mono text-blue-400 font-bold bg-blue-500/10 px-1.5 py-0.5 rounded border border-blue-500/20">24/7</span>
+                </button>
+              ) : (
+                /* QUANDO APRO GLI ORARI: Niente pulsante "Tutto il giorno" qui sotto, solo la regolazione orari */
                 <div className="space-y-2 p-2.5 bg-white/5 rounded-xl border border-white/10 animate-fade-in">
                   <div className="flex justify-between items-center px-0.5">
                     <span className="text-[7.5px] font-black uppercase tracking-widest text-slate-400">
@@ -5541,7 +6421,7 @@ export default function App() {
                 </div>
               )}
 
-              {/* SOLO TASTO CONFERMA */}
+              {/* TASTO CONFERMA */}
               <button
                 type="button"
                 onClick={() => {
@@ -5572,10 +6452,10 @@ export default function App() {
 
                   setSchedulingTrigger(null);
                 }}
-                className="w-full py-2.5 bg-blue-600 hover:bg-blue-500 active:scale-95 text-white text-[10px] font-black uppercase tracking-widest rounded-xl shadow-lg shadow-blue-600/30 transition-all cursor-pointer flex items-center justify-center gap-1.5 mt-0.5 shrink-0"
+                className="w-full py-2 bg-blue-600 hover:bg-blue-500 active:scale-95 text-white text-[9.5px] font-black uppercase tracking-widest rounded-xl shadow-lg shadow-blue-600/30 transition-all cursor-pointer flex items-center justify-center gap-1.5 mt-0.5 shrink-0"
               >
-                <Check size={14} strokeWidth={3} />
-                <span>Conferma</span>
+                <Check size={13} strokeWidth={3} />
+                <span>{schedulingTrigger.schedule.allDay ? 'Conferma 24h' : 'Conferma Orario'}</span>
               </button>
             </motion.div>
           </div>
@@ -5764,113 +6644,110 @@ export default function App() {
                 </button>
               </div>
               
-              {/* Tab menu 3.5" — 2 righe, tutte le sezioni */}
+              {/* Tab menu 3.5" — 1 riga singola con pulsanti stretti */}
               {isMobile35 ? (
-                <div className="vigil-settings-35-tabs">
-                  <div className="vigil-settings-35-tabs-row">
-                    <button type="button" onClick={() => { setActiveSettingsTab("network"); scanWifiNetworks(); }}
-                      className={`flex items-center justify-center rounded-xl border transition-all active:scale-95 ${
-                        activeSettingsTab === "network"
-                          ? "bg-amber-600 border-amber-400 text-white"
-                          : !networkStatus.online ? "bg-amber-600/20 border-amber-500/50 text-amber-400 animate-pulse" : "bg-white/5 border-white/5 text-slate-400"
-                      }`} title="Rete"><Wifi size={15} /></button>
-                    <button type="button" onClick={() => setActiveSettingsTab("ai")}
-                      className={`flex items-center justify-center rounded-xl border transition-all active:scale-95 ${
-                        activeSettingsTab === "ai" ? "bg-blue-600 border-blue-400 text-white" : "bg-white/5 border-white/5 text-slate-400"
-                      }`} title="AI"><Cpu size={15} /></button>
-                    <button type="button" onClick={() => setActiveSettingsTab("email")}
-                      className={`flex items-center justify-center rounded-xl border transition-all active:scale-95 ${
-                        activeSettingsTab === "email" ? "bg-blue-600 border-blue-400 text-white" : "bg-white/5 border-white/5 text-slate-400"
-                      }`} title="Email"><Mail size={15} /></button>
-                    <button type="button" onClick={() => setActiveSettingsTab("telegram")}
-                      className={`flex items-center justify-center rounded-xl border transition-all active:scale-95 ${
-                        activeSettingsTab === "telegram" ? "bg-blue-600 border-blue-400 text-white" : "bg-white/5 border-white/5 text-slate-400"
-                      }`} title="Telegram"><Send size={15} /></button>
-                  </div>
-                  <div className="vigil-settings-35-tabs-row">
-                    <button type="button" onClick={() => { setActiveSettingsTab("log"); setLogStartIndex(0); }}
-                      className={`flex items-center justify-center rounded-xl border transition-all active:scale-95 ${
-                        activeSettingsTab === "log" ? "bg-blue-600 border-blue-400 text-white" : "bg-white/5 border-white/5 text-slate-400"
-                      }`} title="Log"><History size={15} /></button>
-                    <button type="button" onClick={() => setActiveSettingsTab("test")}
-                      className={`flex items-center justify-center rounded-xl border transition-all active:scale-95 ${
-                        activeSettingsTab === "test" ? "bg-blue-600 border-blue-400 text-white" : "bg-white/5 border-white/5 text-slate-400"
-                      }`} title="Test"><Activity size={15} /></button>
-                  </div>
+                <div className="vigil-settings-35-tabs flex items-center gap-1 w-full shrink-0 my-0.5">
+                  <button type="button" onClick={() => { setActiveSettingsTab("network"); scanWifiNetworks(); }}
+                    className={`flex-1 h-7.5 py-1 px-0.5 flex items-center justify-center rounded-lg border transition-all active:scale-95 cursor-pointer ${
+                      activeSettingsTab === "network"
+                        ? "bg-amber-600 border-amber-400 text-white"
+                        : !networkStatus.online ? "bg-amber-600/20 border-amber-500/50 text-amber-400 animate-pulse" : "bg-white/5 border-white/5 text-slate-400"
+                    }`} title="Rete (Wi-Fi / LAN)"><Network size={14} /></button>
+                  <button type="button" onClick={() => setActiveSettingsTab("ai")}
+                    className={`flex-1 h-7.5 py-1 px-0.5 flex items-center justify-center rounded-lg border transition-all active:scale-95 cursor-pointer ${
+                      activeSettingsTab === "ai" ? "bg-blue-600 border-blue-400 text-white" : "bg-white/5 border-white/5 text-slate-400"
+                    }`} title="AI"><Cpu size={14} /></button>
+                  <button type="button" onClick={() => setActiveSettingsTab("email")}
+                    className={`flex-1 h-7.5 py-1 px-0.5 flex items-center justify-center rounded-lg border transition-all active:scale-95 cursor-pointer ${
+                      activeSettingsTab === "email" ? "bg-blue-600 border-blue-400 text-white" : "bg-white/5 border-white/5 text-slate-400"
+                    }`} title="Email"><Mail size={14} /></button>
+                  <button type="button" onClick={() => setActiveSettingsTab("telegram")}
+                    className={`flex-1 h-7.5 py-1 px-0.5 flex items-center justify-center rounded-lg border transition-all active:scale-95 cursor-pointer ${
+                      activeSettingsTab === "telegram" ? "bg-blue-600 border-blue-400 text-white" : "bg-white/5 border-white/5 text-slate-400"
+                    }`} title="Telegram"><Send size={14} /></button>
+                  <button type="button" onClick={() => { setActiveSettingsTab("log"); setLogStartIndex(0); }}
+                    className={`flex-1 h-7.5 py-1 px-0.5 flex items-center justify-center rounded-lg border transition-all active:scale-95 cursor-pointer ${
+                      activeSettingsTab === "log" ? "bg-blue-600 border-blue-400 text-white" : "bg-white/5 border-white/5 text-slate-400"
+                    }`} title="Log"><History size={14} /></button>
+                  <button type="button" onClick={() => setActiveSettingsTab("test")}
+                    className={`flex-1 h-7.5 py-1 px-0.5 flex items-center justify-center rounded-lg border transition-all active:scale-95 cursor-pointer ${
+                      activeSettingsTab === "test" ? "bg-blue-600 border-blue-400 text-white" : "bg-white/5 border-white/5 text-slate-400"
+                    }`} title="Test"><Activity size={14} /></button>
                 </div>
               ) : (
-                <div className="grid grid-cols-2 gap-2 sm:gap-3 mb-1 sm:mb-2">
+                /* Tab menu Desktop — 1 riga singola con pulsanti compatti */
+                <div className="flex items-center gap-1.5 mb-2 w-full overflow-x-auto pb-1">
                   <button
                     type="button"
                     onClick={() => { setActiveSettingsTab("network"); scanWifiNetworks(); }}
-                    className={`flex items-center justify-center gap-2 sm:gap-3 px-3 py-2 sm:px-6 sm:py-4.5 rounded-xl sm:rounded-2xl border text-[9px] sm:text-[11px] lg:text-xs font-black uppercase tracking-widest transition-all active:scale-95 cursor-pointer col-span-2 ${
+                    className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-2 rounded-xl border text-[10px] font-black uppercase tracking-wider transition-all active:scale-95 cursor-pointer whitespace-nowrap ${
                       activeSettingsTab === "network"
                         ? "bg-amber-600 border-amber-400 text-white shadow-lg shadow-amber-500/25"
                         : "bg-white/5 border-white/5 text-slate-400 hover:bg-white/10 hover:text-white"
                     }`}
                   >
-                    <Wifi size={14} className="sm:w-[16px] sm:h-[16px]" />
-                    <span>Rete Wi-Fi / Internet</span>
+                    <Network size={14} />
+                    <span>Rete</span>
                   </button>
                   <button
                     type="button"
                     onClick={() => setActiveSettingsTab("ai")}
-                    className={`flex items-center justify-center gap-2 sm:gap-3 px-3 py-2 sm:px-6 sm:py-4.5 rounded-xl sm:rounded-2xl border text-[9px] sm:text-[11px] lg:text-xs font-black uppercase tracking-widest transition-all active:scale-95 cursor-pointer ${
+                    className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-2 rounded-xl border text-[10px] font-black uppercase tracking-wider transition-all active:scale-95 cursor-pointer whitespace-nowrap ${
                       activeSettingsTab === "ai"
                         ? "bg-blue-600 border-blue-400 text-white shadow-lg shadow-blue-500/25"
                         : "bg-white/5 border-white/5 text-slate-400 hover:bg-white/10 hover:text-white"
                     }`}
                   >
-                    <Cpu size={14} className="sm:w-[16px] sm:h-[16px]" />
-                    <span>AI APIKEY</span>
+                    <Cpu size={14} />
+                    <span>AI</span>
                   </button>
                   <button
                     type="button"
                     onClick={() => setActiveSettingsTab("email")}
-                    className={`flex items-center justify-center gap-2 sm:gap-3 px-3 py-2 sm:px-6 sm:py-4.5 rounded-xl sm:rounded-2xl border text-[9px] sm:text-[11px] lg:text-xs font-black uppercase tracking-widest transition-all active:scale-95 cursor-pointer ${
+                    className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-2 rounded-xl border text-[10px] font-black uppercase tracking-wider transition-all active:scale-95 cursor-pointer whitespace-nowrap ${
                       activeSettingsTab === "email"
                         ? "bg-blue-600 border-blue-400 text-white shadow-lg shadow-blue-500/25"
                         : "bg-white/5 border-white/5 text-slate-400 hover:bg-white/10 hover:text-white"
                     }`}
                   >
-                    <Mail size={14} className="sm:w-[16px] sm:h-[16px]" />
-                    <span>EMAIL Destinatari</span>
+                    <Mail size={14} />
+                    <span>Email</span>
                   </button>
                   <button
                     type="button"
                     onClick={() => setActiveSettingsTab("telegram")}
-                    className={`flex items-center justify-center gap-2 sm:gap-3 px-3 py-2 sm:px-6 sm:py-4.5 rounded-xl sm:rounded-2xl border text-[9px] sm:text-[11px] lg:text-xs font-black uppercase tracking-widest transition-all active:scale-95 cursor-pointer ${
+                    className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-2 rounded-xl border text-[10px] font-black uppercase tracking-wider transition-all active:scale-95 cursor-pointer whitespace-nowrap ${
                       activeSettingsTab === "telegram"
                         ? "bg-blue-600 border-blue-400 text-white shadow-lg shadow-blue-500/25"
                         : "bg-white/5 border-white/5 text-slate-400 hover:bg-white/10 hover:text-white"
                     }`}
                   >
-                    <Send size={14} className="sm:w-[16px] sm:h-[16px]" />
-                    <span>ID Telegram</span>
+                    <Send size={14} />
+                    <span>Telegram</span>
                   </button>
                   <button
                     type="button"
                     onClick={() => setActiveSettingsTab("sleep")}
-                    className={`flex items-center justify-center gap-2 sm:gap-3 px-3 py-2 sm:px-6 sm:py-4.5 rounded-xl sm:rounded-2xl border text-[9px] sm:text-[11px] lg:text-xs font-black uppercase tracking-widest transition-all active:scale-95 cursor-pointer ${
+                    className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-2 rounded-xl border text-[10px] font-black uppercase tracking-wider transition-all active:scale-95 cursor-pointer whitespace-nowrap ${
                       activeSettingsTab === "sleep"
                         ? "bg-blue-600 border-blue-400 text-white shadow-lg shadow-blue-500/25"
                         : "bg-white/5 border-white/5 text-slate-400 hover:bg-white/10 hover:text-white"
                     }`}
                   >
-                    <Lock size={14} className="sm:w-[16px] sm:h-[16px]" />
-                    <span>MODE Anti-sleep</span>
+                    <Lock size={14} />
+                    <span>Anti-sleep</span>
                   </button>
                   <button
                     type="button"
                     onClick={() => setActiveSettingsTab("test")}
-                    className={`flex items-center justify-center gap-2 sm:gap-3 px-3 py-2 sm:px-6 sm:py-4.5 rounded-xl sm:rounded-2xl border text-[9px] sm:text-[11px] lg:text-xs font-black uppercase tracking-widest transition-all active:scale-95 cursor-pointer col-span-2 ${
+                    className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-2 rounded-xl border text-[10px] font-black uppercase tracking-wider transition-all active:scale-95 cursor-pointer whitespace-nowrap ${
                       activeSettingsTab === "test"
                         ? "bg-blue-600 border-blue-400 text-white shadow-lg shadow-blue-500/25"
                         : "bg-white/5 border-white/5 text-slate-400 hover:bg-white/10 hover:text-white"
                     }`}
                   >
-                    <RefreshCw size={14} className="sm:w-[16px] sm:h-[16px]" />
-                    <span>Sistema & Aggiornamenti</span>
+                    <RefreshCw size={14} />
+                    <span>Sistema</span>
                   </button>
                 </div>
               )}
@@ -5879,7 +6756,7 @@ export default function App() {
 
               <div className={`${
                 isMobile35
-                  ? `vigil-settings-35-content ${activeSettingsTab === 'network' ? 'overflow-hidden flex flex-col' : ''}`
+                  ? `vigil-settings-35-content ${activeSettingsTab === 'network' ? 'overflow-y-auto flex flex-col' : ''}`
                   : 'space-y-6'
               }`}>
                 {/* Network / WiFi Configuration Tab */}

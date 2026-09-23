@@ -56,6 +56,7 @@ export function getTriggerScheduleBadgeText(sched?: TriggerSchedule): string | n
 export function loadLocalCameraSettings(cameraId: string): { 
   enabledTriggers?: string[];
   triggerSchedules?: Record<string, TriggerSchedule>;
+  analysisInterval?: number;
 } {
   try {
     const all = JSON.parse(localStorage.getItem(LOCAL_CAMERA_SETTINGS_KEY) || '{}');
@@ -70,6 +71,7 @@ export function persistLocalCameraSettings(
   settings: { 
     enabledTriggers?: string[];
     triggerSchedules?: Record<string, TriggerSchedule>;
+    analysisInterval?: number;
   }
 ) {
   try {
@@ -399,6 +401,7 @@ export function finalizeCameraForSave(
         : [],
     triggerSchedules: edited.triggerSchedules || merged.triggerSchedules || {},
     rtspPath: edited.rtspPath ?? merged.rtspPath ?? '/stream1',
+    analysisInterval: edited.analysisInterval ?? merged.analysisInterval ?? 5,
   };
 }
 
@@ -424,6 +427,7 @@ export function mapDbCamera(c: Record<string, unknown>, subnetHint?: string | nu
 
   let enabledTriggers = parseEnabledTriggers(c.enabled_triggers);
   let triggerSchedules: Record<string, TriggerSchedule> = {};
+  let analysisInterval = typeof c.analysis_interval === 'number' ? c.analysis_interval : 5;
   
   if (c.trigger_schedules && typeof c.trigger_schedules === 'object') {
     triggerSchedules = c.trigger_schedules as Record<string, TriggerSchedule>;
@@ -436,6 +440,9 @@ export function mapDbCamera(c: Record<string, unknown>, subnetHint?: string | nu
     }
     if (Object.keys(triggerSchedules).length === 0 && local.triggerSchedules) {
       triggerSchedules = { ...local.triggerSchedules };
+    }
+    if (local.analysisInterval && typeof local.analysisInterval === 'number') {
+      analysisInterval = local.analysisInterval;
     }
   }
 
@@ -454,6 +461,7 @@ export function mapDbCamera(c: Record<string, unknown>, subnetHint?: string | nu
     status: (c.status as Camera['status']) || 'online',
     enabledTriggers,
     triggerSchedules,
+    analysisInterval,
   };
 }
 

@@ -167,20 +167,29 @@
 .vigil-settings-35-tabs {
   flex-shrink: 0;
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   gap: 0.25rem;
+}
+
+.vigil-settings-35-tabs button {
+  flex: 1;
+  min-height: 28px;
+  height: 28px;
+  padding: 0.2rem !important;
+  border-radius: 8px !important;
 }
 
 .vigil-settings-35-tabs-row {
   display: flex;
   gap: 0.25rem;
+  width: 100%;
 }
 
 .vigil-settings-35-tabs-row button {
   flex: 1;
-  min-height: 34px;
-  padding: 0.25rem !important;
-  border-radius: 10px !important;
+  min-height: 28px;
+  padding: 0.2rem !important;
+  border-radius: 8px !important;
 }
 
 .vigil-settings-35-content {

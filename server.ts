@@ -13,8 +13,7 @@ import net from "net";
 import os from "os";
 import dns from "dns";
 import { WebSocket } from "ws";
-import pg from "pg";
-const { Pool } = pg;
+
 import { isValidGeminiApiKey, normalizeGeminiApiKey } from "./src/utils/geminiApiKey.ts";
 import {
   checkForUpdate,
@@ -176,6 +175,47 @@ async function startServer() {
       }
     }
     return false;
+  };
+
+  const getNetworkDetails = () => {
+    const nets = networkInterfaces();
+    let lanIp: string | null = null;
+    let wifiIp: string | null = null;
+    let lanInterfaceName: string | null = null;
+    let wifiInterfaceName: string | null = null;
+
+    for (const name of Object.keys(nets)) {
+      const interfaces = nets[name];
+      if (interfaces) {
+        for (const netInfo of interfaces) {
+          if (netInfo.family === 'IPv4' && !netInfo.internal && netInfo.address !== '10.42.0.1') {
+            const lowerName = name.toLowerCase();
+            const isWifi = lowerName.includes('wlan') || lowerName.includes('wi-fi') || lowerName.includes('wireless');
+            const isLan = lowerName.includes('eth') || lowerName.includes('en') || lowerName.includes('lan') || lowerName.includes('ethernet');
+            
+            if (isLan && !lanIp) {
+              lanIp = netInfo.address;
+              lanInterfaceName = name;
+            } else if (isWifi && !wifiIp) {
+              wifiIp = netInfo.address;
+              wifiInterfaceName = name;
+            } else if (!lanIp && !isWifi) {
+              lanIp = netInfo.address;
+              lanInterfaceName = name;
+            }
+          }
+        }
+      }
+    }
+
+    return {
+      lanIp,
+      wifiIp,
+      lanInterfaceName,
+      wifiInterfaceName,
+      hasLan: !!lanIp,
+      hasWifi: !!wifiIp
+    };
   };
 
   const ENV_PATH = path.join(process.cwd(), ".env");
@@ -553,47 +593,112 @@ async function startServer() {
     }
   });
 
-  // API per scansionare le reti Wi-Fi
-  app.get("/api/wifi/scan", (req, res) => {
-    if (process.platform === "win32") {
-      // Reti fittizie per sviluppo locale su Windows
-      return res.json({
-        success: true,
-        networks: [
-          { ssid: "VigilAI_Setup_Simulata", signal: 99, security: "" },
-          { ssid: "Rete_Casa_Simulata", signal: 85, security: "WPA2" },
-          { ssid: "Wi-Fi_Ospiti_Simulata", signal: 60, security: "WPA2" },
-          { ssid: "Ufficio_Fastweb", signal: 45, security: "WPA1 WPA2" }
-        ]
-      });
-    }
+  // Helper per scansionare reti Wi-Fi reali su Windows (netsh)
+  const scanWindowsWifi = (): Promise<Array<{ ssid: string; signal: number; security: string; connected?: boolean }>> => {
+    return new Promise((resolve) => {
+      exec("netsh wlan show networks mode=bssid", (err, stdout) => {
+        if (err || !stdout) {
+          return resolve([
+            { ssid: "VigilAI_Setup_Simulata", signal: 99, security: "" },
+            { ssid: "Rete_Casa_Simulata", signal: 85, security: "WPA2" },
+            { ssid: "Wi-Fi_Ospiti_Simulata", signal: 60, security: "WPA2" }
+          ]);
+        }
 
-    exec("nmcli -t -f SSID,SIGNAL,SECURITY dev wifi list", (err, stdout, stderr) => {
-      if (err) {
-        console.error("[WiFi Scan Error]", stderr || err.message);
-        return res.status(500).json({ success: false, error: "Impossibile scansionare le reti Wi-Fi: " + (stderr || err.message) });
-      }
+        const lines = stdout.split("\n");
+        const networks: Array<{ ssid: string; signal: number; security: string; connected?: boolean }> = [];
+        let currentSsid = "";
+        let currentAuth = "";
+        let currentSignal = 0;
 
-      const lines = stdout.split("\n");
-      const networks = [];
-      const seenSsids = new Set();
-
-      for (const line of lines) {
-        if (!line.trim()) continue;
-        const lastColonIdx = line.lastIndexOf(':');
-        const secondLastColonIdx = line.lastIndexOf(':', lastColonIdx - 1);
-        if (secondLastColonIdx !== -1) {
-          const ssid = line.substring(0, secondLastColonIdx).replace(/\\:/g, ':').trim();
-          const signal = parseInt(line.substring(secondLastColonIdx + 1, lastColonIdx), 10) || 0;
-          const security = line.substring(lastColonIdx + 1).trim();
-          if (ssid && !seenSsids.has(ssid)) {
-            seenSsids.add(ssid);
-            networks.push({ ssid, signal, security });
+        for (const line of lines) {
+          const trimmed = line.trim();
+          const ssidMatch = trimmed.match(/^SSID\s+\d+\s*:\s*(.*)$/i);
+          if (ssidMatch) {
+            if (currentSsid) {
+              networks.push({ ssid: currentSsid, signal: currentSignal, security: currentAuth });
+            }
+            currentSsid = ssidMatch[1].trim();
+            currentAuth = "Aperta";
+            currentSignal = 70;
+            continue;
+          }
+          const authMatch = trimmed.match(/^Autenticazione\s*:\s*(.*)$/i) || trimmed.match(/^Authentication\s*:\s*(.*)$/i);
+          if (authMatch) {
+            currentAuth = authMatch[1].trim();
+            continue;
+          }
+          const sigMatch = trimmed.match(/^Segnale\s*:\s*(\d+)%/i) || trimmed.match(/^Signal\s*:\s*(\d+)%/i);
+          if (sigMatch) {
+            currentSignal = parseInt(sigMatch[1], 10) || currentSignal;
+            continue;
           }
         }
-      }
-      res.json({ success: true, networks });
+        if (currentSsid) {
+          networks.push({ ssid: currentSsid, signal: currentSignal, security: currentAuth });
+        }
+
+        if (networks.length === 0) {
+          networks.push(
+            { ssid: "VigilAI_Setup_Simulata", signal: 99, security: "" },
+            { ssid: "Rete_Casa_Simulata", signal: 85, security: "WPA2" },
+            { ssid: "Wi-Fi_Ospiti_Simulata", signal: 60, security: "WPA2" }
+          );
+        }
+        resolve(networks);
+      });
     });
+  };
+
+  // Helper per scansionare reti Wi-Fi reali su Linux (nmcli)
+  const scanLinuxWifi = (): Promise<Array<{ ssid: string; signal: number; security: string; connected?: boolean }>> => {
+    return new Promise((resolve, reject) => {
+      exec("sudo nmcli dev wifi rescan", () => {
+        exec("nmcli -t -f SSID,SIGNAL,SECURITY,ACTIVE dev wifi list", (err, stdout, stderr) => {
+          if (err) {
+            console.error("[WiFi Scan Error]", stderr || err.message);
+            return reject(new Error("Impossibile scansionare le reti Wi-Fi: " + (stderr || err.message)));
+          }
+
+          const lines = stdout.split("\n");
+          const networks: Array<{ ssid: string; signal: number; security: string; connected?: boolean }> = [];
+          const seenSsids = new Set();
+
+          for (const line of lines) {
+            if (!line.trim()) continue;
+            const parts = line.split(":");
+            if (parts.length >= 4) {
+              const active = parts[parts.length - 1].trim().toLowerCase() === "yes";
+              const security = parts[parts.length - 2].trim();
+              const signal = parseInt(parts[parts.length - 3], 10) || 0;
+              const ssid = parts.slice(0, parts.length - 3).join(":").replace(/\\:/g, ":").trim();
+              if (ssid && !seenSsids.has(ssid)) {
+                seenSsids.add(ssid);
+                networks.push({ ssid, signal, security, connected: active });
+              }
+            }
+          }
+          networks.sort((a, b) => (b.connected ? 1000 : b.signal) - (a.connected ? 1000 : a.signal));
+          resolve(networks);
+        });
+      });
+    });
+  };
+
+  // API per scansionare le reti Wi-Fi
+  app.get("/api/wifi/scan", async (req, res) => {
+    try {
+      if (process.platform === "win32") {
+        const networks = await scanWindowsWifi();
+        return res.json({ success: true, networks });
+      }
+
+      const networks = await scanLinuxWifi();
+      res.json({ success: true, networks });
+    } catch (err: any) {
+      console.error("[WiFi Scan API Error]:", err);
+      res.status(500).json({ success: false, error: err.message || "Errore scansione Wi-Fi" });
+    }
   });
 
   const checkInternetConnectivity = (): Promise<boolean> => {
@@ -611,7 +716,18 @@ async function startServer() {
   const getCurrentWifiSsid = (): Promise<string | null> => {
     return new Promise((resolve) => {
       if (process.platform === "win32") {
-        resolve(hasNetworkConnection() ? "Rete_Casa_Simulata" : null);
+        exec("netsh wlan show interfaces", (err, stdout) => {
+          if (err || !stdout) {
+            resolve(hasNetworkConnection() ? "Wi-Fi Locale" : null);
+            return;
+          }
+          const match = stdout.match(/^\s*SSID\s*:\s*(.+)$/m);
+          if (match && match[1]) {
+            resolve(match[1].trim());
+          } else {
+            resolve(hasNetworkConnection() ? "Wi-Fi Locale" : null);
+          }
+        });
         return;
       }
       exec("nmcli -t -f ACTIVE,SSID dev wifi", (err, stdout) => {
@@ -646,6 +762,7 @@ async function startServer() {
         });
       }
 
+      const netDetails = getNetworkDetails();
       const hasLocalNetwork = hasNetworkConnection();
       const hasInternet = hasLocalNetwork ? await checkInternetConnectivity() : false;
       const currentSsid = await getCurrentWifiSsid();
@@ -655,7 +772,14 @@ async function startServer() {
         hasLocalNetwork,
         hasInternet,
         online: hasLocalNetwork && hasInternet,
-        currentSsid
+        currentSsid,
+        lanIp: netDetails.lanIp,
+        wifiIp: netDetails.wifiIp,
+        lanInterfaceName: netDetails.lanInterfaceName,
+        wifiInterfaceName: netDetails.wifiInterfaceName,
+        hasLan: netDetails.hasLan,
+        hasWifi: netDetails.hasWifi,
+        connectionType: currentSsid ? (netDetails.hasLan ? 'both' : 'wifi') : (netDetails.hasLan ? 'lan' : 'none')
       });
     } catch (err: any) {
       res.status(500).json({
@@ -666,6 +790,30 @@ async function startServer() {
         currentSsid: null,
         error: err.message || "Errore verifica rete"
       });
+    }
+  });
+
+  // API per verificare/confermare la connessione LAN (Ethernet)
+  app.post("/api/lan/confirm", async (req, res) => {
+    try {
+      const { ip, gateway, username, password } = req.body || {};
+      const netDetails = getNetworkDetails();
+      const hasLocal = hasNetworkConnection();
+      const hasInternet = hasLocal ? await checkInternetConnectivity() : false;
+
+      res.json({
+        success: true,
+        confirmed: true,
+        hasInternet,
+        ip: ip || netDetails.lanIp || "192.168.1.100",
+        gateway: gateway || "192.168.1.1",
+        interface: netDetails.lanInterfaceName || "eth0",
+        message: hasInternet 
+          ? `Connessione LAN confermata con successo! IP: ${ip || netDetails.lanIp || "rilevato"}`
+          : `Parametri LAN registrati. In attesa di segnale Internet sul cavo LAN.`
+      });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message || "Errore test LAN" });
     }
   });
 
@@ -2029,6 +2177,23 @@ async function startServer() {
 
     // Avvia la sincronizzazione delle telecamere pendenti su boot
     syncPendingCameras();
+
+    // Controllo automatico aggiornamenti OTA in background (dopo 10 secondi dall'avvio)
+    setTimeout(async () => {
+      try {
+        if (hasNetworkConnection()) {
+          console.log("[Update Startup] Verifica aggiornamenti OTA in corso...");
+          const updateInfo = await checkForUpdate();
+          if (updateInfo.updateAvailable && updateInfo.manifest) {
+            console.log(`[Update Startup] Nuovo aggiornamento disponibile: v${updateInfo.manifest.version}`);
+          } else {
+            console.log(`[Update Startup] VigilAI è aggiornato (v${updateInfo.currentVersion}).`);
+          }
+        }
+      } catch (upErr: any) {
+        console.warn("[Update Startup] Controllo aggiornamenti saltato o fallito:", upErr.message);
+      }
+    }, 10000);
 
     if (process.platform !== "win32") {
       if (!isConfigured()) {

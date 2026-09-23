@@ -44,6 +44,7 @@ export interface Camera {
   status: "online" | "offline";
   enabledTriggers: AlertTrigger[];
   triggerSchedules?: Record<string, TriggerSchedule>;
+  analysisInterval?: number; // In seconds, default 5
 }
 
 export interface Incident {

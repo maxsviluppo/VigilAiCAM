@@ -92,7 +92,7 @@ export const analyzeFrame = async (
 
     const primaryModel = resolveVigilAiModel(modelId);
 
-    // Costruiamo la sequenza di modelli resiliente: primario (3-flash-preview o 3.8-flash) con fallback intelligente
+    // Costruiamo la sequenza di modelli: primario con fallback intelligente
     const modelsToTry = [
       primaryModel,
       ...VIGILAI_FALLBACK_AI_MODELS.filter((m) => m !== primaryModel),

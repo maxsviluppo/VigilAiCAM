@@ -20,7 +20,6 @@ const DEPRECATED_AI_MODELS = new Set([
   "gemini-2.0-flash",
 ]);
 
-/** Forza Gemini 3.8 se in localStorage/cloud è rimasto un modello vecchio (es. 1.5). */
 export function resolveVigilAiModel(stored?: string | null): string {
   const id = (stored || "").trim();
   if (!id || DEPRECATED_AI_MODELS.has(id) || id.includes("1.5")) {
@@ -37,7 +36,6 @@ export function normalizeGeminiApiKey(key: string): string {
     .replace(/\s+/g, "");
 }
 
-/** Sceglie la chiave più recente tra locale e cloud (evita rollback a AIza vecchia) */
 export function pickPreferredGeminiApiKey(
   localKey: string,
   cloudKey: string,
@@ -51,7 +49,6 @@ export function pickPreferredGeminiApiKey(
 
   const localFmt = getGeminiApiKeyFormat(local);
   const cloudFmt = getGeminiApiKeyFormat(cloud);
-  // Non ripristinare AIza dal server/cloud se in browser c'è già una chiave AQ. valida
   if (localFmt === "aq" && cloudFmt === "legacy") return local;
   if (localFmt === "legacy" && cloudFmt === "aq") return cloud;
 
@@ -66,7 +63,6 @@ export function pickPreferredGeminiApiKey(
   return local;
 }
 
-/** Rifiuta chiavi troncate (causa tipica del messaggio OAuth su chiavi AQ.) */
 export function validateGeminiApiKeyOrThrow(key: string): string {
   const normalized = normalizeGeminiApiKey(key);
   if (!normalized) {
