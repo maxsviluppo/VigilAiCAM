@@ -24,6 +24,8 @@ import {
   ChevronLeft,
   ChevronRight,
   Maximize2,
+  Minimize2,
+  Sparkles,
   Scan,
   Globe,
   X,
@@ -1241,6 +1243,7 @@ export default function App() {
   const [dragType, setDragType] = useState<"move" | number | null>(null);
   const [dragStart, setDragStart] = useState<{ x: number; y: number; initialPoints: Point[] } | null>(null);
   const [selectedZoneId, setSelectedZoneId] = useState<string | null>(null);
+  const cameraZonesRef = useRef<Map<string, Zone[]>>(new Map());
   
   // Settings State
   const [aiModel, setAiModel] = useState(() => {
@@ -1266,7 +1269,13 @@ export default function App() {
   const updateAnalysisInterval = (val: number) => {
     const newVal = Math.max(2, Math.min(120, val));
     setAnalysisInterval(newVal);
-    localStorage.setItem("vigilai_analysis_interval", newVal.toString());
+    try {
+      localStorage.setItem("vigilai_analysis_interval", newVal.toString());
+    } catch {}
+    if (activeCameraId) {
+      setCameras(prev => prev.map(c => c.id === activeCameraId ? { ...c, analysisInterval: newVal } : c));
+      persistLocalCameraSettings(activeCameraId, { analysisInterval: newVal });
+    }
   };
   const [showEmailPass, setShowEmailPass] = useState(false);
   const [showGeminiKey, setShowGeminiKey] = useState(false);
@@ -1286,6 +1295,33 @@ export default function App() {
   });
   const [activeSettingsTab, setActiveSettingsTab] = useState<"cameras" | "ai" | "email" | "telegram" | "sleep" | "test" | "log" | "network">("cameras");
   const [logStartIndex, setLogStartIndex] = useState(0);
+
+  const [isImageOptimizationEnabled, setIsImageOptimizationEnabled] = useState<boolean>(() => {
+    const saved = localStorage.getItem("vigilai_opt_images");
+    return saved === null ? true : saved !== "false";
+  });
+  const toggleImageOptimization = () => {
+    setIsImageOptimizationEnabled(prev => {
+      const next = !prev;
+      localStorage.setItem("vigilai_opt_images", String(next));
+      return next;
+    });
+  };
+
+  const [isHybridModeEnabled, setIsHybridModeEnabled] = useState<boolean>(() => {
+    const saved = localStorage.getItem("vigilai_hybrid_mode");
+    return saved === null ? true : saved !== "false";
+  });
+  const toggleHybridMode = () => {
+    setIsHybridModeEnabled(prev => {
+      const next = !prev;
+      localStorage.setItem("vigilai_hybrid_mode", String(next));
+      return next;
+    });
+  };
+
+  const lastMotionBaselinesRef = useRef<Map<string, { data: Uint8ClampedArray; time: number }>>(new Map());
+  const lastAiExecutionRef = useRef<Map<string, number>>(new Map());
 
   useEffect(() => {
     if (!showSettings || !isMobile35) return;
@@ -2454,6 +2490,14 @@ export default function App() {
     }
   }, [activeCameraId, cameras]);
 
+  useEffect(() => {
+    cameras.forEach(c => {
+      if (c && c.id) {
+        cameraZonesRef.current.set(c.id, c.zones || []);
+      }
+    });
+  }, [cameras]);
+
 
 
 
@@ -3034,35 +3078,111 @@ export default function App() {
     let base64Image = '';
     let success = false;
 
+    const MAX_OPT_DIM = 640;
+    const computeTargetDims = (origW: number, origH: number) => {
+      let w = origW || 1280;
+      let h = origH || 720;
+      if (isImageOptimizationEnabled && (w > MAX_OPT_DIM || h > MAX_OPT_DIM)) {
+        const ratio = Math.min(MAX_OPT_DIM / w, MAX_OPT_DIM / h);
+        w = Math.round(w * ratio);
+        h = Math.round(h * ratio);
+      }
+      return { w, h };
+    };
+
     if ((cam.type === 'ip' || cam.type === 'onvif') && img) {
-      canvas.width = img.naturalWidth || 1280;
-      canvas.height = img.naturalHeight || 720;
+      const { w, h } = computeTargetDims(img.naturalWidth || 1280, img.naturalHeight || 720);
+      canvas.width = w;
+      canvas.height = h;
       if (canvas.width > 0 && canvas.height > 0) {
         context.drawImage(img, 0, 0, canvas.width, canvas.height);
-        base64Image = canvas.toDataURL("image/jpeg", 0.6).split(",")[1];
+        base64Image = canvas.toDataURL("image/jpeg", isImageOptimizationEnabled ? 0.55 : 0.6).split(",")[1];
         success = true;
       }
     } else if (cam.type === 'webcam' || cam.type === 'browser') {
       const readyVideo = await captureFromWebcam(cam.id);
       if (readyVideo) {
-        canvas.width = readyVideo.videoWidth || 640;
-        canvas.height = readyVideo.videoHeight || 480;
+        const { w, h } = computeTargetDims(readyVideo.videoWidth || 640, readyVideo.videoHeight || 480);
+        canvas.width = w;
+        canvas.height = h;
         context.drawImage(readyVideo, 0, 0, canvas.width, canvas.height);
-        base64Image = canvas.toDataURL("image/jpeg", 0.6).split(",")[1];
+        base64Image = canvas.toDataURL("image/jpeg", isImageOptimizationEnabled ? 0.55 : 0.6).split(",")[1];
         success = true;
       }
     } else if (video && video.readyState >= 2) {
-      // Fallback for any other video type
-      canvas.width = video.videoWidth || 640;
-      canvas.height = video.videoHeight || 480;
+      const { w, h } = computeTargetDims(video.videoWidth || 640, video.videoHeight || 480);
+      canvas.width = w;
+      canvas.height = h;
       context.drawImage(video, 0, 0, canvas.width, canvas.height);
-      base64Image = canvas.toDataURL("image/jpeg", 0.6).split(",")[1];
+      base64Image = canvas.toDataURL("image/jpeg", isImageOptimizationEnabled ? 0.55 : 0.6).split(",")[1];
       success = true;
     }
 
     if (success && base64Image) {
       const isCamAiDisabled = disabledAiCameraIds.includes(cam.id);
       if ((!isAiEnabled || isCamAiDisabled) && !isSimulating) return; // Skip analysis if AI is disabled globally or for this specific camera
+
+      // ── METODO IBRIDO: Pre-filtro di movimento ultra-leggero per abbattimento costi ──
+      if (isHybridModeEnabled && !isSimulating) {
+        const nowMs = Date.now();
+        const lastAiTime = lastAiExecutionRef.current.get(cam.id) || 0;
+        const HEARTBEAT_INTERVAL_MS = 90000; // Heartbeat ogni 90s per controllo periodico
+
+        const sampleW = 64;
+        const sampleH = 36;
+        const sampleCanvas = document.createElement("canvas");
+        sampleCanvas.width = sampleW;
+        sampleCanvas.height = sampleH;
+        const sampleCtx = sampleCanvas.getContext("2d", { willReadFrequently: true });
+
+        let hasMotion = false;
+        if (sampleCtx) {
+          sampleCtx.drawImage(canvas, 0, 0, sampleW, sampleH);
+          const sampleData = sampleCtx.getImageData(0, 0, sampleW, sampleH).data;
+          const prev = lastMotionBaselinesRef.current.get(cam.id);
+
+          if (!prev) {
+            hasMotion = true;
+            lastMotionBaselinesRef.current.set(cam.id, { data: sampleData, time: nowMs });
+          } else if (nowMs - lastAiTime >= HEARTBEAT_INTERVAL_MS) {
+            hasMotion = true;
+            lastMotionBaselinesRef.current.set(cam.id, { data: sampleData, time: nowMs });
+          } else {
+            let changedPixels = 0;
+            const totalPixels = sampleW * sampleH;
+            const prevData = prev.data;
+            for (let i = 0; i < sampleData.length; i += 4) {
+              const lum1 = sampleData[i] * 0.299 + sampleData[i + 1] * 0.587 + sampleData[i + 2] * 0.114;
+              const lum2 = prevData[i] * 0.299 + prevData[i + 1] * 0.587 + prevData[i + 2] * 0.114;
+              if (Math.abs(lum1 - lum2) > 22) {
+                changedPixels++;
+              }
+            }
+
+            const changeRatio = changedPixels / totalPixels;
+            if (changeRatio >= 0.018) {
+              hasMotion = true;
+              lastMotionBaselinesRef.current.set(cam.id, { data: sampleData, time: nowMs });
+            } else if (nowMs - prev.time > 15000) {
+              lastMotionBaselinesRef.current.set(cam.id, { data: sampleData, time: nowMs });
+            }
+          }
+        } else {
+          hasMotion = true;
+        }
+
+        if (!hasMotion) {
+          setLastAnalysis({
+            threatLevel: "low",
+            detectedEvents: [],
+            description: `🟢 Metodo Ibrido: scena tranquilla su ${cam.name} (nessun movimento, chiamata IA risparmiata).`,
+            isEmergency: false,
+          });
+          return;
+        }
+      }
+
+      lastAiExecutionRef.current.set(cam.id, Date.now());
 
       setLastAnalysis(prev => ({
         description: `🔄 Analisi in corso: ${cam.name}...`,
@@ -3143,7 +3263,7 @@ export default function App() {
         setIsAnalyzing(false);
       }
     }
-  }, [cameras, activeCameraId, isAnalyzing, isSimulating, isMultiView, isAiEnabled, disabledAiCameraIds]);
+  }, [cameras, activeCameraId, isAnalyzing, isSimulating, isMultiView, isAiEnabled, disabledAiCameraIds, isImageOptimizationEnabled, isHybridModeEnabled]);
 
   useEffect(() => {
     if (isMonitoring) {
@@ -3316,7 +3436,10 @@ export default function App() {
           label: `Zona ${(cameras.find(c => c.id === activeCameraId)?.zones?.length || 0) + 1}`
         };
         setSelectedZoneId(zid);
-        setCameras(prev => prev.map(c => c.id !== activeCameraId ? c : { ...c, zones: [...(c.zones || []), newZone] }));
+        const existing = cameraZonesRef.current.get(activeCameraId) || cameras.find(c => c.id === activeCameraId)?.zones || [];
+        const nextZones = [...existing, newZone];
+        cameraZonesRef.current.set(activeCameraId, nextZones);
+        setCameras(prev => prev.map(c => c.id !== activeCameraId ? c : { ...c, zones: nextZones }));
       }
     }
     setCurrentDrawingZone(null); setDraggingZoneId(null); setDragType(null); setDragStart(null);
@@ -3324,19 +3447,54 @@ export default function App() {
 
   const deleteZone = async (zoneId: string) => {
     if (!activeCameraId) return;
-    const cam = cameras.find(c => c.id === activeCameraId);
-    const updatedZones = (cam?.zones || []).filter(z => z.id !== zoneId);
+    const currentZones = cameraZonesRef.current.get(activeCameraId) || cameras.find(c => c.id === activeCameraId)?.zones || [];
+    const updatedZones = currentZones.filter(z => z.id !== zoneId);
+    cameraZonesRef.current.set(activeCameraId, updatedZones);
     setCameras(prev => prev.map(c => c.id !== activeCameraId ? c : { ...c, zones: updatedZones }));
     setSelectedZoneId(null);
     await saveCameraZones(activeCameraId, updatedZones);
   };
+
+  const clearAllCameraZones = async (cameraId: string) => {
+    if (!cameraId) return;
+    cameraZonesRef.current.set(cameraId, []);
+    setCameras(prev => prev.map(c => c.id !== cameraId ? c : { ...c, zones: [] }));
+    setSelectedZoneId(null);
+    setCurrentDrawingZone(null);
+    setDraggingZoneId(null);
+    await saveCameraZones(cameraId, []);
+  };
+
+  const handleToggleOrSaveZones = async () => {
+    if (isEditingZones) {
+      const targetCamId = activeCameraId;
+      // Disattiva subito la modalità modifica per feedback visivo immediato (nessun pulsante bloccato)
+      setIsEditingZones(false);
+      setSelectedZoneId(null);
+      setCurrentDrawingZone(null);
+      setDraggingZoneId(null);
+      if (targetCamId) {
+        try {
+          const zonesToPersist = cameraZonesRef.current.get(targetCamId);
+          await saveCameraZones(targetCamId, zonesToPersist);
+        } catch (err) {
+          console.warn("[Zones] Errore salvataggio zone in background:", err);
+        }
+      }
+    } else {
+      setIsEditingZones(true);
+    }
+  };
+
   const updateZoneType = (zoneId: string, type: ZoneType) => setCameras(prev => prev.map(c => c.id !== activeCameraId ? c : { ...c, zones: (c.zones || []).map(z => z.id === zoneId ? { ...z, type } : z) }));
 
   // ── END SMART ZONE HANDLERS ────────────────────────────────────────────────
 
   const saveCameraZones = async (cameraId: string, explicitZones?: Zone[]) => {
     const cam = cameras.find(c => c.id === cameraId);
-    const zonesToSave = explicitZones !== undefined ? explicitZones : (cam?.zones || []);
+    const zonesToSave = explicitZones !== undefined 
+      ? explicitZones 
+      : (cameraZonesRef.current.get(cameraId) ?? cam?.zones ?? []);
     const cleanZones = zonesToSave.filter(z => z && (z as any).id !== '__vigilai_meta__');
     const localSettings = loadLocalCameraSettings(cameraId);
     const effectiveInterval = typeof cam?.analysisInterval === 'number' && cam.analysisInterval >= 2
@@ -3353,6 +3511,7 @@ export default function App() {
       triggerSchedules: effectiveSchedules,
       enabledTriggers: cam?.enabledTriggers,
     });
+    cameraZonesRef.current.set(cameraId, cleanZones);
 
     const zonesWithMeta = [
       ...cleanZones,
@@ -3364,9 +3523,11 @@ export default function App() {
       }
     ];
 
-    // 2. Prova a sincronizzare tramite server locale Raspberry Pi (/api/cameras/zones)
+    // 2. Prova a sincronizzare tramite server locale Raspberry Pi (/api/cameras/zones) con timeout rapido
     let syncedViaServer = false;
     try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 2500);
       const res = await fetch('/api/cameras/zones', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -3375,8 +3536,10 @@ export default function App() {
           zones: zonesWithMeta,
           analysisInterval: effectiveInterval,
           triggerSchedules: effectiveSchedules,
-        })
+        }),
+        signal: controller.signal
       });
+      clearTimeout(timeoutId);
       if (res.ok) {
         const json = await res.json();
         if (json.success) {
@@ -3385,7 +3548,7 @@ export default function App() {
         }
       }
     } catch {
-      // Server locale non raggiungibile o esecuzione su web app remota
+      // Server locale non raggiungibile o timeout
     }
 
     // 3. Se non sincronizzato dal server locale, aggiorna direttamente Supabase (solo per UUID validi, non 'cam-...')
@@ -4824,17 +4987,14 @@ export default function App() {
               </button>
 
               <button
-                onClick={async () => {
-                  if (isEditingZones && activeCameraId) {
-                    await saveCameraZones(activeCameraId);
-                  }
-                  setIsEditingZones(!isEditingZones);
-                }}
-                className={`flex items-center gap-1.5 sm:gap-2 px-3 py-2 sm:px-4 sm:py-3 rounded-lg sm:rounded-xl lg:rounded-2xl font-black uppercase tracking-widest text-[9px] sm:text-[10px] transition-all border ${
+                type="button"
+                onClick={handleToggleOrSaveZones}
+                className={`flex items-center gap-1.5 sm:gap-2 px-3 py-2 sm:px-4 sm:py-3 rounded-lg sm:rounded-xl lg:rounded-2xl font-black uppercase tracking-widest text-[9px] sm:text-[10px] transition-all border cursor-pointer ${
                   isEditingZones
                     ? 'bg-amber-500/20 border-amber-500/40 text-amber-400 shadow-[0_0_20px_rgba(245,158,11,0.2)]'
                     : 'glass border-white/5 text-slate-500 hover:text-white'
                 }`}
+                title={isEditingZones ? "Salva ed esci dalla modalità zone" : "Disegna e modifica zone di allarme"}
               >
                 <Scan size={10} className={`sm:w-[14px] sm:h-[14px] ${isEditingZones ? 'animate-pulse' : ''}`} />
                 <span className="inline">{isEditingZones ? 'Salva Zone' : 'Zone'}</span>
@@ -5167,26 +5327,33 @@ export default function App() {
                                 );
                               })}
                               
-                              {selectedZoneId && (
+                              {selectedZoneId ? (
                                 <button 
+                                  type="button"
                                   onClick={() => { deleteZone(selectedZoneId); setSelectedZoneId(null); }}
-                                  className="p-1.5 bg-red-600/20 hover:bg-red-600 text-red-400 hover:text-white rounded-lg border border-red-500/20 transition-all"
-                                  title="Elimina Zona"
+                                  className="h-7 px-2 bg-red-600 hover:bg-red-500 text-white rounded-lg border border-red-400 flex items-center gap-1 text-[8px] font-bold shadow-md shadow-red-600/30 transition-all active:scale-95 cursor-pointer"
+                                  title="Elimina la zona selezionata"
                                 >
                                   <Trash2 size={10} />
+                                  <span>Elimina</span>
                                 </button>
-                              )}
+                              ) : ((activeCamera.zones?.length || 0) > 0 && (
+                                <button 
+                                  type="button"
+                                  onClick={() => clearAllCameraZones(activeCamera.id)}
+                                  className="h-7 px-2 bg-red-950/70 hover:bg-red-600 text-red-300 hover:text-white rounded-lg border border-red-500/30 flex items-center gap-1 text-[8px] font-bold transition-all active:scale-95 cursor-pointer"
+                                  title="Elimina tutte le zone per questa telecamera"
+                                >
+                                  <Trash2 size={10} />
+                                  <span>Rimuovi ({activeCamera.zones?.length})</span>
+                                </button>
+                              ))}
                               
                               <button 
-                                onClick={async () => { 
-                                  if (activeCameraId) {
-                                    await saveCameraZones(activeCameraId);
-                                  }
-                                  setIsEditingZones(false); 
-                                  setSelectedZoneId(null); 
-                                }} 
-                                className="p-1.5 bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white rounded-lg border border-white/5 transition-all"
-                                title="Chiudi Configurazione"
+                                type="button"
+                                onClick={handleToggleOrSaveZones} 
+                                className="p-1.5 bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white rounded-lg border border-white/5 transition-all cursor-pointer"
+                                title="Salva ed Esci"
                               >
                                 <X size={10}/>
                               </button>
@@ -5403,18 +5570,13 @@ export default function App() {
                         {/* Zone Toggle button */}
                         <button
                           type="button"
-                          onClick={async () => {
-                            if (isEditingZones && activeCameraId) {
-                              await saveCameraZones(activeCameraId);
-                            }
-                            setIsEditingZones(!isEditingZones);
-                          }}
+                          onClick={handleToggleOrSaveZones}
                           className={`w-10 h-[34px] rounded-lg border flex flex-col items-center justify-center active:scale-95 cursor-pointer ${
                             isEditingZones
                               ? 'bg-amber-600/80 border-amber-400 text-white'
                               : 'bg-white/5 border-white/5 text-slate-500'
                           }`}
-                          title={isEditingZones ? "Salva Zone" : "Modifica Zone"}
+                          title={isEditingZones ? "Salva ed esci dalle Zone" : "Modifica Zone"}
                         >
                           <Scan size={14} className={isEditingZones ? 'animate-pulse' : ''} />
                           <span className="text-[6px] font-black uppercase tracking-widest mt-0.5">Zone</span>
@@ -5749,26 +5911,33 @@ export default function App() {
                             );
                           })}
                           
-                          {selectedZoneId && (
+                          {selectedZoneId ? (
                             <button 
+                              type="button"
                               onClick={() => { deleteZone(selectedZoneId); setSelectedZoneId(null); }}
-                              className="p-2 bg-red-600/20 hover:bg-red-600 text-red-400 hover:text-white rounded-xl border border-red-500/20 transition-all"
-                              title="Elimina Zona"
+                              className="h-10 px-3 bg-red-600 hover:bg-red-500 text-white rounded-xl border border-red-400 flex items-center gap-2 text-[9px] font-black uppercase tracking-wider shadow-lg shadow-red-600/30 transition-all active:scale-95 cursor-pointer"
+                              title="Elimina Zona Selezionata"
                             >
                               <Trash2 size={16} />
+                              <span className="hidden sm:inline">Elimina Zona</span>
                             </button>
-                          )}
+                          ) : ((cam.zones?.length || 0) > 0 && (
+                            <button 
+                              type="button"
+                              onClick={() => clearAllCameraZones(cam.id)}
+                              className="h-10 px-3 bg-red-950/70 hover:bg-red-600 text-red-300 hover:text-white rounded-xl border border-red-500/40 flex items-center gap-2 text-[9px] font-black uppercase tracking-wider transition-all active:scale-95 cursor-pointer"
+                              title="Elimina tutte le zone per questa telecamera"
+                            >
+                              <Trash2 size={16} />
+                              <span className="hidden sm:inline">Rimuovi Zone ({cam.zones?.length})</span>
+                            </button>
+                          ))}
                           
                           <button 
-                            onClick={async () => { 
-                              if (activeCameraId) {
-                                await saveCameraZones(activeCameraId);
-                              }
-                              setIsEditingZones(false); 
-                              setSelectedZoneId(null); 
-                            }} 
-                            className="p-2 bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white rounded-xl border border-white/5 transition-all"
-                            title="Chiudi Configurazione"
+                            type="button"
+                            onClick={handleToggleOrSaveZones} 
+                            className="p-2 bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white rounded-xl border border-white/5 transition-all cursor-pointer"
+                            title="Salva ed Esci"
                           >
                             <X size={18}/>
                           </button>
@@ -8040,152 +8209,224 @@ export default function App() {
                   </div>
                 )}
 
-                {/* Test alarm Tab */}
+                {/* Scheda Aggiornamenti, Test e Ottimizzazioni Sistema */}
                 {activeSettingsTab === "test" && (
                   <div className="space-y-2">
-                    <div className={`p-2.5 bg-blue-500/10 border border-blue-500/30 rounded-xl space-y-2 ${isMobile35 ? "" : "mb-1"}`}>
-                      <div className="flex items-center justify-between gap-2">
+                    {/* 1. PRIMI COMANDI: I 2 TRIGGER SULLO STESSO RIGO (ON DI DEFAULT) */}
+                    <div className="p-2.5 bg-gradient-to-r from-emerald-500/10 via-cyan-500/10 to-blue-500/10 border border-emerald-500/30 rounded-xl space-y-1.5">
+                      <div className="flex items-center justify-between">
                         <div className="flex items-center gap-1.5">
-                          <Download size={12} className="text-blue-400 shrink-0" />
-                          <span className={`font-black uppercase tracking-widest text-blue-400 ${isMobile35 ? "text-[8px]" : "text-[10px]"}`}>
-                            Software Vigil.AI
+                          <Sparkles size={12} className="text-emerald-400 shrink-0" />
+                          <span className={`font-black uppercase tracking-widest text-emerald-400 ${isMobile35 ? "text-[8px]" : "text-[9.5px]"}`}>
+                            Ottimizzazioni Costi & IA
                           </span>
                         </div>
-                        <span className={`font-mono font-bold text-white ${isMobile35 ? "text-[10px]" : "text-sm"}`}>
-                          v{appVersion}
+                        <span className="text-[7px] font-bold text-emerald-300 bg-emerald-500/20 px-1.5 py-0.5 rounded-full border border-emerald-500/30">
+                          -95% Consumi
                         </span>
                       </div>
+
+                      {/* I 2 trigger affiancati sullo stesso rigo */}
+                      <div className="grid grid-cols-2 gap-1.5 sm:gap-2">
+                        {/* Trigger 1: Ottimizzazione Immagini */}
+                        <button
+                          type="button"
+                          onClick={toggleImageOptimization}
+                          className={`p-2 rounded-xl border flex items-center justify-between gap-1.5 transition-all text-left cursor-pointer active:scale-95 ${
+                            isImageOptimizationEnabled
+                              ? "bg-emerald-500/20 border-emerald-500/50 text-white shadow-sm shadow-emerald-500/15"
+                              : "bg-white/5 border-white/10 text-slate-400 hover:bg-white/10"
+                          }`}
+                          title={isImageOptimizationEnabled ? "Ottimizzazione immagini attiva (-70% token)" : "Ottimizzazione immagini disattivata (risoluzione piena)"}
+                        >
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-1">
+                              <Minimize2 size={11} className={isImageOptimizationEnabled ? "text-emerald-400 shrink-0" : "text-slate-400 shrink-0"} />
+                              <span className="text-[7.5px] sm:text-[9px] font-black uppercase tracking-tight truncate block">
+                                Ottimizza Frame
+                              </span>
+                            </div>
+                            <span className="text-[6.5px] text-slate-400 block truncate mt-0.5">
+                              {isImageOptimizationEnabled ? "640px + No-Thinking ON" : "Risoluzione Piena OFF"}
+                            </span>
+                          </div>
+                          <div className={`w-6.5 h-3.5 rounded-full transition-colors flex items-center px-0.5 shrink-0 ${isImageOptimizationEnabled ? "bg-emerald-500 justify-end" : "bg-slate-700 justify-start"}`}>
+                            <div className="w-2.5 h-2.5 rounded-full bg-white shadow-sm" />
+                          </div>
+                        </button>
+
+                        {/* Trigger 2: Metodo Ibrido */}
+                        <button
+                          type="button"
+                          onClick={toggleHybridMode}
+                          className={`p-2 rounded-xl border flex items-center justify-between gap-1.5 transition-all text-left cursor-pointer active:scale-95 ${
+                            isHybridModeEnabled
+                              ? "bg-cyan-500/20 border-cyan-500/50 text-white shadow-sm shadow-cyan-500/15"
+                              : "bg-white/5 border-white/10 text-slate-400 hover:bg-white/10"
+                          }`}
+                          title={isHybridModeEnabled ? "Metodo Ibrido attivo: chiama Gemini solo su movimento reale (-90% chiamate)" : "Metodo Ibrido disattivato: chiama Gemini a intervallo continuo fisso"}
+                        >
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-1">
+                              <Zap size={11} className={isHybridModeEnabled ? "text-cyan-400 shrink-0" : "text-slate-400 shrink-0"} />
+                              <span className="text-[7.5px] sm:text-[9px] font-black uppercase tracking-tight truncate block">
+                                Metodo Ibrido
+                              </span>
+                            </div>
+                            <span className="text-[6.5px] text-slate-400 block truncate mt-0.5">
+                              {isHybridModeEnabled ? "Motion Filter ON" : "Chiamate Fisse OFF"}
+                            </span>
+                          </div>
+                          <div className={`w-6.5 h-3.5 rounded-full transition-colors flex items-center px-0.5 shrink-0 ${isHybridModeEnabled ? "bg-cyan-500 justify-end" : "bg-slate-700 justify-start"}`}>
+                            <div className="w-2.5 h-2.5 rounded-full bg-white shadow-sm" />
+                          </div>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* 2. 4 PULSANTI ALLINEATI PER TEST E VERIFICHE */}
+                    <div className="grid grid-cols-4 gap-1.5 sm:gap-2">
+                      {/* 1: Verifica Aggiornamenti (eliminata la simulazione OTA) */}
                       <button
                         type="button"
                         onClick={() => checkForUpdates(false)}
-                        className={`w-full py-2.5 bg-blue-600 border border-blue-400 rounded-xl font-black uppercase tracking-widest text-white hover:bg-blue-500 active:scale-[0.98] transition-all flex items-center justify-center gap-2 shadow-lg shadow-blue-500/20 cursor-pointer ${isMobile35 ? "text-[9px]" : "text-[10px]"}`}
+                        className="py-2.5 px-1 bg-blue-600/20 border border-blue-500/40 hover:bg-blue-600 hover:text-white text-blue-400 rounded-xl flex flex-col items-center justify-center gap-1 active:scale-95 transition-all cursor-pointer shadow-sm shadow-blue-500/10"
+                        title={`Verifica Aggiornamenti Software (v${appVersion})`}
                       >
-                        <RefreshCw size={12} />
-                        Verifica aggiornamenti ora
+                        <RefreshCw size={13} className="shrink-0" />
+                        <span className="text-[7px] sm:text-[8px] font-black uppercase tracking-tight text-center leading-tight">
+                          Aggiornamenti
+                        </span>
+                        <span className="text-[6px] font-mono text-blue-300 font-bold">v{appVersion}</span>
                       </button>
-                      <button
+
+                      {/* 2: Test Email */}
+                      <button 
                         type="button"
-                        onClick={simulateUpdateCheck}
-                        className={`w-full py-2.5 bg-amber-600/15 border border-amber-500/30 rounded-xl font-black uppercase tracking-widest text-amber-400 hover:bg-amber-600 hover:text-white transition-all flex items-center justify-center gap-2 ${isMobile35 ? "text-[9px]" : "text-[10px]"}`}
+                        onClick={sendManualTestAlarm}
+                        className="py-2.5 px-1 bg-orange-600/20 border border-orange-500/40 hover:bg-orange-600 hover:text-white text-orange-400 rounded-xl flex flex-col items-center justify-center gap-1 active:scale-95 transition-all cursor-pointer shadow-sm shadow-orange-500/10"
+                        title="Invia Email di Test"
                       >
-                        <Activity size={12} />
-                        Simula upgrade OTA
+                        <Mail size={13} className="shrink-0" />
+                        <span className="text-[7px] sm:text-[8px] font-black uppercase tracking-tight text-center leading-tight">
+                          Test Email
+                        </span>
+                        <span className="text-[6px] text-orange-300/80 font-bold">Allerta</span>
+                      </button>
+
+                      {/* 3: Test Telegram */}
+                      <button 
+                        type="button"
+                        onClick={async () => {
+                          if (!appSettings.telegramChatId) {
+                            setGlobalModal({
+                              type: 'error',
+                              title: 'Chat ID Mancante',
+                              message: 'Inserisci prima un Telegram Chat ID valido per inviare il test.'
+                            });
+                            return;
+                          }
+                          try {
+                            const res = await fetch("/api/notify", {
+                              method: "POST",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({
+                                type: "telegram",
+                                recipient: [],
+                                description: "🔔 [TEST VIGIL.AI] - Integrazione Telegram completata con successo!",
+                                screenshot: "",
+                                telegramChatId: appSettings.telegramChatId,
+                                telegramToken: appSettings.telegramToken
+                              })
+                            });
+                            const data = await res.json();
+                            if (data.success) {
+                              setGlobalModal({
+                                type: 'success',
+                                title: 'Test Telegram Inviato',
+                                message: 'La notifica di test è stata inoltrata al bot Telegram.'
+                              });
+                            } else {
+                              throw new Error(data.error || "Errore sconosciuto");
+                            }
+                          } catch (err: any) {
+                            setGlobalModal({
+                              type: 'error',
+                              title: 'Errore Test Telegram',
+                              message: `Impossibile inviare: ${err.message}`
+                            });
+                          }
+                        }}
+                        className="py-2.5 px-1 bg-cyan-600/20 border border-cyan-500/40 hover:bg-cyan-600 hover:text-white text-cyan-400 rounded-xl flex flex-col items-center justify-center gap-1 active:scale-95 transition-all cursor-pointer shadow-sm shadow-cyan-500/10"
+                        title="Invia Notifica Telegram di Test"
+                      >
+                        <Send size={13} className="shrink-0" />
+                        <span className="text-[7px] sm:text-[8px] font-black uppercase tracking-tight text-center leading-tight">
+                          Test Telegram
+                        </span>
+                        <span className="text-[6px] text-cyan-300/80 font-bold">Bot Chat</span>
+                      </button>
+
+                      {/* 4: Diagnostica Rete */}
+                      <button 
+                        type="button"
+                        onClick={async () => {
+                          setLoadingDiagnostic(true);
+                          setShowDiagnosticModal(true);
+                          setDiagnosticResult(null);
+                          try {
+                            const res = await fetch("/api/system/diagnostic");
+                            const data = await res.json();
+                            setDiagnosticResult(data);
+                          } catch (err: any) {
+                            setDiagnosticResult({
+                              success: false,
+                              error: err.message
+                            });
+                          } finally {
+                            setLoadingDiagnostic(false);
+                          }
+                        }}
+                        className="py-2.5 px-1 bg-amber-500/20 border border-amber-500/40 hover:bg-amber-600 hover:text-white text-amber-400 rounded-xl flex flex-col items-center justify-center gap-1 active:scale-95 transition-all cursor-pointer shadow-sm shadow-amber-500/10"
+                        title="Diagnostica Rete Hardware Raspberry"
+                      >
+                        <Activity size={13} className={`shrink-0 ${loadingDiagnostic ? 'animate-spin' : ''}`} />
+                        <span className="text-[7px] sm:text-[8px] font-black uppercase tracking-tight text-center leading-tight">
+                          Diagnostica
+                        </span>
+                        <span className="text-[6px] text-amber-300/80 font-bold">Rete/LAN</span>
                       </button>
                     </div>
-                    {isMobile35 && (
-                      <div className="p-2.5 bg-green-500/10 border border-green-500/30 rounded-xl space-y-1">
-                        <div className="flex items-center gap-1.5">
-                          <Globe size={12} className="text-green-400 shrink-0" />
-                          <span className="text-[8px] font-black uppercase tracking-widest text-green-400">Indirizzo IP Raspberry</span>
-                        </div>
-                        {getPrimaryNetworkIp() ? (
-                          <div className="space-y-0.5">
-                            <code className="text-[11px] text-white font-mono font-bold block">
-                              {getPrimaryNetworkIp()}:{serverInfo?.port || 3088}
-                            </code>
-                            {networkStatus.currentSsid && (
-                              <span className="text-[7px] text-slate-500 font-bold uppercase block">Wi-Fi: {networkStatus.currentSsid}</span>
-                            )}
-                          </div>
-                        ) : (
-                          <span className="text-[8px] text-amber-400 font-bold uppercase">IP non rilevato — verifica connessione rete</span>
-                        )}
-                      </div>
-                    )}
-                  <div className="grid grid-cols-2 gap-3">
-                    <button 
-                      type="button"
-                      onClick={sendManualTestAlarm}
-                      className="py-4 bg-orange-600/20 border border-orange-500/30 rounded-2xl text-[9px] font-black uppercase tracking-widest text-orange-400 hover:bg-orange-600 hover:text-white transition-all flex items-center justify-center gap-2"
-                    >
-                      <Mail size={14} />
-                      Test Email
-                    </button>
 
-                    <button 
-                      type="button"
-                      onClick={async () => {
-                        if (!appSettings.telegramChatId) {
-                          setGlobalModal({
-                            type: 'error',
-                            title: 'Chat ID Mancante',
-                            message: 'Inserisci prima un Telegram Chat ID valido per inviare il test.'
-                          });
-                          return;
-                        }
-                        try {
-                          const res = await fetch("/api/notify", {
-                            method: "POST",
-                            headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify({
-                              type: "telegram",
-                              recipient: [],
-                              description: "🔔 [TEST VIGIL.AI] - Integrazione Telegram completata con successo!",
-                              screenshot: "",
-                              telegramChatId: appSettings.telegramChatId,
-                              telegramToken: appSettings.telegramToken
-                            })
-                          });
-                          const data = await res.json();
-                          if (data.success) {
-                            setGlobalModal({
-                              type: 'success',
-                              title: 'Test Telegram Inviato',
-                              message: 'La notifica di test è stata inoltrata al bot Telegram.'
-                            });
-                          } else {
-                            throw new Error(data.error || "Errore sconosciuto");
-                          }
-                        } catch (err: any) {
-                          setGlobalModal({
-                            type: 'error',
-                            title: 'Errore Test Telegram',
-                            message: `Impossibile inviare: ${err.message}`
-                          });
-                        }
-                      }}
-                      className="py-4 bg-blue-600/20 border border-blue-500/30 rounded-2xl text-[9px] font-black uppercase tracking-widest text-blue-400 hover:bg-blue-600 hover:text-white transition-all flex items-center justify-center gap-2"
-                    >
-                      <Send size={14} />
-                      Test Telegram
-                    </button>
-
+                    {/* 3. Visualizza Credenziali Mittente */}
                     <button 
                       type="button"
                       onClick={() => setShowCredentialsModal(true)}
-                      className="col-span-2 py-3 bg-blue-500/10 border border-blue-500/20 rounded-xl text-[9px] font-black uppercase tracking-widest text-blue-400 hover:bg-blue-600 hover:text-white transition-all flex items-center justify-center gap-2"
+                      className="w-full py-2 bg-blue-500/10 border border-blue-500/25 rounded-xl text-[8px] sm:text-[9px] font-black uppercase tracking-widest text-blue-400 hover:bg-blue-600 hover:text-white transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-98"
                     >
                       <Eye size={12} />
-                      Visualizza Credenziali Mittente
+                      <span>Visualizza Credenziali Mittente</span>
                     </button>
 
-                    {!isMobile35 && (
-                    <button 
-                      type="button"
-                      onClick={async () => {
-                        setLoadingDiagnostic(true);
-                        setShowDiagnosticModal(true);
-                        setDiagnosticResult(null);
-                        try {
-                          const res = await fetch("/api/system/diagnostic");
-                          const data = await res.json();
-                          setDiagnosticResult(data);
-                        } catch (err: any) {
-                          setDiagnosticResult({
-                            success: false,
-                            error: err.message
-                          });
-                        } finally {
-                          setLoadingDiagnostic(false);
-                        }
-                      }}
-                      className="col-span-2 py-3 bg-amber-500/10 border border-amber-500/20 rounded-xl text-[9px] font-black uppercase tracking-widest text-amber-400 hover:bg-amber-600 hover:text-white transition-all flex items-center justify-center gap-2"
-                    >
-                      <Activity size={12} />
-                      {loadingDiagnostic ? 'Diagnostica in corso...' : 'Diagnostica Rete (Risoluzione ENETUNREACH)'}
-                    </button>
-                    )}
-                  </div>
+                    {/* 4. Box IP e Stato Rete Raspberry (compatto, perfetto per 3.5" e Desktop) */}
+                    <div className="p-2 bg-slate-800/40 border border-white/5 rounded-xl flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <Globe size={12} className="text-emerald-400 shrink-0" />
+                        <div className="min-w-0">
+                          <span className="text-[7px] sm:text-[8px] font-black uppercase tracking-widest text-slate-400 block truncate">
+                            IP Raspberry {networkStatus.currentSsid ? `(Wi-Fi: ${networkStatus.currentSsid})` : "(LAN)"}
+                          </span>
+                          <code className="text-[10px] sm:text-[11px] text-white font-mono font-bold block truncate">
+                            {getPrimaryNetworkIp() ? `${getPrimaryNetworkIp()}:${serverInfo?.port || 3088}` : "IP non rilevato"}
+                          </code>
+                        </div>
+                      </div>
+                      {networkStatus.online && (
+                        <span className="px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 text-[7px] font-black uppercase border border-emerald-500/30 shrink-0">
+                          Online
+                        </span>
+                      )}
+                    </div>
                   </div>
                 )}
 

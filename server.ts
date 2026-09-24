@@ -1321,6 +1321,83 @@ async function startServer() {
     });
   });
 
+  // API per salvare/aggiornare le zone e relative configurazioni delle telecamere
+  app.post("/api/cameras/zones", async (req, res) => {
+    try {
+      const { cameraId, zones, analysisInterval, triggerSchedules } = req.body;
+      if (!cameraId) {
+        return res.status(400).json({ success: false, error: "cameraId mancante" });
+      }
+
+      // 1. Salva localmente su file per garantire persistenza su Raspberry anche offline
+      const ZONES_FILE = path.join(process.cwd(), "camera_zones.json");
+      let allZones: Record<string, any> = {};
+      try {
+        if (fs.existsSync(ZONES_FILE)) {
+          allZones = JSON.parse(fs.readFileSync(ZONES_FILE, "utf-8"));
+        }
+      } catch (e) {
+        allZones = {};
+      }
+      allZones[cameraId] = {
+        zones: zones || [],
+        analysisInterval,
+        triggerSchedules,
+        updated_at: new Date().toISOString()
+      };
+      try {
+        fs.writeFileSync(ZONES_FILE, JSON.stringify(allZones, null, 2), "utf-8");
+      } catch (e: any) {
+        console.warn("[Zones] Impossibile scrivere camera_zones.json:", e.message);
+      }
+
+      // 2. Sincronizzazione cloud tramite Supabase Service Role Key (bypassa RLS e scadenze JWT)
+      const supabaseUrl = process.env.VITE_SUPABASE_URL;
+      const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY;
+
+      if (supabaseUrl && supabaseKey && !cameraId.startsWith("cam-")) {
+        // Esegue aggiornamento Supabase in background per non bloccare la risposta HTTP locale
+        (async () => {
+          try {
+            const { createClient } = await import("@supabase/supabase-js");
+            const supabase = createClient(supabaseUrl, supabaseKey);
+            const { error } = await supabase
+              .from("cameras")
+              .update({ zones: zones || [] })
+              .eq("id", cameraId);
+
+            if (error) {
+              console.warn("[Zones Cloud] Errore aggiornamento Supabase da server:", error.message);
+            } else {
+              console.log(`[Zones Cloud] Zone per camera ${cameraId} salvate con successo su Supabase.`);
+            }
+          } catch (err: any) {
+            console.warn("[Zones Cloud] Eccezione Supabase da server:", err?.message || err);
+          }
+        })();
+        return res.json({ success: true, localOnly: false, backgroundSync: true });
+      }
+
+      return res.json({ success: true, localOnly: true });
+    } catch (err: any) {
+      console.error("[Zones API] Errore in /api/cameras/zones:", err.message);
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  app.get("/api/cameras/zones", (_req, res) => {
+    try {
+      const ZONES_FILE = path.join(process.cwd(), "camera_zones.json");
+      if (fs.existsSync(ZONES_FILE)) {
+        const allZones = JSON.parse(fs.readFileSync(ZONES_FILE, "utf-8"));
+        return res.json({ success: true, zones: allZones });
+      }
+      return res.json({ success: true, zones: {} });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
   // API per testare lo stream RTSP e generare un'anteprima fotogramma
   app.post("/api/cameras/test-stream", (req, res) => {
     const { rtspUrl } = req.body;

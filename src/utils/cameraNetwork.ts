@@ -1,4 +1,4 @@
-import type { Camera, TriggerSchedule } from '../types';
+import type { Camera, TriggerSchedule, Zone } from '../types';
 
 const LOCAL_CAMERA_SETTINGS_KEY = 'vigilai_camera_local_settings';
 
@@ -57,6 +57,7 @@ export function loadLocalCameraSettings(cameraId: string): {
   enabledTriggers?: string[];
   triggerSchedules?: Record<string, TriggerSchedule>;
   analysisInterval?: number;
+  zones?: Zone[];
 } {
   try {
     const all = JSON.parse(localStorage.getItem(LOCAL_CAMERA_SETTINGS_KEY) || '{}');
@@ -72,6 +73,7 @@ export function persistLocalCameraSettings(
     enabledTriggers?: string[];
     triggerSchedules?: Record<string, TriggerSchedule>;
     analysisInterval?: number;
+    zones?: Zone[];
   }
 ) {
   try {
@@ -436,7 +438,7 @@ export function mapDbCamera(c: Record<string, unknown>, subnetHint?: string | nu
   // Estrai metadati persistiti in zones (analysisInterval e triggerSchedules)
   const rawZones = Array.isArray(c.zones) ? (c.zones as any[]) : [];
   const metaItem = rawZones.find(z => z && z.id === '__vigilai_meta__');
-  const realZones = rawZones.filter(z => z && z.id !== '__vigilai_meta__');
+  let realZones = rawZones.filter(z => z && z.id !== '__vigilai_meta__');
 
   let hasMetaInterval = false;
   if (metaItem) {
@@ -459,6 +461,9 @@ export function mapDbCamera(c: Record<string, unknown>, subnetHint?: string | nu
     }
     if (!hasMetaInterval && local.analysisInterval && typeof local.analysisInterval === 'number' && local.analysisInterval >= 2) {
       analysisInterval = local.analysisInterval;
+    }
+    if ((c.zones === undefined || c.zones === null) && local.zones && Array.isArray(local.zones)) {
+      realZones = local.zones;
     }
   }
 

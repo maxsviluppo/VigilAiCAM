@@ -139,8 +139,12 @@ export const analyzeFrame = async (
           },
         };
 
+        const isOpt = typeof localStorage !== 'undefined'
+          ? localStorage.getItem("vigilai_opt_images") !== "false"
+          : true;
+
         if (is38) {
-          configObj.thinkingConfig = { thinkingLevel: "low" };
+          configObj.thinkingConfig = isOpt ? { thinkingBudget: 0 } : { thinkingLevel: "low" };
         }
 
         // Prova fino a 2 tentativi se 503 (high demand) sul modello primario
