@@ -94,6 +94,20 @@ const extractAccountEmail = (authUser: User | null | undefined): string => {
   return identityEmail || "";
 };
 
+const formatScreenshotSrc = (raw?: string | null): string => {
+  if (!raw) return "";
+  let str = raw.trim();
+  if (!str) return "";
+  // Rimuovi eventuali prefissi duplicati/annidati generati accidentalmente
+  while (str.startsWith("data:image/jpeg;base64,data:image/") || str.startsWith("data:image/png;base64,data:image/")) {
+    str = str.replace(/^data:image\/[a-zA-Z0-9]+;base64,/, "");
+  }
+  if (str.startsWith("data:image/")) return str;
+  if (str.startsWith("http://") || str.startsWith("https://")) return str;
+  // Se è una stringa base64 grezza senza schema
+  return `data:image/jpeg;base64,${str}`;
+};
+
 const AccountEmailLine = ({ email }: { email: string }) => (
   <span className="text-[11px] sm:text-xs text-blue-400 font-semibold normal-case tracking-normal truncate max-w-[180px] sm:max-w-[260px] lg:max-w-[360px] mt-0.5 drop-shadow-[0_0_8px_rgba(96,165,250,0.45)]">
     {email}
@@ -751,7 +765,13 @@ export default function App() {
     trigger: AlertTriggerItem;
     schedule: TriggerSchedule;
   } | null>(null);
-  const [activeCamStatuses, setActiveCamStatuses] = useState<Record<string, boolean>>({});
+  const [activeCamStatuses, setActiveCamStatuses] = useState<Record<string, boolean>>(() => {
+    try {
+      return JSON.parse(localStorage.getItem("vigilai_cam_statuses") || "{}");
+    } catch {
+      return {};
+    }
+  });
   const [cameraToDelete, setCameraToDelete] = useState<string | null>(null);
   const [isNightMode, setIsNightMode] = useState(false);
   const [notificationEmails, setNotificationEmails] = useState<string[]>(() => {
@@ -2256,17 +2276,40 @@ export default function App() {
       const subnet = getPrimaryNetworkIp();
       const mappedCams = cams.map((c: Record<string, unknown>) => mapDbCamera(c, subnet));
       setCameras(mappedCams);
+      // Sincronizza lo stato attivo/disattivo delle cam (da localStorage o da colonna status di Supabase)
+      const savedStatuses: Record<string, boolean> = (() => {
+        try {
+          return JSON.parse(localStorage.getItem("vigilai_cam_statuses") || "{}");
+        } catch {
+          return {};
+        }
+      })();
       const initialStatuses: Record<string, boolean> = {};
-      mappedCams.forEach(c => initialStatuses[c.id] = true);
+      mappedCams.forEach(c => {
+        initialStatuses[c.id] = savedStatuses[c.id] !== undefined ? savedStatuses[c.id] : (c.status !== 'offline');
+      });
       setActiveCamStatuses(initialStatuses);
+      try {
+        localStorage.setItem("vigilai_cam_statuses", JSON.stringify(initialStatuses));
+      } catch {}
+
       setActiveCameraId(prev => {
         if (prev && mappedCams.some(c => c.id === prev)) return prev;
         return mappedCams.length > 0 ? mappedCams[0].id : null;
       });
 
-      // Ripristina la frequenza di analisi salvata nel database (priorità alla prima camera o salvataggio locale)
+      // Salva le impostazioni di ogni telecamera nel local storage della nuova installazione
+      mappedCams.forEach(c => {
+        persistLocalCameraSettings(c.id, {
+          enabledTriggers: c.enabledTriggers,
+          triggerSchedules: c.triggerSchedules,
+          analysisInterval: c.analysisInterval,
+        });
+      });
+
+      // Ripristina la frequenza di analisi salvata nel database (priorità alla camera attiva o alla prima camera)
       if (mappedCams.length > 0) {
-        const primaryCam = mappedCams[0];
+        const primaryCam = mappedCams.find(c => c.id === activeCameraId) || mappedCams[0];
         if (typeof primaryCam.analysisInterval === 'number' && primaryCam.analysisInterval >= 2) {
           setAnalysisInterval(primaryCam.analysisInterval);
           localStorage.setItem("vigilai_analysis_interval", String(primaryCam.analysisInterval));
@@ -2298,7 +2341,7 @@ export default function App() {
             timestamp: new Date(row.created_at || Date.now()),
             description: desc,
             threatLevel: (row.threat_level as any) || 'high',
-            screenshot: row.screenshot || ''
+            screenshot: formatScreenshotSrc(row.screenshot)
           };
         }));
       }
@@ -2345,6 +2388,17 @@ export default function App() {
     }
   }, [networkStatus.online, user, fetchUserData]);
 
+  useEffect(() => {
+    if (!activeCameraId || cameras.length === 0) return;
+    const current = cameras.find(c => c.id === activeCameraId);
+    if (current && typeof current.analysisInterval === 'number' && current.analysisInterval >= 2) {
+      setAnalysisInterval(current.analysisInterval);
+      try {
+        localStorage.setItem("vigilai_analysis_interval", String(current.analysisInterval));
+      } catch {}
+    }
+  }, [activeCameraId, cameras]);
+
 
 
 
@@ -2364,14 +2418,17 @@ export default function App() {
   const lastNotificationTimeRef = useRef<number>(0);
   const alertSequenceCountRef = useRef<number>(0);
 
-  const activeCamera = cameras.find(c => c.id === activeCameraId);
-  const currentAnalysisSeconds = (
-    (scheduledActiveCameraId ? cameras.find(c => c.id === scheduledActiveCameraId)?.analysisInterval : null) ??
-    (activeCameraId ? cameras.find(c => c.id === activeCameraId)?.analysisInterval : null) ??
-    (cameras[0]?.analysisInterval) ??
-    analysisInterval ??
-    5
-  );
+  const activeCamera = cameras.find(c => c.id === activeCameraId) || cameras[0];
+  const activeCameraInterval = activeCamera?.analysisInterval ?? 5;
+
+  const cameraIntervals = cameras.map(c => c.analysisInterval ?? 5);
+  const minAnalysisInterval = cameraIntervals.length > 0 ? Math.min(...cameraIntervals) : 5;
+  const maxAnalysisInterval = cameraIntervals.length > 0 ? Math.max(...cameraIntervals) : 5;
+  const isUniformInterval = minAnalysisInterval === maxAnalysisInterval;
+
+  const currentAnalysisSeconds = isMultiView
+    ? (isUniformInterval ? `${minAnalysisInterval}s` : `${minAnalysisInterval}-${maxAnalysisInterval}s`)
+    : `${activeCameraInterval}s`;
 
   // Helper: capture a frame from a webcam/browser camera robustly
   const captureFromWebcam = async (camId: string): Promise<HTMLVideoElement | null> => {
@@ -2536,8 +2593,9 @@ export default function App() {
   const toggleSingleCamera = (id: string, e?: MouseEvent) => {
     if (e) e.stopPropagation();
     setActiveCamStatuses(prev => {
-      const isPresentlyActive = prev[id];
-      if (isPresentlyActive) {
+      const isPresentlyActive = prev[id] !== false;
+      const nextActive = !isPresentlyActive;
+      if (!nextActive) {
         // Turning off: stop the physical stream if it exists
         const stream = streamsRef.current.get(id);
         if (stream) {
@@ -2550,10 +2608,24 @@ export default function App() {
         // Turning on: we trigger startCameras after state updates
         setTimeout(startCameras, 100);
       }
-      return {
+      const updated = {
         ...prev,
-        [id]: !isPresentlyActive
+        [id]: nextActive
       };
+      try {
+        localStorage.setItem("vigilai_cam_statuses", JSON.stringify(updated));
+      } catch (err) {}
+
+      // Sincronizza lo status sul database Supabase se connesso
+      if (user && id && !id.startsWith('cam-')) {
+        supabase.from('cameras').update({ status: nextActive ? 'online' : 'offline' }).eq('id', id)
+          .then(({ error }: any) => {
+            if (error) console.warn("[Supabase] Aggiornamento status camera fallito:", error);
+            else console.log(`[Supabase] Status camera ${id} aggiornato a ${nextActive ? 'online' : 'offline'}`);
+          });
+      }
+
+      return updated;
     });
   };
 
@@ -3009,7 +3081,7 @@ export default function App() {
       // In tutte le modalità (incluso Raspberry Pi a schermo singolo),
       // TUTTE le telecamere abilitate (non bloccate specificamente dall'utente)
       // continuano a essere analizzate in background secondo le proprie regole e frequenze.
-      const eligibleCameras = cameras.filter(c => !disabledAiCameraIds.includes(c.id));
+      const eligibleCameras = cameras.filter(c => !disabledAiCameraIds.includes(c.id) && activeCamStatuses[c.id] !== false);
       if (eligibleCameras.length === 0) return;
 
       if (eligibleCameras.length === 1) {
@@ -3045,7 +3117,7 @@ export default function App() {
     return () => {
       if (analysisIntervalRef.current) clearInterval(analysisIntervalRef.current);
     };
-  }, [isMonitoring, isMultiView, activeCameraId, cameras, analysisInterval, disabledAiCameraIds]);
+  }, [isMonitoring, isMultiView, activeCameraId, cameras, analysisInterval, disabledAiCameraIds, activeCamStatuses]);
 
   // ── SMART ZONE DRAWING HANDLERS ──────────────────────────────────────────
 
@@ -3163,9 +3235,28 @@ export default function App() {
     if (!cam) return;
     
     try {
+      const cleanZones = (cam.zones || []).filter(z => z && (z as any).id !== '__vigilai_meta__');
+      const localSettings = loadLocalCameraSettings(cameraId);
+      const effectiveInterval = typeof cam.analysisInterval === 'number' && cam.analysisInterval >= 2
+        ? cam.analysisInterval
+        : (typeof localSettings.analysisInterval === 'number' && localSettings.analysisInterval >= 2 ? localSettings.analysisInterval : 5);
+      const effectiveSchedules = (cam.triggerSchedules && Object.keys(cam.triggerSchedules).length > 0)
+        ? cam.triggerSchedules
+        : (localSettings.triggerSchedules || {});
+
+      const zonesWithMeta = [
+        ...cleanZones,
+        {
+          id: '__vigilai_meta__',
+          type: 'meta',
+          analysisInterval: effectiveInterval,
+          triggerSchedules: effectiveSchedules,
+        }
+      ];
+
       const { error } = await supabase
         .from('cameras')
-        .update({ zones: cam.zones || [] })
+        .update({ zones: zonesWithMeta })
         .eq('id', cameraId);
         
       if (error) throw error;
@@ -3246,6 +3337,9 @@ export default function App() {
       // Ensure newly chosen analysisInterval is carried over from finalized!
       if (typeof finalized.analysisInterval === 'number') {
         savedCam.analysisInterval = finalized.analysisInterval;
+      }
+      if (finalized.triggerSchedules && Object.keys(finalized.triggerSchedules).length > 0) {
+        savedCam.triggerSchedules = { ...savedCam.triggerSchedules, ...finalized.triggerSchedules };
       }
       const savedTriggers = parseEnabledTriggers((data as Record<string, unknown>).enabled_triggers);
 
@@ -3354,14 +3448,16 @@ export default function App() {
       const editIp = sanitizeCameraIpForEdit(ip, subnet);
       const editUrl =
         editIp !== ip && subnet && parseIpFromRtspUrl(url) === subnet ? '' : url;
+      const editCam: Camera = { ...cam, ip: editIp, url: editUrl, analysisInterval: cam.analysisInterval ?? 5 };
       setEditingCameraNumber(displayNumber ?? getCameraOrderNumber(cameras, cam.id));
-      setEditingCamera({ ...cam, ip: editIp, url: editUrl, analysisInterval: cam.analysisInterval ?? 5 });
+      setEditingCamera(editCam);
+      editingCameraRef.current = editCam;
       setActiveCameraTab('info');
       setShowCameraModal(true);
       return;
     }
     setEditingCameraNumber(displayNumber ?? cameras.length + 1);
-    setEditingCamera({
+    const newCam: Camera = {
       id: `cam-${Date.now()}`,
       name: "Tapo C220",
       location: "Ingresso",
@@ -3375,7 +3471,9 @@ export default function App() {
       status: "online",
       analysisInterval: 5,
       enabledTriggers: availableTriggers.slice(0, 3).map(t => t.id)
-    });
+    };
+    setEditingCamera(newCam);
+    editingCameraRef.current = newCam;
     setActiveCameraTab('info');
     setShowCameraModal(true);
   };
@@ -3394,7 +3492,7 @@ export default function App() {
     });
 
     setEditingCameraNumber(nextNum);
-    setEditingCamera({
+    const newDiscoveredCam: Camera = {
       id: `cam-${Date.now()}`,
       name: d.brand ? `${d.brand} #${nextNum}` : `Telecamera ${nextNum}`,
       location: `Zona ${nextNum}`,
@@ -3408,7 +3506,9 @@ export default function App() {
       status: 'online',
       analysisInterval: 5,
       enabledTriggers: availableTriggers.slice(0, 3).map(t => t.id)
-    });
+    };
+    setEditingCamera(newDiscoveredCam);
+    editingCameraRef.current = newDiscoveredCam;
     setActiveCameraTab('info');
     setShowSettings(false);
     setShowCameraModal(true);
@@ -4345,10 +4445,16 @@ export default function App() {
                   </h2>
                   <span 
                     className="px-1.5 sm:px-2 py-0.5 rounded-lg bg-blue-500/15 border border-blue-500/30 text-blue-400 font-mono font-black text-[10px] sm:text-xs flex items-center gap-1 shadow-sm shrink-0"
-                    title={`Frequenza di analisi attiva: ${currentAnalysisSeconds} secondi`}
+                    title={
+                      isMultiView 
+                        ? (isUniformInterval 
+                            ? `Frequenza analisi per tutte le telecamere: ${minAnalysisInterval}s`
+                            : `Frequenze individuali telecamere: ${cameras.map((c, i) => `#${i + 1} ${c.name}: ${c.analysisInterval ?? 5}s`).join(', ')}`)
+                        : `Frequenza analisi per ${activeCamera?.name || 'Camera'}: ${activeCameraInterval}s`
+                    }
                   >
                     <Timer size={11} className="text-blue-400 shrink-0" />
-                    <span>{currentAnalysisSeconds}s</span>
+                    <span>{currentAnalysisSeconds}</span>
                   </span>
                 </div>
                 <div className="flex flex-wrap items-center gap-2 mt-0.5 text-[9px] lg:text-[10px] font-bold text-slate-500 uppercase tracking-widest">
@@ -4695,12 +4801,13 @@ export default function App() {
                             VIGIL.<span className="text-blue-400">AI</span>
                           </span>
 
-                          {/* Badge frequenza d'analisi (solo numeretto) */}
+                          {/* Badge frequenza d'analisi della telecamera visualizzata */}
                           <span 
-                            className="px-1.5 py-0.5 rounded bg-blue-500/20 border border-blue-500/30 text-blue-300 font-mono font-bold text-[8.5px] shrink-0"
-                            title={`Frequenza di analisi: ${currentAnalysisSeconds}s`}
+                            className="px-1.5 py-0.5 rounded bg-blue-500/20 border border-blue-500/30 text-blue-300 font-mono font-bold text-[8.5px] shrink-0 flex items-center gap-1"
+                            title={`Frequenza analisi per ${activeCamera.name}: ${activeCamera.analysisInterval ?? 5}s`}
                           >
-                            {currentAnalysisSeconds}s
+                            <Timer size={9} className="text-blue-400" />
+                            <span>{activeCamera.analysisInterval ?? 5}s</span>
                           </span>
                           
                           {/* LED Stato Sistema: Solo verde (in linea/attivo) o rosso (non attivo) */}
@@ -4860,6 +4967,39 @@ export default function App() {
                             </button>
                           </div>
                         )}
+
+                        {/* Overlay Controllo Attivazione/Disattivazione Telecamera in sovraimpressione (in basso a sinistra) */}
+                        <div className="absolute bottom-1.5 left-1.5 z-30 pointer-events-auto">
+                          <button 
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              toggleSingleCamera(activeCamera.id, e);
+                            }}
+                            className={`px-2 py-0.5 rounded-lg backdrop-blur-md flex items-center gap-1.5 border transition-all active:scale-95 shadow-xl cursor-pointer ${
+                              activeCamStatuses[activeCamera.id] !== false
+                                ? 'bg-emerald-950/85 border-emerald-500/50 text-emerald-300 hover:bg-emerald-900/80 shadow-[0_0_12px_rgba(16,185,129,0.35)]'
+                                : 'bg-red-950/90 border-red-600/70 text-red-400 hover:bg-red-900/80 shadow-[0_0_12px_rgba(239,68,68,0.35)]'
+                            }`}
+                            title={activeCamStatuses[activeCamera.id] !== false ? "Disattiva questa telecamera" : "Attiva questa telecamera"}
+                          >
+                            {activeCamStatuses[activeCamera.id] !== false ? (
+                              <>
+                                <Video size={isMobile35 ? 11 : 13} className="text-emerald-400 shrink-0" />
+                                <span className="text-[7.5px] font-black uppercase tracking-wider font-mono">
+                                  CAM ON
+                                </span>
+                              </>
+                            ) : (
+                              <>
+                                <VideoOff size={isMobile35 ? 11 : 13} className="text-red-400 shrink-0 animate-pulse" />
+                                <span className="text-[7.5px] font-black uppercase tracking-wider font-mono">
+                                  CAM OFF
+                                </span>
+                              </>
+                            )}
+                          </button>
+                        </div>
 
                         {/* UI Overlays for Video (DRAWING MODE in mobile) */}
                         {isEditingZones && activeCameraId === activeCamera.id && (
@@ -5369,6 +5509,13 @@ export default function App() {
                               <span className="text-[9px] lg:text-[10px] font-black text-blue-400 uppercase tracking-widest">#{index + 1}</span>
                               <div className={`w-1.5 h-1.5 lg:w-2 lg:h-2 rounded-full ${isMonitoring ? 'bg-red-500 animate-pulse' : 'bg-slate-500'}`} />
                               <span className="text-[9px] lg:text-[10px] font-black text-white uppercase tracking-widest">{cam.name}</span>
+                              <span 
+                                className="px-1.5 py-0.5 rounded-md bg-blue-500/15 border border-blue-500/30 text-blue-400 font-mono font-bold text-[8px] lg:text-[9px] flex items-center gap-1 ml-1"
+                                title={`Frequenza analisi AI: ${cam.analysisInterval ?? 5}s`}
+                              >
+                                <Timer size={9} className="text-blue-400" />
+                                <span>{cam.analysisInterval ?? 5}s</span>
+                              </span>
                             </div>
                             <div className="glass px-3 py-1 rounded-lg bg-slate-950/20 text-[8px] lg:text-[9px] font-bold text-slate-400 uppercase tracking-widest w-fit">
                               {cam.location || 'Settore Default'}
@@ -5694,7 +5841,12 @@ export default function App() {
                       <p className="text-sm font-bold text-slate-200 leading-snug mb-3">{incident.description}</p>
                       {incident.screenshot && (
                         <div className="relative rounded-xl overflow-hidden aspect-video border border-white/10 grayscale group-hover:grayscale-0 transition-all">
-                          <img src={`data:image/jpeg;base64,${incident.screenshot}`} className="w-full h-full object-cover" alt="event capture" />
+                          <img 
+                            src={formatScreenshotSrc(incident.screenshot)} 
+                            className="w-full h-full object-cover" 
+                            alt="event capture"
+                            onError={(e) => { (e.currentTarget as HTMLElement).style.display = 'none'; }}
+                          />
                           <div className="absolute inset-0 bg-red-600/10 pointer-events-none" />
                         </div>
                       )}
@@ -6649,7 +6801,7 @@ export default function App() {
               {/* TASTO CONFERMA */}
               <button
                 type="button"
-                onClick={() => {
+                onClick={async () => {
                   if (!editingCamera || !schedulingTrigger) return;
                   const { trigger, schedule } = schedulingTrigger;
                   const currentTriggers = editingCamera.enabledTriggers || [];
@@ -6668,12 +6820,36 @@ export default function App() {
                     triggerSchedules: updatedSchedules,
                   };
 
+                  editingCameraRef.current = updatedCamera;
                   setEditingCamera(updatedCamera);
                   setCameras(prev => prev.map(c => c.id === updatedCamera.id ? updatedCamera : c));
                   persistLocalCameraSettings(updatedCamera.id, {
                     enabledTriggers: updatedTriggers,
                     triggerSchedules: updatedSchedules,
+                    analysisInterval: updatedCamera.analysisInterval ?? 5,
                   });
+
+                  if (user && updatedCamera.id && !updatedCamera.id.startsWith('cam-')) {
+                    const cleanZones = (updatedCamera.zones || []).filter(z => z && (z as any).id !== '__vigilai_meta__');
+                    const zonesWithMeta = [
+                      ...cleanZones,
+                      {
+                        id: '__vigilai_meta__',
+                        type: 'meta',
+                        analysisInterval: typeof updatedCamera.analysisInterval === 'number' && updatedCamera.analysisInterval >= 2 ? updatedCamera.analysisInterval : 5,
+                        triggerSchedules: updatedSchedules,
+                      }
+                    ];
+                    try {
+                      await supabase.from('cameras').update({
+                        zones: zonesWithMeta,
+                        enabled_triggers: updatedTriggers
+                      }).eq('id', updatedCamera.id);
+                      console.log("[Supabase] Fascia oraria sincronizzata sul cloud con successo.");
+                    } catch (e) {
+                      console.warn("[Supabase] Sincronizzazione cloud orari fallita:", e);
+                    }
+                  }
 
                   setSchedulingTrigger(null);
                 }}
@@ -6797,7 +6973,12 @@ export default function App() {
                         <p className="text-xs font-bold text-slate-200 leading-snug mb-2">{incident.description}</p>
                         {incident.screenshot && (
                           <div className="relative rounded-lg overflow-hidden aspect-video border border-white/10">
-                            <img src={`data:image/jpeg;base64,${incident.screenshot}`} className="w-full h-full object-cover" alt="event capture" />
+                            <img 
+                              src={formatScreenshotSrc(incident.screenshot)} 
+                              className="w-full h-full object-cover" 
+                              alt="event capture"
+                              onError={(e) => { (e.currentTarget as HTMLElement).style.display = 'none'; }}
+                            />
                           </div>
                         )}
                       </div>
@@ -7868,7 +8049,12 @@ export default function App() {
                           .map((incident) => (
                             <div key={incident.id} className="flex gap-3 bg-white/5 p-3 border border-white/5 rounded-xl h-24">
                               {incident.screenshot ? (
-                                <img src={`data:image/jpeg;base64,${incident.screenshot}`} alt="Screenshot allarme" className="w-20 h-full object-cover rounded-lg border border-red-500/30 shrink-0" />
+                                <img 
+                                  src={formatScreenshotSrc(incident.screenshot)} 
+                                  alt="Screenshot allarme" 
+                                  className="w-20 h-full object-cover rounded-lg border border-red-500/30 shrink-0"
+                                  onError={(e) => { (e.currentTarget as HTMLElement).style.display = 'none'; }}
+                                />
                               ) : (
                                 <div className="w-20 h-full bg-black/40 rounded-lg flex items-center justify-center border border-white/5 shrink-0">
                                   <CameraOff size={24} className="text-slate-600" />

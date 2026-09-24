@@ -438,9 +438,11 @@ export function mapDbCamera(c: Record<string, unknown>, subnetHint?: string | nu
   const metaItem = rawZones.find(z => z && z.id === '__vigilai_meta__');
   const realZones = rawZones.filter(z => z && z.id !== '__vigilai_meta__');
 
+  let hasMetaInterval = false;
   if (metaItem) {
     if (typeof metaItem.analysisInterval === 'number' && metaItem.analysisInterval >= 2) {
       analysisInterval = metaItem.analysisInterval;
+      hasMetaInterval = true;
     }
     if (metaItem.triggerSchedules && typeof metaItem.triggerSchedules === 'object') {
       triggerSchedules = { ...triggerSchedules, ...metaItem.triggerSchedules };
@@ -455,7 +457,7 @@ export function mapDbCamera(c: Record<string, unknown>, subnetHint?: string | nu
     if (Object.keys(triggerSchedules).length === 0 && local.triggerSchedules) {
       triggerSchedules = { ...local.triggerSchedules };
     }
-    if (local.analysisInterval && typeof local.analysisInterval === 'number') {
+    if (!hasMetaInterval && local.analysisInterval && typeof local.analysisInterval === 'number' && local.analysisInterval >= 2) {
       analysisInterval = local.analysisInterval;
     }
   }
@@ -501,13 +503,21 @@ export function toDbCameraRecord(
   // Incorpora analysisInterval e triggerSchedules dentro il campo JSONB 'zones'
   // così da essere persistiti sul database PostgreSQL di Supabase senza errori di colonne mancanti.
   const cleanZones = (cam.zones || []).filter(z => z && (z as any).id !== '__vigilai_meta__');
+  const localSettings = cam.id ? loadLocalCameraSettings(cam.id) : {};
+  const effectiveInterval = typeof cam.analysisInterval === 'number' && cam.analysisInterval >= 2
+    ? cam.analysisInterval
+    : (typeof localSettings.analysisInterval === 'number' && localSettings.analysisInterval >= 2 ? localSettings.analysisInterval : 5);
+  const effectiveSchedules = (cam.triggerSchedules && Object.keys(cam.triggerSchedules).length > 0)
+    ? cam.triggerSchedules
+    : (localSettings.triggerSchedules || {});
+
   const zonesWithMeta = [
     ...cleanZones,
     {
       id: '__vigilai_meta__',
       type: 'meta',
-      analysisInterval: typeof cam.analysisInterval === 'number' ? cam.analysisInterval : 5,
-      triggerSchedules: cam.triggerSchedules || {},
+      analysisInterval: effectiveInterval,
+      triggerSchedules: effectiveSchedules,
     }
   ];
 
