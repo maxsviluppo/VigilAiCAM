@@ -2684,25 +2684,54 @@ export default function App() {
     });
   };
 
-  const deleteCamera = (id: string, e?: MouseEvent) => {
+  const deleteCamera = (id: string, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
     setCameraToDelete(id);
   };
 
   const confirmDelete = async () => {
     if (!cameraToDelete) return;
+    const camId = cameraToDelete;
+    setCameraToDelete(null);
     
     // Stop the stream if it exists
-    const stream = streamsRef.current.get(cameraToDelete);
+    const stream = streamsRef.current.get(camId);
     if (stream) {
-      stream.getTracks().forEach(t => t.stop());
-      streamsRef.current.delete(cameraToDelete);
+      try {
+        stream.getTracks().forEach(t => t.stop());
+      } catch {}
+      streamsRef.current.delete(camId);
     }
+    videoRefs.current.delete(camId);
+    imgRefs.current.delete(camId);
+
+    // Optimistic local update
+    setCameras(prev => {
+      const next = prev.filter(c => c.id !== camId);
+      if (activeCameraId === camId) {
+        setActiveCameraId(next.length > 0 ? next[0].id : null);
+      }
+      return next;
+    });
+
+    // Remove local storage settings for this camera
+    try {
+      const all = JSON.parse(localStorage.getItem('vigilai_camera_settings') || '{}');
+      if (all[camId]) {
+        delete all[camId];
+        localStorage.setItem('vigilai_camera_settings', JSON.stringify(all));
+      }
+    } catch {}
     
-    await supabase.from('cameras').delete().eq('id', cameraToDelete);
-    fetchUserData();
-    
-    setCameraToDelete(null);
+    // Delete from Supabase
+    if (user && !camId.startsWith('cam-')) {
+      try {
+        await supabase.from('cameras').delete().eq('id', camId);
+        fetchUserData();
+      } catch (err: any) {
+        console.warn("[Cameras] Errore eliminazione camera da Supabase:", err?.message);
+      }
+    }
   };
 
   const createLightweightThumbnail = (cvs: HTMLCanvasElement): string => {
@@ -2759,13 +2788,27 @@ export default function App() {
     }
   };
 
-  const handleClearIncidents = async () => {
+  const handleDeleteIncident = async (incidentId: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    setIncidents(prev => prev.filter(inc => inc.id !== incidentId));
+    if (user) {
+      try {
+        await supabase.from('alerts').delete().eq('id', incidentId);
+      } catch (err: any) {
+        console.warn("[Alerts DB] Errore eliminazione allarme:", err?.message);
+      }
+    }
+  };
+
+  const handleClearIncidents = async (e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
     setIncidents([]);
+    setLogStartIndex(0);
     if (user) {
       try {
         await supabase.from('alerts').delete().eq('user_id', user.id);
       } catch (err: any) {
-        console.warn("[Alerts DB] Errore pulizia storico:", err.message);
+        console.warn("[Alerts DB] Errore pulizia storico allarmi:", err?.message);
       }
     }
   };
@@ -3279,50 +3322,92 @@ export default function App() {
     setCurrentDrawingZone(null); setDraggingZoneId(null); setDragType(null); setDragStart(null);
   };
 
-  const deleteZone = (zoneId: string) => setCameras(prev => prev.map(c => c.id !== activeCameraId ? c : { ...c, zones: (c.zones || []).filter(z => z.id !== zoneId) }));
+  const deleteZone = async (zoneId: string) => {
+    if (!activeCameraId) return;
+    const cam = cameras.find(c => c.id === activeCameraId);
+    const updatedZones = (cam?.zones || []).filter(z => z.id !== zoneId);
+    setCameras(prev => prev.map(c => c.id !== activeCameraId ? c : { ...c, zones: updatedZones }));
+    setSelectedZoneId(null);
+    await saveCameraZones(activeCameraId, updatedZones);
+  };
   const updateZoneType = (zoneId: string, type: ZoneType) => setCameras(prev => prev.map(c => c.id !== activeCameraId ? c : { ...c, zones: (c.zones || []).map(z => z.id === zoneId ? { ...z, type } : z) }));
 
   // ── END SMART ZONE HANDLERS ────────────────────────────────────────────────
 
-  const saveCameraZones = async (cameraId: string) => {
-    if (!user) return;
+  const saveCameraZones = async (cameraId: string, explicitZones?: Zone[]) => {
     const cam = cameras.find(c => c.id === cameraId);
-    if (!cam) return;
-    
-    try {
-      const cleanZones = (cam.zones || []).filter(z => z && (z as any).id !== '__vigilai_meta__');
-      const localSettings = loadLocalCameraSettings(cameraId);
-      const effectiveInterval = typeof cam.analysisInterval === 'number' && cam.analysisInterval >= 2
-        ? cam.analysisInterval
-        : (typeof localSettings.analysisInterval === 'number' && localSettings.analysisInterval >= 2 ? localSettings.analysisInterval : 5);
-      const effectiveSchedules = (cam.triggerSchedules && Object.keys(cam.triggerSchedules).length > 0)
-        ? cam.triggerSchedules
-        : (localSettings.triggerSchedules || {});
+    const zonesToSave = explicitZones !== undefined ? explicitZones : (cam?.zones || []);
+    const cleanZones = zonesToSave.filter(z => z && (z as any).id !== '__vigilai_meta__');
+    const localSettings = loadLocalCameraSettings(cameraId);
+    const effectiveInterval = typeof cam?.analysisInterval === 'number' && cam.analysisInterval >= 2
+      ? cam.analysisInterval
+      : (typeof localSettings.analysisInterval === 'number' && localSettings.analysisInterval >= 2 ? localSettings.analysisInterval : 5);
+    const effectiveSchedules = (cam?.triggerSchedules && Object.keys(cam.triggerSchedules).length > 0)
+      ? cam.triggerSchedules
+      : (localSettings.triggerSchedules || {});
 
-      const zonesWithMeta = [
-        ...cleanZones,
-        {
-          id: '__vigilai_meta__',
-          type: 'meta',
+    // 1. Persistenza locale immediata (localStorage) per mantenere sempre le zone anche in caso di disconnessione
+    persistLocalCameraSettings(cameraId, {
+      zones: cleanZones,
+      analysisInterval: effectiveInterval,
+      triggerSchedules: effectiveSchedules,
+      enabledTriggers: cam?.enabledTriggers,
+    });
+
+    const zonesWithMeta = [
+      ...cleanZones,
+      {
+        id: '__vigilai_meta__',
+        type: 'meta',
+        analysisInterval: effectiveInterval,
+        triggerSchedules: effectiveSchedules,
+      }
+    ];
+
+    // 2. Prova a sincronizzare tramite server locale Raspberry Pi (/api/cameras/zones)
+    let syncedViaServer = false;
+    try {
+      const res = await fetch('/api/cameras/zones', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          cameraId,
+          zones: zonesWithMeta,
           analysisInterval: effectiveInterval,
           triggerSchedules: effectiveSchedules,
-        }
-      ];
-
-      const { error } = await supabase
-        .from('cameras')
-        .update({ zones: zonesWithMeta })
-        .eq('id', cameraId);
-        
-      if (error) throw error;
-      console.log(`[Supabase] Zone salvate con successo per la camera: ${cam.name}`);
-    } catch (err: any) {
-      console.error("Errore nel salvataggio delle zone su Supabase:", err);
-      setGlobalModal({
-        type: 'error',
-        title: 'Errore Salvataggio',
-        message: 'Non è stato possibile salvare le zone nel database. Controlla la connessione e riprova.'
+        })
       });
+      if (res.ok) {
+        const json = await res.json();
+        if (json.success) {
+          syncedViaServer = true;
+          console.log(`[Zones] Sincronizzate con successo via server per camera: ${cameraId}`);
+        }
+      }
+    } catch {
+      // Server locale non raggiungibile o esecuzione su web app remota
+    }
+
+    // 3. Se non sincronizzato dal server locale, aggiorna direttamente Supabase (solo per UUID validi, non 'cam-...')
+    if (!syncedViaServer) {
+      if (user && !cameraId.startsWith('cam-')) {
+        try {
+          const { error } = await supabase
+            .from('cameras')
+            .update({ zones: zonesWithMeta })
+            .eq('id', cameraId);
+
+          if (error) {
+            console.warn(`[Supabase] Avviso aggiornamento zone cloud:`, error.message);
+          } else {
+            console.log(`[Supabase] Zone salvate con successo per la camera: ${cam?.name || cameraId}`);
+          }
+        } catch (err: any) {
+          console.warn("[Supabase] Eccezione salvataggio zone cloud:", err?.message || err);
+        }
+      } else {
+        console.log(`[Local] Zone salvate in locale per camera: ${cam?.name || cameraId}`);
+      }
     }
   };
 
@@ -5872,26 +5957,42 @@ export default function App() {
                   <div className="flex items-center justify-between w-full">
                     <div>
                       <h3 className="text-lg font-black text-white uppercase tracking-tight">Registro Log</h3>
-                      <p className="text-[9px] font-bold text-slate-500 uppercase tracking-widest">Ultime 24 ore</p>
+                      <p className="text-[9px] font-bold text-slate-500 uppercase tracking-widest">
+                        Ultime 24 ore {incidents.length > 0 ? `(${incidents.length})` : ''}
+                      </p>
                     </div>
-                    <button 
-                      onClick={handleClearIncidents}
-                      className="p-3 glass border-white/5 text-slate-500 hover:text-red-400 hover:border-red-500/20 rounded-xl transition-all"
-                      title="Svuota Log"
-                    >
-                      <Trash2 size={14} />
-                    </button>
+                    {incidents.length > 0 && (
+                      <button 
+                        type="button"
+                        onClick={handleClearIncidents}
+                        className="px-3 py-2 glass border-white/5 text-slate-400 hover:text-red-400 hover:border-red-500/30 rounded-xl transition-all flex items-center gap-1.5 text-[9px] font-black uppercase tracking-wider cursor-pointer active:scale-95"
+                        title="Elimina tutti gli eventi registrati"
+                      >
+                        <Trash2 size={13} />
+                        <span>Svuota Tutti</span>
+                      </button>
+                    )}
                   </div>
                 </div>
 
                 <div className="flex-1 overflow-y-auto space-y-4 pr-4 custom-scrollbar">
                   {incidents.length > 0 ? incidents.map(incident => (
-                    <div key={incident.id} className="glass bg-white/5 rounded-2xl p-5 border-l-4 border-l-blue-600 group hover:bg-white/10 transition-all cursor-pointer">
+                    <div key={incident.id} className="glass bg-white/5 rounded-2xl p-5 border-l-4 border-l-blue-600 group hover:bg-white/10 transition-all relative">
                       <div className="flex justify-between items-center mb-2">
                         <span className="text-[10px] font-black text-white uppercase tracking-tighter">{incident.cameraName || 'Camera Sconosciuta'}</span>
-                        <span className="text-[10px] font-mono text-slate-500">
-                          {incident.timestamp instanceof Date ? incident.timestamp.toLocaleTimeString() : '--:--'}
-                        </span>
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] font-mono text-slate-500">
+                            {incident.timestamp instanceof Date ? incident.timestamp.toLocaleTimeString() : '--:--'}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={(e) => handleDeleteIncident(incident.id, e)}
+                            className="p-1 text-slate-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors cursor-pointer"
+                            title="Elimina questo evento"
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        </div>
                       </div>
                       <p className="text-sm font-bold text-slate-200 leading-snug mb-3">{incident.description}</p>
                       {incident.screenshot && (
@@ -7007,13 +7108,21 @@ export default function App() {
                     <div className="flex items-center gap-2">
                       <History size={18} className="text-orange-400" />
                       <h3 className="text-xs font-black text-white uppercase">Registro Log</h3>
+                      {incidents.length > 0 && (
+                        <span className="text-[9px] font-mono text-slate-500">({incidents.length})</span>
+                      )}
                     </div>
-                    <button 
-                      onClick={handleClearIncidents}
-                      className="p-2 bg-white/5 border border-white/5 text-slate-500 hover:text-red-400 rounded-lg active:scale-95"
-                    >
-                      <Trash2 size={12} />
-                    </button>
+                    {incidents.length > 0 && (
+                      <button 
+                        type="button"
+                        onClick={handleClearIncidents}
+                        className="px-2 py-1 bg-red-600/10 hover:bg-red-600/20 text-red-400 border border-red-500/20 rounded-lg text-[8px] font-black uppercase flex items-center gap-1 active:scale-95 transition-all cursor-pointer"
+                        title="Elimina tutti gli eventi registrati"
+                      >
+                        <Trash2 size={11} />
+                        <span>Svuota</span>
+                      </button>
+                    )}
                   </div>
 
                   <div className="space-y-3 max-h-[200px] overflow-y-auto custom-scrollbar pr-1">
@@ -7021,9 +7130,19 @@ export default function App() {
                       <div key={incident.id} className="glass bg-white/5 rounded-xl p-3 border-l-2 border-l-blue-600">
                         <div className="flex justify-between items-center mb-1">
                           <span className="text-[8px] font-black text-white uppercase">{incident.cameraName || 'Camera'}</span>
-                          <span className="text-[8px] font-mono text-slate-500">
-                            {incident.timestamp instanceof Date ? incident.timestamp.toLocaleTimeString() : '--:--'}
-                          </span>
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-[8px] font-mono text-slate-500">
+                              {incident.timestamp instanceof Date ? incident.timestamp.toLocaleTimeString() : '--:--'}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={(e) => handleDeleteIncident(incident.id, e)}
+                              className="p-1 text-slate-500 hover:text-red-400 transition-colors cursor-pointer"
+                              title="Elimina questo evento"
+                            >
+                              <Trash2 size={11} />
+                            </button>
+                          </div>
                         </div>
                         <p className="text-xs font-bold text-slate-200 leading-snug mb-2">{incident.description}</p>
                         {incident.screenshot && (
@@ -8073,24 +8192,39 @@ export default function App() {
                 {/* LOGS Tab */}
                 {activeSettingsTab === "log" && (
                   <div className="space-y-4">
-                    <div className="flex items-center justify-between">
-                      <h3 className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Ultimi Allarmi Rilevati</h3>
-                      <div className="flex gap-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <h3 className="text-[10px] font-black uppercase text-slate-400 tracking-widest truncate">
+                          Ultimi Allarmi {incidents.length > 0 ? `(${incidents.length})` : ''}
+                        </h3>
+                        {incidents.length > 0 && (
+                          <button
+                            type="button"
+                            onClick={handleClearIncidents}
+                            className="px-2 py-0.5 bg-red-600/15 hover:bg-red-600/30 text-red-400 border border-red-500/25 rounded-md text-[7.5px] font-black uppercase tracking-wider flex items-center gap-1 active:scale-95 transition-all cursor-pointer shrink-0"
+                            title="Elimina tutti gli allarmi salvati"
+                          >
+                            <Trash2 size={10} />
+                            <span>Svuota Tutti</span>
+                          </button>
+                        )}
+                      </div>
+                      <div className="flex gap-1.5 shrink-0">
                         <button
                           type="button"
                           onClick={() => setLogStartIndex(Math.max(0, logStartIndex - 2))}
                           disabled={logStartIndex === 0}
-                          className="p-2 bg-white/5 border border-white/10 rounded-lg text-slate-400 hover:bg-white/10 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+                          className="p-1.5 bg-white/5 border border-white/10 rounded-lg text-slate-400 hover:bg-white/10 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-all"
                         >
-                          <ChevronUp size={16} />
+                          <ChevronUp size={14} />
                         </button>
                         <button
                           type="button"
                           onClick={() => setLogStartIndex(logStartIndex + 2)}
                           disabled={logStartIndex + 2 >= incidents.length}
-                          className="p-2 bg-white/5 border border-white/10 rounded-lg text-slate-400 hover:bg-white/10 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+                          className="p-1.5 bg-white/5 border border-white/10 rounded-lg text-slate-400 hover:bg-white/10 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-all"
                         >
-                          <ChevronDown size={16} />
+                          <ChevronDown size={14} />
                         </button>
                       </div>
                     </div>
@@ -8116,7 +8250,19 @@ export default function App() {
                                 </div>
                               )}
                               <div className="flex-1 flex flex-col justify-start overflow-hidden">
-                                <span className="text-[9px] font-black uppercase text-red-400 tracking-widest mb-1">{new Date(incident.timestamp).toLocaleTimeString()}</span>
+                                <div className="flex items-center justify-between mb-1">
+                                  <span className="text-[9px] font-black uppercase text-red-400 tracking-widest">
+                                    {new Date(incident.timestamp).toLocaleTimeString()}
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={(e) => handleDeleteIncident(incident.id, e)}
+                                    className="p-1 text-slate-500 hover:text-red-400 hover:bg-red-500/10 rounded transition-colors cursor-pointer"
+                                    title="Elimina questo allarme"
+                                  >
+                                    <Trash2 size={11} />
+                                  </button>
+                                </div>
                                 <p className="text-[9px] sm:text-[10px] text-slate-300 font-medium leading-tight overflow-y-auto custom-scrollbar pr-1">{incident.description}</p>
                               </div>
                             </div>
@@ -8320,42 +8466,82 @@ export default function App() {
         )}
       </AnimatePresence>
 
-      {/* Delete Confirmation Modal */}
+      {/* Delete Confirmation Modal - Themed VigilAI */}
       <AnimatePresence>
-        {cameraToDelete && (
-          <div className="fixed inset-0 z-[150] flex items-center justify-center p-6 backdrop-blur-2xl bg-slate-950/80">
-            <motion.div 
-              initial={{ scale: 0.9, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.9, opacity: 0 }}
-              className="glass max-w-md w-full p-6 lg:p-10 rounded-[32px] lg:rounded-[48px] border-white/10 text-center space-y-6 lg:space-y-8 shadow-[0_0_100px_rgba(239,68,68,0.2)]"
-            >
-              <div className="w-16 h-16 lg:w-24 lg:h-24 bg-red-600/20 rounded-full flex items-center justify-center mx-auto border border-red-500/30">
-                <Trash2 size={32} className="text-red-500 lg:size-[40px]" />
-              </div>
-              <div className="space-y-3">
-                <h3 className="text-xl lg:text-2xl font-black text-white uppercase tracking-tighter">Conferma Eliminazione</h3>
-                <p className="text-slate-400 text-xs lg:text-sm leading-relaxed">
-                  Sei sicuro di voler rimuovere questa telecamera dal sistema? L'azione è irreversibile e interromperà il monitoraggio attivo.
-                </p>
-              </div>
-              <div className="flex gap-4">
-                <button 
-                  onClick={() => setCameraToDelete(null)}
-                  className="flex-1 py-4 lg:py-5 rounded-2xl lg:rounded-3xl text-[9px] lg:text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-white transition-all bg-white/5"
-                >
-                  Annulla
-                </button>
-                <button 
-                  onClick={confirmDelete}
-                  className="flex-1 py-4 lg:py-5 rounded-2xl lg:rounded-3xl text-[9px] lg:text-[10px] font-black uppercase tracking-widest text-white bg-red-600 shadow-xl shadow-red-500/20 hover:bg-red-500 transition-all"
-                >
-                  Elimina Ora
-                </button>
-              </div>
-            </motion.div>
-          </div>
-        )}
+        {cameraToDelete && (() => {
+          const camToDeleteObj = cameras.find(c => c.id === cameraToDelete);
+          const camToDeleteNum = camToDeleteObj ? (getCameraOrderNumber(cameras, camToDeleteObj.id) ?? 1) : 1;
+          const camName = camToDeleteObj?.name || 'Telecamera';
+          const camLoc = camToDeleteObj?.location || 'Settore Default';
+          const camIp = camToDeleteObj?.ip || (camToDeleteObj?.url ? parseIpFromRtspUrl(camToDeleteObj.url) : null);
+
+          return (
+            <div className="fixed inset-0 z-[200] flex items-center justify-center p-3 sm:p-6 backdrop-blur-2xl bg-slate-950/85">
+              <motion.div 
+                initial={{ scale: 0.9, opacity: 0, y: 15 }}
+                animate={{ scale: 1, opacity: 1, y: 0 }}
+                exit={{ scale: 0.9, opacity: 0, y: 15 }}
+                className="glass max-w-sm sm:max-w-md w-full p-4 sm:p-6 lg:p-8 rounded-2xl sm:rounded-[32px] border-red-500/30 text-center space-y-3.5 sm:space-y-5 shadow-[0_0_80px_rgba(239,68,68,0.25)] bg-[#0c101d]/95"
+              >
+                {/* Icona con glow */}
+                <div className="w-11 h-11 sm:w-16 sm:h-16 bg-red-600/20 rounded-2xl sm:rounded-3xl flex items-center justify-center mx-auto border border-red-500/40 shadow-[0_0_25px_rgba(239,68,68,0.3)]">
+                  <Trash2 size={22} className="text-red-400 sm:size-[28px]" />
+                </div>
+
+                {/* Titolo e descrizione */}
+                <div className="space-y-1 sm:space-y-1.5">
+                  <div className="flex items-center justify-center gap-1.5 text-red-400 font-mono font-bold text-[8.5px] uppercase tracking-widest">
+                    <AlertTriangle size={11} className="text-red-400 shrink-0" />
+                    <span>Eliminazione Telecamera</span>
+                  </div>
+                  <h3 className="text-base sm:text-xl font-black text-white uppercase tracking-tight">
+                    Conferma Rimozione
+                  </h3>
+                  <p className="text-slate-400 text-[9.5px] sm:text-xs leading-relaxed max-w-xs mx-auto">
+                    Vuoi davvero rimuovere questa camera dal sistema? L'azione è irreversibile e interromperà il monitoraggio attivo.
+                  </p>
+                </div>
+
+                {/* Scheda anteprima telecamera da eliminare */}
+                <div className="p-2.5 sm:p-3 bg-red-950/20 border border-red-500/20 rounded-xl flex items-center justify-between text-left gap-2">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div className="w-7 h-7 rounded-lg bg-red-600/30 border border-red-500/40 text-red-300 flex items-center justify-center font-mono font-bold text-xs shrink-0">
+                      #{camToDeleteNum}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-xs font-bold text-white truncate">{camName}</p>
+                      <p className="text-[8.5px] text-slate-400 truncate">{camLoc}</p>
+                    </div>
+                  </div>
+                  {camIp && (
+                    <span className="font-mono text-[8px] text-slate-400 bg-black/40 px-2 py-0.5 rounded border border-white/5 shrink-0">
+                      {camIp}
+                    </span>
+                  )}
+                </div>
+
+                {/* Tasti azione */}
+                <div className="flex gap-2.5 pt-1">
+                  <button 
+                    type="button"
+                    onClick={() => setCameraToDelete(null)}
+                    className="flex-1 py-2.5 sm:py-3.5 rounded-xl sm:rounded-2xl text-[9px] sm:text-[10px] font-black uppercase tracking-widest text-slate-300 hover:text-white transition-all bg-white/5 hover:bg-white/10 border border-white/10 active:scale-95 cursor-pointer"
+                  >
+                    Annulla
+                  </button>
+                  <button 
+                    type="button"
+                    onClick={confirmDelete}
+                    className="flex-1 py-2.5 sm:py-3.5 rounded-xl sm:rounded-2xl text-[9px] sm:text-[10px] font-black uppercase tracking-widest text-white bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 shadow-lg shadow-red-600/30 active:scale-95 transition-all flex items-center justify-center gap-1.5 cursor-pointer border border-red-400/30"
+                  >
+                    <Trash2 size={13} />
+                    <span>Elimina Ora</span>
+                  </button>
+                </div>
+              </motion.div>
+            </div>
+          );
+        })()}
       </AnimatePresence>
 
       {/* Plans Modal */}
