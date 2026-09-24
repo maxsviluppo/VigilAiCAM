@@ -433,6 +433,20 @@ export function mapDbCamera(c: Record<string, unknown>, subnetHint?: string | nu
     triggerSchedules = c.trigger_schedules as Record<string, TriggerSchedule>;
   }
 
+  // Estrai metadati persistiti in zones (analysisInterval e triggerSchedules)
+  const rawZones = Array.isArray(c.zones) ? (c.zones as any[]) : [];
+  const metaItem = rawZones.find(z => z && z.id === '__vigilai_meta__');
+  const realZones = rawZones.filter(z => z && z.id !== '__vigilai_meta__');
+
+  if (metaItem) {
+    if (typeof metaItem.analysisInterval === 'number' && metaItem.analysisInterval >= 2) {
+      analysisInterval = metaItem.analysisInterval;
+    }
+    if (metaItem.triggerSchedules && typeof metaItem.triggerSchedules === 'object') {
+      triggerSchedules = { ...triggerSchedules, ...metaItem.triggerSchedules };
+    }
+  }
+
   if (c.id) {
     const local = loadLocalCameraSettings(String(c.id));
     if (enabledTriggers.length === 0 && local.enabledTriggers?.length) {
@@ -457,7 +471,7 @@ export function mapDbCamera(c: Record<string, unknown>, subnetHint?: string | nu
     username: (c.username as string) || '',
     password: (c.password as string) || '',
     rtspPath,
-    zones: (c.zones as Camera['zones']) || [],
+    zones: realZones as Camera['zones'] || [],
     status: (c.status as Camera['status']) || 'online',
     enabledTriggers,
     triggerSchedules,
@@ -484,6 +498,19 @@ export function toDbCameraRecord(
     ip = parseIpFromRtspUrl(url) || '';
   }
 
+  // Incorpora analysisInterval e triggerSchedules dentro il campo JSONB 'zones'
+  // così da essere persistiti sul database PostgreSQL di Supabase senza errori di colonne mancanti.
+  const cleanZones = (cam.zones || []).filter(z => z && (z as any).id !== '__vigilai_meta__');
+  const zonesWithMeta = [
+    ...cleanZones,
+    {
+      id: '__vigilai_meta__',
+      type: 'meta',
+      analysisInterval: typeof cam.analysisInterval === 'number' ? cam.analysisInterval : 5,
+      triggerSchedules: cam.triggerSchedules || {},
+    }
+  ];
+
   const record: Record<string, unknown> = {
     user_id: userId,
     name: cam.name || 'Camera',
@@ -496,7 +523,7 @@ export function toDbCameraRecord(
     password: cam.password || '',
     rtsp_path: cam.rtspPath || '/stream1',
     enabled_triggers: Array.isArray(cam.enabledTriggers) ? [...cam.enabledTriggers] : [],
-    zones: cam.zones || [],
+    zones: zonesWithMeta,
     status: cam.status || 'online',
   };
 

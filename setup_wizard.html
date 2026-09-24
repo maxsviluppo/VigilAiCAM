@@ -1057,7 +1057,13 @@
       </div>
 
       <!-- Main Layout Area -->
-      <div class="home-main-area">
+      <div class="home-main-area" style="position: relative;">
+        <!-- Sync Cloud Main Button (Floating) -->
+        <button id="btn-sync-cloud-main" onclick="syncFromCloud()" title="Sincronizza Profilo Online" style="position: absolute; top: 8px; right: 8px; z-index: 50; background: rgba(16, 185, 129, 0.2); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.4); padding: 4px 8px; display: flex; align-items: center; justify-content: center; gap: 4px; border-radius: 6px; font-size: 9px; font-weight: 800; cursor: pointer; text-transform: uppercase;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path><path d="M3 3v5h5"></path><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"></path><path d="M16 21v-5h5"></path></svg>
+          SYNC CLOUD
+        </button>
+
         <!-- Sidebar / Left Strip (Stacked bottom-to-top) -->
         <div class="home-left-strip">
           <!-- Quick Alarm Config Icon (placed above VPN status icon) -->
@@ -1209,6 +1215,18 @@
 
               <!-- Step 2: Configurazione Protocollo (IP, Porta, Credenziali, Path) -->
               <div id="add-cam-step-2" class="add-cam-step" style="display: none; flex-direction: column; gap: 4px; width: 100%;">
+                
+                <!-- Pulsante Scansione Automatica WS-Discovery per Inesperti -->
+                <button type="button" id="btn-wizard-discover-cams" onclick="autoDiscoverCamerasWizard()" style="width: 100%; height: 26px; background: linear-gradient(135deg, #2563eb, #1d4ed8); border: 1px solid #3b82f6; border-radius: 5px; color: #fff; font-size: 8.5px; font-weight: 800; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 4px; outline: none; box-shadow: 0 2px 6px rgba(37,99,235,0.3);">
+                  <span id="wizard-discover-icon">🔍</span>
+                  <span id="wizard-discover-text">Rileva Telecamere sulla Rete (WS-Discovery)</span>
+                </button>
+
+                <div id="wizard-discovered-cams-box" style="display: none; background: rgba(15,23,42,0.8); border: 1px solid rgba(59,130,246,0.3); border-radius: 5px; padding: 4px; margin-bottom: 2px;">
+                  <div style="font-size: 7px; color: #93c5fd; font-weight: bold; margin-bottom: 2px;">Tocca una telecamera per impostare l'IP:</div>
+                  <div id="wizard-discovered-cams-list" style="display: flex; flex-direction: column; gap: 3px; max-height: 60px; overflow-y: auto;"></div>
+                </div>
+
                 <div style="display: grid; grid-template-columns: 1.3fr 0.7fr; gap: 6px;">
                   <div>
                     <label style="font-size: 7px; margin-bottom: 1px; display: block; text-transform: uppercase; color: var(--text-muted);">Indirizzo IP</label>
@@ -1520,8 +1538,12 @@
 
             </div>
 
-            <div style="margin-top: 5px; margin-bottom: 0px; padding-bottom: 0px;">
-              <button type="button" onclick="closeSimulatedConfigModal()" style="width: 100%; height: 28px; padding: 0; background: #5c62ec; color: #fff; font-size: 9px; font-weight: 800; text-transform: uppercase; border-radius: 6px; border: none; cursor: pointer; display: block; margin-bottom: 0px;">Salva e Chiudi</button>
+            <div style="margin-top: 5px; margin-bottom: 0px; padding-bottom: 0px; display: flex; gap: 8px;">
+              <button type="button" onclick="syncFromCloud()" id="btn-sync-cloud" style="flex: 1; height: 28px; padding: 0; background: rgba(16, 185, 129, 0.2); color: #10b981; font-size: 9px; font-weight: 800; text-transform: uppercase; border-radius: 6px; border: 1px solid rgba(16, 185, 129, 0.4); cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 4px; margin-bottom: 0px;">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path><path d="M3 3v5h5"></path><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"></path><path d="M16 21v-5h5"></path></svg>
+                Sync Cloud
+              </button>
+              <button type="button" onclick="closeSimulatedConfigModal()" style="flex: 1; height: 28px; padding: 0; background: #5c62ec; color: #fff; font-size: 9px; font-weight: 800; text-transform: uppercase; border-radius: 6px; border: none; cursor: pointer; display: block; margin-bottom: 0px;">Salva e Chiudi</button>
             </div>
           </div>
         </div>
@@ -1876,7 +1898,7 @@
             EMAIL_USER: '',
             EMAIL_PASS: '',
             NOTIFICATION_EMAILS: '',
-            cameras: []
+            cameras: config.cameras || []
           })
         });
         const setupData = await setupRes.json();
@@ -1972,6 +1994,16 @@
       document.getElementById('home-panel').classList.add('active');
       startSimulatedLogs();
       updateSidebarQuickAlarmIcon();
+
+      // Auto-sincronizzazione all'avvio / login (solo se su Raspberry Pi, bypassato su PC locale)
+      const isRaspberry = !navigator.userAgent.toLowerCase().includes('windows') && !navigator.userAgent.toLowerCase().includes('macintosh');
+      if (isRaspberry) {
+        setTimeout(() => {
+          if (typeof syncFromCloud === 'function') {
+            syncFromCloud();
+          }
+        }, 1500); // Ritardo leggero per permettere all'interfaccia di stabilizzarsi
+      }
     }
 
     function exitToSetup() {
@@ -2092,6 +2124,32 @@
       document.getElementById('simulated-config-modal').style.display = 'none';
       const gearBtn = document.getElementById('btn-config-gear');
       if (gearBtn) gearBtn.classList.remove('active');
+    }
+
+    async function syncFromCloud() {
+      const btn = document.getElementById('btn-sync-cloud');
+      const originalText = btn.innerHTML;
+      btn.innerHTML = '<span class="spinner" style="width:10px;height:10px;border-width:1.5px;"></span> <span style="font-size:8px;">Sync...</span>';
+      btn.disabled = true;
+
+      try {
+        const res = await fetch('/api/sync/force', { method: 'POST' });
+        const data = await res.json();
+        
+        if (data.success) {
+          showAlert('success', 'Configurazione aggiornata dal Profilo Online!');
+          appendLogLine("Sincronizzazione manuale dal cloud completata con successo.");
+        } else {
+          throw new Error(data.error || 'Errore sconosciuto');
+        }
+      } catch (err) {
+        showAlert('error', 'Errore Sincronizzazione: ' + err.message);
+        appendLogLine("Errore durante la sincronizzazione dal cloud: " + err.message);
+      } finally {
+        btn.innerHTML = originalText;
+        btn.disabled = false;
+        closeSimulatedConfigModal();
+      }
     }
 
     function setSimulatedTab(tab) {
@@ -2414,17 +2472,50 @@
           currentAddCamStep++;
           updateAddCamStepView();
         } else {
-          // Salva la telecamera (Simulato con dettagli completi)
+          // Salva la telecamera con credenziali e URL RTSP completo
           const camName = document.getElementById('add-cam-name').value.trim() || "Tapo C220";
           const camPos = document.getElementById('add-cam-pos').value.trim() || "Ingresso";
-          const camType = document.getElementById('add-cam-type').value;
-          const camIp = document.getElementById('add-cam-ip').value.trim();
-          const camPort = document.getElementById('add-cam-port').value.trim();
-          const camPath = document.getElementById('add-cam-path').value.trim();
+          const camType = document.getElementById('add-cam-type').value || "ONVIF";
+          const camIp = document.getElementById('add-cam-ip').value.trim() || "192.168.1.10";
+          const camPort = parseInt(document.getElementById('add-cam-port').value.trim(), 10) || 554;
+          const camUser = document.getElementById('add-cam-user').value.trim();
+          const camPass = document.getElementById('add-cam-pass').value.trim();
+          let camPath = document.getElementById('add-cam-path').value.trim() || "/stream1";
+          if (!camPath.startsWith('/')) camPath = `/${camPath}`;
+
+          // Costruzione URL RTSP formattato con credenziali
+          const authPart = camUser ? `${encodeURIComponent(camUser)}:${encodeURIComponent(camPass)}@` : '';
+          const fullRtspUrl = `rtsp://${authPart}${camIp}:${camPort}${camPath}`;
+
+          // Raccogli gli allarmi abilitati
+          const activeAlarms = [];
+          ['intrusione', 'violenza', 'incendio', 'fumo', 'dpi', 'cadute', 'allagamento', 'terremoto'].forEach(id => {
+            const el = document.getElementById(`alarm-${id}`);
+            if (el && el.value === 'true') activeAlarms.push(id);
+          });
+
+          const newCameraObj = {
+            id: `cam-${Date.now()}`,
+            name: camName,
+            location: camPos,
+            type: camType.toLowerCase().includes('tapo') ? 'onvif' : (camType.toLowerCase().includes('ip') ? 'ip' : 'onvif'),
+            ip: camIp,
+            port: camPort,
+            username: camUser,
+            password: camPass,
+            rtsp_path: camPath,
+            url: fullRtspUrl,
+            enabled_triggers: activeAlarms,
+            status: 'online'
+          };
+
+          // Salva nell'array di configurazione globale
+          if (!Array.isArray(config.cameras)) config.cameras = [];
+          config.cameras.push(newCameraObj);
           
-          document.getElementById('confirm-modal-detail-text').innerHTML = `Telecamera <strong>${camName}</strong> (${camPos}) configurata con successo.<br><span style="color:#8e95a5; font-size:7.5px;">URL: rtsp://${camIp}:${camPort}${camPath}</span>`;
+          document.getElementById('confirm-modal-detail-text').innerHTML = `Telecamera <strong>${camName}</strong> (${camPos}) salvata con successo!<br><span style="color:#93c5fd; font-size:7.5px; word-break:break-all;">Flusso: rtsp://${camUser ? camUser + ':***@' : ''}${camIp}:${camPort}${camPath}</span><br><span style="color:#10b981; font-size:7.5px;">Totale configurate: ${config.cameras.length}</span>`;
           document.getElementById('simulated-add-cam-confirm-modal').style.display = 'flex';
-          appendLogLine(`Telecamera salvata: ${camName} (${camPos}) su rtsp://${camIp}:${camPort}${camPath}`);
+          appendLogLine(`Telecamera salvata: ${camName} (${camIp}) - Totale: ${config.cameras.length}`);
         }
       } else {
         if (quickAlarmDirectOpen) {
@@ -2440,6 +2531,85 @@
           appendLogLine("Configurazione nuova telecamera annullata.");
         }
       }
+    }
+
+    async function autoDiscoverCamerasWizard() {
+      const btn = document.getElementById('btn-wizard-discover-cams');
+      const icon = document.getElementById('wizard-discover-icon');
+      const text = document.getElementById('wizard-discover-text');
+      const box = document.getElementById('wizard-discovered-cams-box');
+      const list = document.getElementById('wizard-discovered-cams-list');
+
+      if (!btn || !text || !box || !list) return;
+
+      btn.disabled = true;
+      icon.innerText = '⏳';
+      text.innerText = 'Ricerca in corso (WS-Discovery + LAN)...';
+      box.style.display = 'none';
+      list.innerHTML = '';
+
+      try {
+        const res = await fetch('/api/cameras/discover');
+        const data = await res.json();
+        const devices = data.devices || (data.cameras || []).map(ip => ({ ip, port: 554, brand: 'Telecamera IP' }));
+
+        if (devices.length === 0) {
+          box.style.display = 'block';
+          list.innerHTML = `
+            <div style="color: #f87171; font-size: 7.5px; padding: 4px;">
+              Nessuna telecamera trovata automaticamente.<br>
+              Assicurati che le telecamere siano accese e collegate allo switch LAN, oppure inserisci l'IP manualmente.
+            </div>
+          `;
+          return;
+        }
+
+        box.style.display = 'block';
+        list.innerHTML = devices.map(d => `
+          <button type="button" onclick="selectDiscoveredCameraWizard('${d.ip}', ${d.port || 554}, '${(d.brand || 'Telecamera ONVIF').replace(/'/g, "\\'")}')"
+            style="width: 100%; text-align: left; padding: 4px 6px; font-size: 8px; background: rgba(37,99,235,0.25); border: 1px solid #3b82f6; border-radius: 4px; color: #fff; cursor: pointer; display: flex; justify-content: space-between; align-items: center;">
+            <span>🟢 <strong style="font-family: monospace;">${d.ip}</strong> (${d.brand || 'ONVIF'})</span>
+            <span style="font-size: 7px; color: #60a5fa; font-weight: bold;">SELEZIONA ➔</span>
+          </button>
+        `).join('');
+
+        appendLogLine(`[Discovery] Rilevate ${devices.length} telecamere via WS-Discovery/LAN.`);
+      } catch (err) {
+        box.style.display = 'block';
+        list.innerHTML = `<div style="color: #f87171; font-size: 7.5px;">Errore scansione: ${err.message}</div>`;
+      } finally {
+        btn.disabled = false;
+        icon.innerText = '🔍';
+        text.innerText = 'Cerca Nuovamente Telecamere (WS-Discovery)';
+      }
+    }
+
+    function selectDiscoveredCameraWizard(ip, port, brand) {
+      const ipInput = document.getElementById('add-cam-ip');
+      const portInput = document.getElementById('add-cam-port');
+      const pathInput = document.getElementById('add-cam-path');
+      const nameInput = document.getElementById('add-cam-name');
+      const box = document.getElementById('wizard-discovered-cams-box');
+
+      if (ipInput) ipInput.value = ip;
+      if (portInput) portInput.value = String(port || 554);
+      if (pathInput && !pathInput.value) pathInput.value = '/stream1';
+      if (nameInput && nameInput.value === 'Tapo C220' && brand) {
+        nameInput.value = brand;
+      }
+
+      if (brand.toLowerCase().includes('tapo')) {
+        setCamType('Tapo');
+      } else {
+        setCamType('ONVIF');
+      }
+
+      if (box) box.style.display = 'none';
+      appendLogLine(`[Wizard] Selezionata telecamera: ${ip} (${brand})`);
+
+      // Porta il focus sul campo Username per completare le credenziali
+      const userInput = document.getElementById('add-cam-user');
+      if (userInput) userInput.focus();
     }
 
     function dismissAddCamConfirmModal() {

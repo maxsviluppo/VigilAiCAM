@@ -47,7 +47,8 @@ import {
   Download,
   Check,
   Timer,
-  Network
+  Network,
+  Search
 } from "lucide-react";
 import * as Lucide from "lucide-react";
 import { motion, AnimatePresence, Reorder } from "framer-motion";
@@ -70,6 +71,7 @@ import {
   persistLocalCameraSettings,
   prepareCameraNetworkFields,
   parseIpFromRtspUrl,
+  buildOnvifRtspUrl,
   requiresStreamUrl,
   toDbCameraRecord,
   isTriggerScheduleActive,
@@ -742,7 +744,8 @@ export default function App() {
   const [showCameraModal, setShowCameraModal] = useState(false);
   const [editingCameraNumber, setEditingCameraNumber] = useState<number | null>(null);
   const [editingCamera, setEditingCamera] = useState<Camera | null>(null);
-  const [activeCameraTab, setActiveCameraTab] = useState<'info' | 'source' | 'triggers' | 'frequency' | 'client'>('info');
+  const [showCameraPass, setShowCameraPass] = useState(false);
+  const [activeCameraTab, setActiveCameraTab] = useState<'info' | 'triggers' | 'frequency' | 'client'>('info');
   const [scheduledActiveCameraId, setScheduledActiveCameraId] = useState<string | null>(null);
   const [schedulingTrigger, setSchedulingTrigger] = useState<{
     trigger: AlertTriggerItem;
@@ -769,6 +772,8 @@ export default function App() {
   const [activeQrTab, setActiveQrTab] = useState<'local' | 'tailscale'>('local');
   const [vpnStatus, setVpnStatus] = useState<{ installed: boolean, state: string, authUrl: string | null, ip: string | null } | null>(null);
   const [loadingVpn, setLoadingVpn] = useState(false);
+  const [discoveredCams, setDiscoveredCams] = useState<Array<{ ip: string; port: number; brand?: string; rtspUrl?: string }>>([]);
+  const [isDiscoveringCams, setIsDiscoveringCams] = useState(false);
 
   const [isMobile35, setIsMobile35] = useState(false);
   const [showMobileOverlay, setShowMobileOverlay] = useState(false);
@@ -1204,7 +1209,7 @@ export default function App() {
       return [];
     }
   });
-  const [activeSettingsTab, setActiveSettingsTab] = useState<"ai" | "email" | "telegram" | "sleep" | "test" | "log" | "network">("ai");
+  const [activeSettingsTab, setActiveSettingsTab] = useState<"cameras" | "ai" | "email" | "telegram" | "sleep" | "test" | "log" | "network">("cameras");
   const [logStartIndex, setLogStartIndex] = useState(0);
 
   useEffect(() => {
@@ -2245,7 +2250,6 @@ export default function App() {
   }, [user]);
   
   const fetchUserData = useCallback(async () => {
-
     if (!user) return;
     const { data: cams } = await supabase.from('cameras').select('*').order('order', { ascending: true });
     if (cams) {
@@ -2259,6 +2263,47 @@ export default function App() {
         if (prev && mappedCams.some(c => c.id === prev)) return prev;
         return mappedCams.length > 0 ? mappedCams[0].id : null;
       });
+
+      // Ripristina la frequenza di analisi salvata nel database (priorità alla prima camera o salvataggio locale)
+      if (mappedCams.length > 0) {
+        const primaryCam = mappedCams[0];
+        if (typeof primaryCam.analysisInterval === 'number' && primaryCam.analysisInterval >= 2) {
+          setAnalysisInterval(primaryCam.analysisInterval);
+          localStorage.setItem("vigilai_analysis_interval", String(primaryCam.analysisInterval));
+        }
+      }
+    }
+
+    // Carica gli ultimi 5 allarmi/incidenti registrati dal database
+    try {
+      const { data: alertRows } = await supabase
+        .from('alerts')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(5);
+
+      if (alertRows && alertRows.length > 0) {
+        setIncidents(alertRows.map((row: any) => {
+          let camName = 'Camera';
+          let desc = row.description || 'Evento registrato';
+          const match = desc.match(/^\[(.*?)\]\s*(.*)$/);
+          if (match) {
+            camName = match[1];
+            desc = match[2];
+          }
+          return {
+            id: row.id || Math.random().toString(36).substr(2, 9),
+            cameraId: row.camera_id || '',
+            cameraName: camName,
+            timestamp: new Date(row.created_at || Date.now()),
+            description: desc,
+            threatLevel: (row.threat_level as any) || 'high',
+            screenshot: row.screenshot || ''
+          };
+        }));
+      }
+    } catch (alertErr: any) {
+      console.warn("[Alerts] Caricamento storico allarmi da Supabase saltato:", alertErr.message);
     }
   }, [user, getPrimaryNetworkIp]);
 
@@ -2533,6 +2578,71 @@ export default function App() {
     setCameraToDelete(null);
   };
 
+  const createLightweightThumbnail = (cvs: HTMLCanvasElement): string => {
+    try {
+      const thumb = document.createElement('canvas');
+      const maxDim = 400;
+      const w = cvs.width || 640;
+      const h = cvs.height || 480;
+      const scale = Math.min(1, maxDim / Math.max(w, h));
+      thumb.width = Math.max(160, Math.round(w * scale));
+      thumb.height = Math.max(120, Math.round(h * scale));
+      const ctx = thumb.getContext('2d');
+      if (ctx) {
+        ctx.drawImage(cvs, 0, 0, thumb.width, thumb.height);
+        return thumb.toDataURL('image/jpeg', 0.45);
+      }
+    } catch (e) {
+      console.warn("Errore thumbnail:", e);
+    }
+    return cvs.toDataURL('image/jpeg', 0.4);
+  };
+
+  const saveIncidentToDb = async (newIncident: Incident, lightScreenshot: string) => {
+    if (!user) return;
+    try {
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(newIncident.cameraId);
+      const { error: insertError } = await supabase.from('alerts').insert({
+        user_id: user.id,
+        camera_id: isUuid ? newIncident.cameraId : null,
+        description: `[${newIncident.cameraName}] ${newIncident.description}`,
+        threat_level: newIncident.threatLevel || 'high',
+        screenshot: lightScreenshot,
+        created_at: new Date().toISOString()
+      });
+      if (insertError) {
+        console.warn("[Alerts DB] Inserimento allarme fallito:", insertError.message);
+        return;
+      }
+
+      // Mantieni massimo gli ultimi 5 allarmi (FIFO: dal sesto in poi elimina il più vecchio)
+      const { data: allAlerts } = await supabase
+        .from('alerts')
+        .select('id, created_at')
+        .order('created_at', { ascending: false });
+
+      if (allAlerts && allAlerts.length > 5) {
+        const idsToDelete = allAlerts.slice(5).map(a => a.id);
+        if (idsToDelete.length > 0) {
+          await supabase.from('alerts').delete().in('id', idsToDelete);
+        }
+      }
+    } catch (err) {
+      console.warn("[Alerts DB] Errore salvataggio alert su database:", err);
+    }
+  };
+
+  const handleClearIncidents = async () => {
+    setIncidents([]);
+    if (user) {
+      try {
+        await supabase.from('alerts').delete().eq('user_id', user.id);
+      } catch (err: any) {
+        console.warn("[Alerts DB] Errore pulizia storico:", err.message);
+      }
+    }
+  };
+
   const sendManualTestAlarm = async () => {
     if (!canvasRef.current) return;
     const canvas = canvasRef.current;
@@ -2589,18 +2699,21 @@ export default function App() {
 
       // Invia SEMPRE (anche con foto nera se cam non disponibile)
       const screenshot = canvas.toDataURL("image/jpeg", 0.6).split(",")[1];
+      const lightShot = createLightweightThumbnail(canvas);
       const res = await sendNotification(`[TEST MANUALE] Allarme inviato manualmente per verificare la ricezione delle immagini dalla camera: ${cam.name}`, screenshot);
 
       if (res.success) {
-        setIncidents(prev => [{
+        const testIncident: Incident = {
           id: Math.random().toString(36).substr(2, 9),
           timestamp: new Date(),
           cameraId: cam.id,
           cameraName: cam.name,
           description: `[TEST MANUALE] Notifica inviata con successo (${cam.name})`,
           threatLevel: "medium",
-          screenshot: canvas.toDataURL("image/jpeg", 0.8)
-        }, ...prev]);
+          screenshot: lightShot
+        };
+        setIncidents(prev => [testIncident, ...prev].slice(0, 5));
+        saveIncidentToDb(testIncident, lightShot);
         sentCount++;
       } else {
         lastErrorMsg = res.error || "Errore sconosciuto";
@@ -2689,6 +2802,7 @@ export default function App() {
     }
 
     const screenshot = canvas.toDataURL("image/jpeg", 0.6).split(",")[1];
+    const lightShot = createLightweightThumbnail(canvas);
     
     if (shouldNotify) {
       sendNotification(desc, screenshot);
@@ -2696,15 +2810,18 @@ export default function App() {
       alertSequenceCountRef.current += 1;
     }
     
-    setIncidents(prev => [{
+    const newIncident: Incident = {
       id: Math.random().toString(36).substr(2, 9),
       cameraId: cam.id,
       cameraName: cam.name,
       timestamp: new Date(),
       description: desc,
       threatLevel: result.threatLevel || "high",
-      screenshot: screenshot
-    }, ...prev]);
+      screenshot: lightShot
+    };
+
+    setIncidents(prev => [newIncident, ...prev].slice(0, 5));
+    saveIncidentToDb(newIncident, lightShot);
   };
 
   const stopActiveAlert = (camId?: string) => {
@@ -2727,12 +2844,10 @@ export default function App() {
     // In multi-view or if no active cam, use rotation.
     let cam = targetCam;
     if (!cam) {
-      if (!isMultiView && activeCameraId) {
-        cam = cameras.find(c => c.id === activeCameraId);
-      } 
-      if (!cam) {
-        const camIndex = camRotationIndexRef.current % cameras.length;
-        cam = cameras[camIndex];
+      const eligible = cameras.filter(c => !disabledAiCameraIds.includes(c.id));
+      if (eligible.length > 0) {
+        const camIndex = camRotationIndexRef.current % eligible.length;
+        cam = eligible[camIndex];
         camRotationIndexRef.current += 1;
       }
     }
@@ -2891,20 +3006,9 @@ export default function App() {
 
       const now = Date.now();
 
-      // Modalità Vista Singola: analizza solo la telecamera selezionata
-      if (!isMultiView && activeCameraId) {
-        const activeCam = cameras.find(c => c.id === activeCameraId);
-        if (!activeCam || disabledAiCameraIds.includes(activeCam.id)) return;
-
-        const targetSec = activeCam.analysisInterval ?? analysisInterval ?? 5;
-        const lastTime = cameraLastAnalyzedRef.current.get(activeCam.id) || 0;
-        if (now - lastTime >= targetSec * 1000) {
-          analysisFnRef.current(activeCam);
-        }
-        return;
-      }
-
-      // Modalità Multi-Telecamera: alternanza equa e bilanciata
+      // In tutte le modalità (incluso Raspberry Pi a schermo singolo),
+      // TUTTE le telecamere abilitate (non bloccate specificamente dall'utente)
+      // continuano a essere analizzate in background secondo le proprie regole e frequenze.
       const eligibleCameras = cameras.filter(c => !disabledAiCameraIds.includes(c.id));
       if (eligibleCameras.length === 0) return;
 
@@ -3113,7 +3217,7 @@ export default function App() {
         type: 'success',
         message: streamOk
           ? `Camera salvata (${finalized.enabledTriggers.length} trigger attivi).`
-          : `Salvato (${finalized.enabledTriggers.length} trigger). Configura IP in Sorgente per lo stream.`,
+          : `Salvato (${finalized.enabledTriggers.length} trigger). Configura l'indirizzo IP per lo stream.`,
       });
       setTimeout(() => {
         setShowCameraModal(false);
@@ -3182,7 +3286,7 @@ export default function App() {
         type: 'success',
         message: streamOk
           ? `Camera salvata (${savedCam.enabledTriggers.length} trigger attivi).`
-          : `Salvato (${savedCam.enabledTriggers.length} trigger). Configura IP in Sorgente per lo stream.`,
+          : `Salvato (${savedCam.enabledTriggers.length} trigger). Configura l'indirizzo IP per lo stream.`,
       });
       
       // Close modal after a short delay to show success
@@ -3274,6 +3378,65 @@ export default function App() {
     });
     setActiveCameraTab('info');
     setShowCameraModal(true);
+  };
+
+  const addNewCameraFromDiscovered = (d: { ip: string; port: number; brand?: string; rtspUrl?: string }) => {
+    const nextNum = cameras.length + 1;
+    const defaultUser = "Testcamera";
+    const defaultPass = "12345678";
+    const defaultPath = "/stream1";
+    const rtspUrl = buildOnvifRtspUrl({
+      ip: d.ip,
+      port: d.port || 554,
+      username: defaultUser,
+      password: defaultPass,
+      rtspPath: defaultPath
+    });
+
+    setEditingCameraNumber(nextNum);
+    setEditingCamera({
+      id: `cam-${Date.now()}`,
+      name: d.brand ? `${d.brand} #${nextNum}` : `Telecamera ${nextNum}`,
+      location: `Zona ${nextNum}`,
+      type: 'onvif',
+      url: rtspUrl,
+      ip: d.ip,
+      port: d.port || 554,
+      username: defaultUser,
+      password: defaultPass,
+      rtspPath: defaultPath,
+      status: 'online',
+      analysisInterval: 5,
+      enabledTriggers: availableTriggers.slice(0, 3).map(t => t.id)
+    });
+    setActiveCameraTab('info');
+    setShowSettings(false);
+    setShowCameraModal(true);
+  };
+
+  const handleDiscoverCamerasInApp = async () => {
+    setIsDiscoveringCams(true);
+    try {
+      const res = await fetch('/api/cameras/discover');
+      const data = await res.json();
+      const list = data.devices || (data.cameras || []).map((ip: string) => ({ ip, port: 554, brand: 'Telecamera IP' }));
+      setDiscoveredCams(list);
+      if (list.length === 0) {
+        setGlobalModal({
+          type: 'info',
+          title: 'Nessuna camera rilevata',
+          message: 'Nessuna telecamera trovata con WS-Discovery o LAN. Verifica che siano accese e collegate allo switch.'
+        });
+      }
+    } catch (err: any) {
+      setGlobalModal({
+        type: 'error',
+        title: 'Errore scansione',
+        message: err.message || 'Impossibile completare la scansione.'
+      });
+    } finally {
+      setIsDiscoveringCams(false);
+    }
   };
 
   const openActiveCameraConfig = () => {
@@ -4610,15 +4773,6 @@ export default function App() {
                         onTouchEnd={handleZoneEnd}
                         onMouseLeave={handleZoneEnd}
                       >
-                        {/* Badge In Analisi AI per Raspberry quando ci sono più telecamere */}
-                        {cameras.length > 1 && (analyzingCameraId ? analyzingCameraId === activeCamera.id : activeCameraId === activeCamera.id) && (
-                          <div className="absolute top-1.5 left-1.5 z-30 pointer-events-none flex items-center gap-1 bg-slate-950/90 backdrop-blur-md border border-cyan-400/80 text-cyan-300 px-1.5 py-0.5 rounded-lg shadow-[0_0_10px_rgba(34,211,238,0.4)]">
-                            <span className={`w-1.5 h-1.5 rounded-full bg-cyan-400 ${isAnalyzing ? 'animate-ping' : 'shadow-[0_0_8px_#22d3ee]'}`} />
-                            <span className="text-[7.5px] font-black uppercase font-mono tracking-wider">
-                              {isAnalyzing ? 'In Analisi...' : 'Camera in Analisi'}
-                            </span>
-                          </div>
-                        )}
                         {/* Drag / Swipe camera view wrapper */}
                         <motion.div
                           key={activeCamera.id}
@@ -4657,6 +4811,31 @@ export default function App() {
                             </div>
                           )}
                         </motion.div>
+
+                        {/* Flussi in background per telecamere non visualizzate a schermo (garantisce analisi AI continua su Raspberry) */}
+                        {isMonitoring && (
+                          <div className="hidden" aria-hidden="true" style={{ display: 'none' }}>
+                            {cameras.filter(c => c.id !== activeCamera.id && activeCamStatuses[c.id]).map(bgCam => (
+                              bgCam.type === 'ip' || bgCam.type === 'onvif' ? (
+                                <IPCameraPlayer 
+                                  key={bgCam.id}
+                                  url={bgCam.url || ''} 
+                                  isAlertActive={alertingCameraIds.includes(bgCam.id)} 
+                                  isNightMode={isNightMode} 
+                                  imgRefCallback={(el) => { if (el) imgRefs.current.set(bgCam.id, el); else imgRefs.current.delete(bgCam.id); }} 
+                                />
+                              ) : (
+                                <video 
+                                  key={bgCam.id}
+                                  ref={(el) => { if (el) videoRefs.current.set(bgCam.id, el); else videoRefs.current.delete(bgCam.id); }}
+                                  autoPlay 
+                                  muted 
+                                  playsInline 
+                                />
+                              )
+                            ))}
+                          </div>
+                        )}
 
                         {/* Overlay Controllo AI ON/OFF in sovraimpressione al monitor della camera attiva */}
                         {isMonitoring && isAiEnabled && (
@@ -5069,13 +5248,6 @@ export default function App() {
                         : 'border-white/5 opacity-80 hover:opacity-100'
                     }`}
                   >
-                    {/* Badge In Analisi AI per Desktop/Tablet quando ci sono più telecamere */}
-                    {isCamUnderAnalysis && (
-                      <div className="absolute top-4 left-4 z-30 pointer-events-none flex items-center gap-2 bg-slate-950/85 backdrop-blur-md border border-cyan-400/80 text-cyan-300 px-3 py-1.5 rounded-xl shadow-[0_0_15px_rgba(34,211,238,0.4)] animate-pulse">
-                        <span className="w-2 h-2 rounded-full bg-cyan-400 animate-ping" />
-                        <span className="text-[10px] font-black uppercase font-mono tracking-widest">In Analisi AI</span>
-                      </div>
-                    )}
                     <div className="absolute inset-0 bg-slate-900/40 z-0 animate-pulse" />
                     
                     {isMonitoring && activeCamStatuses[cam.id] ? (
@@ -5501,7 +5673,7 @@ export default function App() {
                       <p className="text-[9px] font-bold text-slate-500 uppercase tracking-widest">Ultime 24 ore</p>
                     </div>
                     <button 
-                      onClick={() => setIncidents([])}
+                      onClick={handleClearIncidents}
                       className="p-3 glass border-white/5 text-slate-500 hover:text-red-400 hover:border-red-500/20 rounded-xl transition-all"
                       title="Svuota Log"
                     >
@@ -5635,28 +5807,17 @@ export default function App() {
                   </div>
                 )}
 
-                <div className={`grid grid-cols-5 ${isMobile35 ? 'gap-0.5 mt-1.5' : 'gap-1 mt-3'}`}>
+                <div className={`grid grid-cols-4 ${isMobile35 ? 'gap-0.5 mt-1.5' : 'gap-1 mt-3'}`}>
                   <button
                     type="button"
                     onClick={() => setActiveCameraTab('info')}
                     className={`flex flex-row items-center justify-center gap-0.5 ${isMobile35 ? 'py-1 text-[7px]' : 'py-1.5 text-[8px]'} px-0.5 rounded-xl border font-black uppercase tracking-tight transition-all active:scale-95 cursor-pointer min-w-0 ${
                       activeCameraTab === 'info' ? 'bg-blue-600 border-blue-400 text-white shadow-lg' : 'bg-white/5 border-white/5 text-slate-400 hover:border-white/20'
                     }`}
-                    title="Info Generale"
+                    title="Info e Configurazione Stream"
                   >
                     <Monitor size={isMobile35 ? 9 : 11} className="shrink-0" />
                     <span className="truncate">Info</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setActiveCameraTab('source')}
-                    className={`flex flex-row items-center justify-center gap-0.5 ${isMobile35 ? 'py-1 text-[7px]' : 'py-1.5 text-[8px]'} px-0.5 rounded-xl border font-black uppercase tracking-tight transition-all active:scale-95 cursor-pointer min-w-0 ${
-                      activeCameraTab === 'source' ? 'bg-blue-600 border-blue-400 text-white shadow-lg' : 'bg-white/5 border-white/5 text-slate-400 hover:border-white/20'
-                    }`}
-                    title="Configura Sorgente"
-                  >
-                    <Video size={isMobile35 ? 9 : 11} className="shrink-0" />
-                    <span className="truncate">Sorgente</span>
                   </button>
                   <button
                     type="button"
@@ -5696,7 +5857,7 @@ export default function App() {
 
               <div
                 ref={cameraModalScrollRef}
-                className={`flex-1 min-h-0 ${isMobile35 ? 'px-2 py-1' : 'px-4 sm:px-6 lg:px-10 py-2 sm:py-3'} custom-scrollbar ${isMobile35 && activeCameraTab === 'triggers' ? 'overflow-hidden' : 'overflow-y-auto'} relative`}
+                className={`flex-1 min-h-0 ${isMobile35 ? 'px-2 py-1' : 'px-4 sm:px-6 lg:px-10 py-2 sm:py-3'} no-scrollbar ${isMobile35 && activeCameraTab === 'triggers' ? 'overflow-hidden' : 'overflow-y-auto no-scrollbar'} relative`}
               >
                 {!isMobile35 && (
                 <div className="sticky top-0 z-10 flex justify-end gap-1 mb-2">
@@ -5720,7 +5881,7 @@ export default function App() {
                 )}
 
                 <div className="space-y-4">
-                  {/* GENERAL INFO FIELDS */}
+                  {/* GENERAL INFO & SOURCE CONFIGURATION IN A SINGLE CLEAN TAB */}
                   {activeCameraTab === 'info' && (
                     <>
                       <div className="space-y-1">
@@ -5772,45 +5933,42 @@ export default function App() {
                             onChange={(e) => setEditingCamera({...editingCamera, type: e.target.value as any})}
                             className="w-full h-11 bg-white/5 border border-white/10 px-4 text-xs rounded-xl outline-none transition-all text-white font-bold appearance-none animate-fade-in"
                           >
-                            <option value="webcam" className="bg-[#0f172a]">Webcam Locale</option>
                             <option value="onvif" className="bg-[#0f172a]">ONVIF / Tapo / IP Cam</option>
                             <option value="ip" className="bg-[#0f172a]">Stream (URL Diretto)</option>
+                            <option value="webcam" className="bg-[#0f172a]">Webcam Locale</option>
                           </select>
                         </div>
                       </div>
-                    </>
-                  )}
 
-                  {/* SOURCE CONFIGURATION FIELDS */}
-                  {activeCameraTab === 'source' && (
-                    <>
-                      {editingCamera.type !== 'onvif' && (
+                      {/* Configurazione Stream Diretto (URL) */}
+                      {editingCamera.type === 'ip' && (
                         <div className="space-y-1">
                           <div className="flex justify-between items-center">
-                            <label className="text-[9px] font-black uppercase tracking-widest text-slate-500 px-1">Sorgente Video</label>
+                            <label className="text-[9px] font-black uppercase tracking-widest text-slate-500 px-1">Sorgente Video URL</label>
                             {keyboardTarget?.id === 'cameraUrl' && (
                               <Keyboard size={12} className="text-blue-400 animate-pulse" />
                             )}
                           </div>
                           <input 
                             type="text" 
-                            disabled={editingCamera.type === 'webcam'}
-                            value={editingCamera.type === 'webcam' ? 'Default System' : editingCamera.url}
+                            value={editingCamera.url || ''}
                             onChange={(e) => setEditingCamera({...editingCamera, url: e.target.value})}
                             onFocus={() => { if (useVirtualKeyboard) setKeyboardTarget({ id: 'cameraUrl', title: 'Sorgente Video URL' }); }}
-                            placeholder="rtsp://..."
-                            className="w-full bg-white/5 border border-white/10 px-4 py-3 text-[10px] rounded-xl focus:border-white/30 outline-none transition-all text-white/60 font-mono disabled:opacity-30"
+                            placeholder="rtsp://192.168.1.100:554/stream1 o http://..."
+                            className="w-full bg-white/5 border border-white/10 px-4 py-3 text-[10px] rounded-xl focus:border-white/30 outline-none transition-all text-white/80 font-mono"
                           />
                         </div>
                       )}
 
+                      {/* Configurazione ONVIF con pulsante Cerca Cam e parametri rete */}
                       {editingCamera.type === 'onvif' && (
-                        <div className="p-4 bg-blue-500/5 rounded-2xl border border-blue-500/10 space-y-3 animate-fade-in">
-                          <div className="flex items-center gap-2">
-                            <Zap size={14} className="text-blue-400 shrink-0" />
-                            <h4 className="text-[10px] font-black text-blue-400 uppercase tracking-widest">Configurazione ONVIF</h4>
+                        <div className="p-3 bg-blue-500/5 rounded-2xl border border-blue-500/10 space-y-3 animate-fade-in">
+                          <div className="flex items-center gap-1.5">
+                            <Zap size={13} className="text-blue-400 shrink-0" />
+                            <h4 className="text-[10px] font-black text-blue-400 uppercase tracking-widest">Parametri Rete ONVIF / RTSP</h4>
                           </div>
-                          <div className="grid grid-cols-2 gap-3">
+
+                          <div className="grid grid-cols-2 gap-2.5">
                             <div className="flex flex-col gap-1 min-w-0 col-span-2">
                               <div className="flex items-center justify-between h-[14px] px-1">
                                 <label className="text-[9px] font-black uppercase tracking-widest text-slate-500 leading-none truncate">Indirizzo IP Camera</label>
@@ -5820,40 +5978,32 @@ export default function App() {
                                   <span className="w-3 h-3 shrink-0" aria-hidden="true" />
                                 )}
                               </div>
-                              <div className="flex gap-2 items-stretch">
-                                <input
-                                  type="text"
-                                  readOnly
-                                  value={getDefaultCameraIpPrefix(getPrimaryNetworkIp())}
-                                  className="flex-[2] min-w-0 h-11 bg-white/5 border border-white/10 px-3 text-xs rounded-xl outline-none text-slate-400 font-mono"
-                                  title="Rete locale (prefisso fisso)"
-                                />
-                                <input
-                                  type="text"
-                                  inputMode="numeric"
-                                  value={getIpLastOctet(editingCamera.ip || '')}
-                                  onChange={(e) => {
-                                    const oct = e.target.value.replace(/\D/g, '').slice(0, 3);
-                                    setEditingCamera({
-                                      ...editingCamera,
-                                      ip: buildIpFromPrefixAndOctet(
-                                        getDefaultCameraIpPrefix(getPrimaryNetworkIp()),
-                                        oct
-                                      ),
+                              <input
+                                type="text"
+                                value={editingCamera.ip || ''}
+                                onChange={(e) => {
+                                  const raw = e.target.value;
+                                  setEditingCamera(prev => {
+                                    if (!prev) return null;
+                                    const next = { ...prev, ip: raw };
+                                    next.url = buildOnvifRtspUrl({
+                                      ip: raw,
+                                      port: next.port || 554,
+                                      username: next.username,
+                                      password: next.password,
+                                      rtspPath: next.rtspPath || '/stream1'
                                     });
-                                  }}
-                                  onFocus={() => {
-                                    if (useVirtualKeyboard) {
-                                      setKeyboardTarget({ id: 'cameraIp', title: 'Ultimo numero IP camera (es. 8)' });
-                                    }
-                                  }}
-                                  placeholder="8"
-                                  className="flex-1 min-w-[4rem] h-11 bg-white/5 border border-blue-500/30 px-3 text-xs rounded-xl outline-none text-white font-mono text-center focus:border-blue-400 transition-all"
-                                />
-                              </div>
-                              <p className="text-[7px] text-slate-500 font-bold uppercase tracking-wide px-1">
-                                Inserisci solo l&apos;ultimo numero — es. Tapo C220 su .8 (non usare l&apos;IP del Raspberry)
-                              </p>
+                                    return next;
+                                  });
+                                }}
+                                onFocus={() => {
+                                  if (useVirtualKeyboard) {
+                                    setKeyboardTarget({ id: 'cameraIp', title: 'Indirizzo IP Camera (es. 192.168.1.100)' });
+                                  }
+                                }}
+                                placeholder="192.168.1.100"
+                                className="w-full h-10 bg-white/5 border border-blue-500/30 px-3 text-xs rounded-xl outline-none text-white font-mono focus:border-blue-400 transition-all"
+                              />
                             </div>
                             <div className="flex flex-col gap-1 min-w-0">
                               <div className="flex items-center justify-between h-[14px] px-1">
@@ -5866,9 +6016,23 @@ export default function App() {
                               </div>
                               <input 
                                 type="number" value={editingCamera.port || 554}
-                                onChange={(e) => setEditingCamera({...editingCamera, port: Number(e.target.value)})}
+                                onChange={(e) => {
+                                  const p = Number(e.target.value) || 554;
+                                  setEditingCamera(prev => {
+                                    if (!prev) return null;
+                                    const next = { ...prev, port: p };
+                                    next.url = buildOnvifRtspUrl({
+                                      ip: next.ip,
+                                      port: p,
+                                      username: next.username,
+                                      password: next.password,
+                                      rtspPath: next.rtspPath || '/stream1'
+                                    });
+                                    return next;
+                                  });
+                                }}
                                 onFocus={() => { if (useVirtualKeyboard) setKeyboardTarget({ id: 'cameraPort', title: 'Porta RTSP' }); }}
-                                className="w-full h-11 bg-white/5 border border-white/10 px-4 text-xs rounded-xl outline-none text-white font-mono focus:border-white/30 transition-all"
+                                className="w-full h-10 bg-white/5 border border-white/10 px-3 text-xs rounded-xl outline-none text-white font-mono focus:border-white/30 transition-all"
                               />
                             </div>
                             <div className="flex flex-col gap-1 min-w-0">
@@ -5882,28 +6046,69 @@ export default function App() {
                               </div>
                               <input 
                                 type="text" value={editingCamera.username || ''}
-                                onChange={(e) => setEditingCamera({...editingCamera, username: e.target.value})}
+                                onChange={(e) => {
+                                  const u = e.target.value;
+                                  setEditingCamera(prev => {
+                                    if (!prev) return null;
+                                    const next = { ...prev, username: u };
+                                    next.url = buildOnvifRtspUrl({
+                                      ip: next.ip,
+                                      port: next.port || 554,
+                                      username: u,
+                                      password: next.password,
+                                      rtspPath: next.rtspPath || '/stream1'
+                                    });
+                                    return next;
+                                  });
+                                }}
                                 onFocus={() => { if (useVirtualKeyboard) setKeyboardTarget({ id: 'cameraUser', title: 'Username ONVIF' }); }}
-                                className="w-full h-11 bg-white/5 border border-white/10 px-4 text-xs rounded-xl outline-none text-white font-mono focus:border-white/30 transition-all"
+                                className="w-full h-10 bg-white/5 border border-white/10 px-3 text-xs rounded-xl outline-none text-white font-mono focus:border-white/30 transition-all"
                               />
                             </div>
                             <div className="flex flex-col gap-1 min-w-0">
                               <div className="flex items-center justify-between h-[14px] px-1">
                                 <label className="text-[9px] font-black uppercase tracking-widest text-slate-500 leading-none truncate">Password</label>
-                                {keyboardTarget?.id === 'cameraPass' ? (
-                                  <Keyboard size={12} className="text-blue-400 animate-pulse shrink-0" />
-                                ) : (
-                                  <span className="w-3 h-3 shrink-0" aria-hidden="true" />
-                                )}
+                                <div className="flex items-center gap-1.5">
+                                  {keyboardTarget?.id === 'cameraPass' ? (
+                                    <Keyboard size={12} className="text-blue-400 animate-pulse shrink-0" />
+                                  ) : (
+                                    <span className="w-3 h-3 shrink-0" aria-hidden="true" />
+                                  )}
+                                </div>
                               </div>
-                              <input 
-                                type="password" value={editingCamera.password || ''}
-                                onChange={(e) => setEditingCamera({...editingCamera, password: e.target.value})}
-                                onFocus={() => { if (useVirtualKeyboard) setKeyboardTarget({ id: 'cameraPass', title: 'Password ONVIF' }); }}
-                                className="w-full h-11 bg-white/5 border border-white/10 px-4 text-xs rounded-xl outline-none text-white font-mono focus:border-white/30 transition-all"
-                              />
+                              <div className="relative">
+                                <input 
+                                  type={showCameraPass ? "text" : "password"}
+                                  value={editingCamera.password || ''}
+                                  onChange={(e) => {
+                                    const pwd = e.target.value;
+                                    setEditingCamera(prev => {
+                                      if (!prev) return null;
+                                      const next = { ...prev, password: pwd };
+                                      next.url = buildOnvifRtspUrl({
+                                        ip: next.ip,
+                                        port: next.port || 554,
+                                        username: next.username,
+                                        password: pwd,
+                                        rtspPath: next.rtspPath || '/stream1'
+                                      });
+                                      return next;
+                                    });
+                                  }}
+                                  onFocus={() => { if (useVirtualKeyboard) setKeyboardTarget({ id: 'cameraPass', title: 'Password ONVIF' }); }}
+                                  className="w-full h-10 bg-white/5 border border-white/10 px-3 pr-9 text-xs rounded-xl outline-none text-white font-mono focus:border-white/30 transition-all"
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => setShowCameraPass(prev => !prev)}
+                                  className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-white transition-colors cursor-pointer"
+                                  title={showCameraPass ? "Nascondi password" : "Mostra password"}
+                                >
+                                  {showCameraPass ? <EyeOff size={14} /> : <Eye size={14} />}
+                                </button>
+                              </div>
                             </div>
-                            <div className="flex flex-col gap-1 min-w-0 col-span-2">
+                            <div className="flex flex-col gap-1 min-w-0">
                               <div className="flex items-center justify-between h-[14px] px-1">
                                 <label className="text-[9px] font-black uppercase tracking-widest text-slate-500 leading-none truncate">Percorso (Path)</label>
                                 {keyboardTarget?.id === 'cameraRtsp' ? (
@@ -5914,11 +6119,31 @@ export default function App() {
                               </div>
                               <input 
                                 type="text" value={editingCamera.rtspPath || '/stream1'}
-                                onChange={(e) => setEditingCamera({...editingCamera, rtspPath: e.target.value})}
+                                onChange={(e) => {
+                                  const pth = e.target.value;
+                                  setEditingCamera(prev => {
+                                    if (!prev) return null;
+                                    const next = { ...prev, rtspPath: pth };
+                                    next.url = buildOnvifRtspUrl({
+                                      ip: next.ip,
+                                      port: next.port || 554,
+                                      username: next.username,
+                                      password: next.password,
+                                      rtspPath: pth
+                                    });
+                                    return next;
+                                  });
+                                }}
                                 onFocus={() => { if (useVirtualKeyboard) setKeyboardTarget({ id: 'cameraRtsp', title: 'Percorso RTSP (Path)' }); }}
                                 placeholder="/stream1"
-                                className="w-full h-11 bg-white/5 border border-white/10 px-4 text-xs rounded-xl outline-none text-white font-mono focus:border-white/30 transition-all"
+                                className="w-full h-10 bg-white/5 border border-white/10 px-3 text-xs rounded-xl outline-none text-white font-mono focus:border-white/30 transition-all"
                               />
+                            </div>
+                            <div className="col-span-2 pt-0.5">
+                              <div className="text-[8px] font-mono text-slate-400 bg-black/40 p-2 rounded-lg border border-white/5 truncate" title={editingCamera.url}>
+                                <span className="text-slate-500">Flusso RTSP Generato: </span>
+                                <span className="text-blue-300">{editingCamera.url || `rtsp://${editingCamera.ip || '...'}:${editingCamera.port || 554}${editingCamera.rtspPath || '/stream1'}`}</span>
+                              </div>
                             </div>
                           </div>
                         </div>
@@ -6553,7 +6778,7 @@ export default function App() {
                       <h3 className="text-xs font-black text-white uppercase">Registro Log</h3>
                     </div>
                     <button 
-                      onClick={() => setIncidents([])}
+                      onClick={handleClearIncidents}
                       className="p-2 bg-white/5 border border-white/5 text-slate-500 hover:text-red-400 rounded-lg active:scale-95"
                     >
                       <Trash2 size={12} />
@@ -6602,7 +6827,7 @@ export default function App() {
               className={`glass bg-slate-900/95 lg:bg-slate-900/60 w-full h-full sm:h-auto sm:max-h-[90vh] max-w-lg rounded-none sm:rounded-[32px] lg:rounded-[40px] shadow-2xl border-white/5 ${
                 isMobile35
                   ? 'vigil-settings-35 overflow-hidden flex flex-col'
-                  : 'p-4 sm:p-6 lg:p-10 space-y-3 sm:space-y-6 lg:space-y-8 overflow-y-auto custom-scrollbar'
+                  : 'p-4 sm:p-6 lg:p-10 space-y-3 sm:space-y-6 lg:space-y-8 overflow-y-auto no-scrollbar'
               }`}
             >
               <div className={isMobile35 ? 'vigil-settings-35-header' : 'flex justify-between items-center shrink-0'}>
@@ -6647,6 +6872,12 @@ export default function App() {
               {/* Tab menu 3.5" — 1 riga singola con pulsanti stretti */}
               {isMobile35 ? (
                 <div className="vigil-settings-35-tabs flex items-center gap-1 w-full shrink-0 my-0.5">
+                  <button type="button" onClick={() => setActiveSettingsTab("cameras")}
+                    className={`flex-1 h-7.5 py-1 px-0.5 flex items-center justify-center rounded-lg border transition-all active:scale-95 cursor-pointer ${
+                      activeSettingsTab === "cameras"
+                        ? "bg-blue-600 border-blue-400 text-white"
+                        : "bg-white/5 border-white/5 text-slate-400"
+                    }`} title="Telecamere"><Video size={14} /></button>
                   <button type="button" onClick={() => { setActiveSettingsTab("network"); scanWifiNetworks(); }}
                     className={`flex-1 h-7.5 py-1 px-0.5 flex items-center justify-center rounded-lg border transition-all active:scale-95 cursor-pointer ${
                       activeSettingsTab === "network"
@@ -6676,7 +6907,19 @@ export default function App() {
                 </div>
               ) : (
                 /* Tab menu Desktop — 1 riga singola con pulsanti compatti */
-                <div className="flex items-center gap-1.5 mb-2 w-full overflow-x-auto pb-1">
+                <div className="flex items-center gap-1.5 mb-2 w-full overflow-x-auto no-scrollbar pb-1">
+                  <button
+                    type="button"
+                    onClick={() => setActiveSettingsTab("cameras")}
+                    className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-2 rounded-xl border text-[10px] font-black uppercase tracking-wider transition-all active:scale-95 cursor-pointer whitespace-nowrap ${
+                      activeSettingsTab === "cameras"
+                        ? "bg-blue-600 border-blue-400 text-white shadow-lg shadow-blue-500/25"
+                        : "bg-white/5 border-white/5 text-slate-400 hover:bg-white/10 hover:text-white"
+                    }`}
+                  >
+                    <Video size={14} />
+                    <span>Telecamere</span>
+                  </button>
                   <button
                     type="button"
                     onClick={() => { setActiveSettingsTab("network"); scanWifiNetworks(); }}
@@ -6756,9 +6999,198 @@ export default function App() {
 
               <div className={`${
                 isMobile35
-                  ? `vigil-settings-35-content ${activeSettingsTab === 'network' ? 'overflow-y-auto flex flex-col' : ''}`
-                  : 'space-y-6'
+                  ? `vigil-settings-35-content no-scrollbar ${activeSettingsTab === 'network' || activeSettingsTab === 'cameras' ? 'overflow-y-auto no-scrollbar flex flex-col' : ''}`
+                  : 'space-y-6 no-scrollbar'
               }`}>
+                {/* Telecamere Configuration & Discovery Tab */}
+                {activeSettingsTab === "cameras" && (
+                  <div className={`space-y-3.5 no-scrollbar ${isMobile35 ? 'p-1 text-[9px] overflow-y-auto no-scrollbar max-h-[220px]' : ''}`}>
+                    {/* Header con pulsanti Ricerca e Aggiungi */}
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-3 bg-blue-950/30 rounded-2xl border border-blue-500/20">
+                      <div>
+                        <div className="flex items-center gap-1.5">
+                          <Video size={isMobile35 ? 12 : 15} className="text-blue-400" />
+                          <h4 className="text-[11px] sm:text-xs font-black text-white uppercase tracking-wider">
+                            Ricerca & Gestione Telecamere
+                          </h4>
+                        </div>
+                        <p className="text-[9px] text-slate-400 mt-0.5">
+                          Trova telecamere IP con ONVIF WS-Discovery o gestisci le telecamere configurate.
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <button
+                          type="button"
+                          onClick={handleDiscoverCamerasInApp}
+                          disabled={isDiscoveringCams}
+                          className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-500 border border-blue-400/50 rounded-xl text-[9.5px] font-black uppercase text-white transition-all cursor-pointer shadow-md active:scale-95 disabled:opacity-50"
+                          title="Cerca automaticamente le telecamere sulla rete LAN tramite WS-Discovery"
+                        >
+                          <Search size={12} className={isDiscoveringCams ? "animate-spin" : ""} />
+                          <span>{isDiscoveringCams ? "Scansione..." : "🔍 Cerca sulla Rete"}</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setShowSettings(false);
+                            openCameraConfig();
+                          }}
+                          className="flex items-center gap-1 px-2.5 py-1.5 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-[9.5px] font-bold uppercase text-slate-300 hover:text-white transition-all cursor-pointer active:scale-95"
+                          title="Aggiungi una telecamera inserendo manualmente i dati"
+                        >
+                          <Plus size={12} />
+                          <span>+ Manuale</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Risultati Scansione Rete WS-Discovery */}
+                    {discoveredCams.length > 0 && (
+                      <div className="p-3 bg-slate-800/40 rounded-2xl border border-blue-500/30 space-y-2 animate-fade-in">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[9.5px] font-black text-blue-300 uppercase tracking-wider flex items-center gap-1.5">
+                            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                            Telecamere Rilevate sulla Rete ({discoveredCams.length})
+                          </span>
+                          <span className="text-[8.5px] text-slate-400">Clicca per associare come nuova camera</span>
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          {discoveredCams.map((d, idx) => {
+                            const existingCam = cameras.find(c => 
+                              c.ip === d.ip || (c.url && parseIpFromRtspUrl(c.url) === d.ip)
+                            );
+                            const existingOrder = existingCam ? getCameraOrderNumber(cameras, existingCam.id) : null;
+                            return (
+                              <div
+                                key={idx}
+                                className="p-2.5 bg-black/40 rounded-xl border border-white/5 flex flex-col justify-between gap-2"
+                              >
+                                <div className="flex items-start justify-between gap-1">
+                                  <div>
+                                    <div className="flex items-center gap-1.5">
+                                      <span className="font-mono text-white font-bold text-xs">{d.ip}</span>
+                                      <span className="text-[9px] px-1.5 py-0.2 bg-blue-500/20 text-blue-300 rounded font-semibold">
+                                        porta {d.port || 554}
+                                      </span>
+                                    </div>
+                                    <p className="text-[9px] text-slate-400 mt-0.5 font-medium">
+                                      {d.brand || 'Telecamera ONVIF'}
+                                    </p>
+                                  </div>
+                                  <span className="text-[8px] font-mono uppercase px-1.5 py-0.5 rounded bg-white/5 text-slate-400">
+                                    {d.method || 'ONVIF'}
+                                  </span>
+                                </div>
+                                <div className="pt-1 border-t border-white/5 flex items-center justify-between gap-1">
+                                  {existingCam ? (
+                                    <>
+                                      <span className="text-[8.5px] text-emerald-400 font-bold flex items-center gap-1">
+                                        <Check size={11} /> Già associata: Cam #{existingOrder}
+                                      </span>
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setShowSettings(false);
+                                          openCameraConfig(existingCam, existingOrder ?? undefined);
+                                        }}
+                                        className="px-2 py-1 bg-white/10 hover:bg-white/20 text-white rounded-lg text-[9px] font-bold cursor-pointer transition-all"
+                                      >
+                                        Modifica Cam #{existingOrder}
+                                      </button>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <span className="text-[8px] text-slate-500">Non configurata</span>
+                                      <button
+                                        type="button"
+                                        onClick={() => addNewCameraFromDiscovered(d)}
+                                        className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-[9px] font-black uppercase tracking-wider flex items-center gap-1 cursor-pointer transition-all shadow-sm active:scale-95"
+                                      >
+                                        <Plus size={11} />
+                                        <span>+ Aggiungi Nuova Cam</span>
+                                      </button>
+                                    </>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Elenco Telecamere Configurate nell'Impianto */}
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between px-1">
+                        <label className="text-[9.5px] font-black uppercase tracking-widest text-slate-400">
+                          Telecamere Configurate nell'Impianto ({cameras.length})
+                        </label>
+                        <span className="text-[8px] text-slate-500">Tutte analizzate in background</span>
+                      </div>
+
+                      {cameras.length === 0 ? (
+                        <div className="p-4 bg-black/20 rounded-2xl border border-white/5 text-center text-slate-500 text-[10px]">
+                          Nessuna telecamera configurata. Usa "Cerca sulla Rete" o "Aggiungi Manuale".
+                        </div>
+                      ) : (
+                        <div className="space-y-1.5">
+                          {cameras.map((cam, idx) => {
+                            const orderNum = getCameraOrderNumber(cameras, cam.id) ?? (idx + 1);
+                            const ipDisplay = cam.ip || (cam.url ? parseIpFromRtspUrl(cam.url) : 'IP non spec.');
+                            return (
+                              <div
+                                key={cam.id}
+                                className="p-2.5 bg-black/30 hover:bg-black/50 rounded-xl border border-white/5 flex items-center justify-between gap-2 transition-all"
+                              >
+                                <div className="flex items-center gap-2.5 min-w-0">
+                                  <div className="w-6 h-6 rounded-lg bg-blue-600/30 border border-blue-400/40 text-blue-300 flex items-center justify-center font-mono font-bold text-[10px] shrink-0">
+                                    #{orderNum}
+                                  </div>
+                                  <div className="min-w-0">
+                                    <div className="flex items-center gap-2">
+                                      <span className="text-white font-bold text-xs truncate">{cam.name}</span>
+                                      <span className="text-[8.5px] text-slate-400 bg-white/5 px-1.5 py-0.2 rounded truncate">
+                                        {cam.location || `Zona ${orderNum}`}
+                                      </span>
+                                    </div>
+                                    <div className="flex items-center gap-2 mt-0.5 text-[8.5px] font-mono text-slate-400">
+                                      <span className="text-blue-300 truncate">{ipDisplay}</span>
+                                      <span>•</span>
+                                      <span>Freq: {cam.analysisInterval ?? 5}s</span>
+                                      <span>•</span>
+                                      <span className="text-slate-500 uppercase">{cam.type || 'onvif'}</span>
+                                    </div>
+                                  </div>
+                                </div>
+                                <div className="flex items-center gap-1 shrink-0">
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setShowSettings(false);
+                                      openCameraConfig(cam, orderNum);
+                                    }}
+                                    className="p-1.5 bg-white/5 hover:bg-white/10 text-slate-300 hover:text-white rounded-lg transition-all cursor-pointer"
+                                    title="Modifica impostazioni di questa camera"
+                                  >
+                                    <Pencil size={13} />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setCameraToDelete(cam.id)}
+                                    className="p-1.5 bg-red-600/10 hover:bg-red-600/30 text-red-400 rounded-lg transition-all cursor-pointer"
+                                    title="Rimuovi telecamera"
+                                  >
+                                    <Trash2 size={13} />
+                                  </button>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
                 {/* Network / WiFi Configuration Tab */}
                 {activeSettingsTab === "network" && (
                   isMobile35 ? (

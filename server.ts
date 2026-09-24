@@ -15,6 +15,7 @@ import dns from "dns";
 import { WebSocket } from "ws";
 
 import { isValidGeminiApiKey, normalizeGeminiApiKey } from "./src/utils/geminiApiKey.ts";
+import { discoverAllCameras } from "./src/utils/cameraDiscovery.ts";
 import {
   checkForUpdate,
   getCurrentVersion,
@@ -1274,54 +1275,50 @@ async function startServer() {
     });
   });
 
-  // API per la scansione automatica delle telecamere IP sulla sottorete locale
+  // API per la scansione automatica avanzata delle telecamere IP (ONVIF WS-Discovery + DHCP leases + ARP + Port-scan)
   app.get("/api/cameras/discover", async (req, res) => {
-    console.log("[Camera Discovery] Avvio scansione sottorete locale...");
-    const subnet = getLocalSubnet();
-    if (!subnet) {
-      if (process.platform === "win32") {
-        return res.json({
-          success: true,
-          subnet: "192.168.1.x",
-          cameras: ["192.168.1.50", "192.168.1.120"]
-        });
-      }
-      return res.status(400).json({ success: false, error: "Nessuna interfaccia di rete attiva trovata per la scansione." });
-    }
-
-    const foundIps: string[] = [];
-    const scanPromises: Promise<void>[] = [];
-    
-    for (let i = 1; i <= 254; i++) {
-      const ip = `${subnet}.${i}`;
-      scanPromises.push((async () => {
-        // Scansiona prima la porta standard RTSP 554
-        const has554 = await checkPort(ip, 554, 400);
-        if (has554) {
-          foundIps.push(ip);
-          return;
-        }
-        // Fallback su porta RTSP alternativa 8554
-        const has8554 = await checkPort(ip, 8554, 400);
-        if (has8554) {
-          foundIps.push(ip);
-          return;
-        }
-        // Fallback su porta ONVIF 2020 (TP-Link Tapo C220)
-        const has2020 = await checkPort(ip, 2020, 400);
-        if (has2020) {
-          foundIps.push(ip);
-        }
-      })());
-    }
-
+    console.log("[Camera Discovery] Avvio discovery avanzato (WS-Discovery + DHCP + ARP)...");
     try {
-      await Promise.all(scanPromises);
-      console.log(`[Camera Discovery] Scansione completata. Trovati IP telecamere: ${foundIps.join(", ")}`);
-      res.json({ success: true, subnet: `${subnet}.x`, cameras: foundIps });
+      const discovered = await discoverAllCameras();
+      const cameraIps = discovered.map(d => d.ip);
+
+      console.log(`[Camera Discovery] Trovate ${discovered.length} telecamere reali:`, discovered.map(d => `${d.ip} (${d.brand || d.method})`).join(", "));
+      res.json({
+        success: true,
+        cameras: cameraIps,
+        devices: discovered,
+        count: discovered.length
+      });
     } catch (err: any) {
-      res.status(500).json({ success: false, error: err.message });
+      console.error("[Camera Discovery Error]:", err.message);
+      res.status(500).json({ success: false, error: err.message, cameras: [], devices: [], count: 0 });
     }
+  });
+
+  // API per configurare/attivare automaticamente il DHCP Server sulla porta Ethernet eth0 (NetworkManager shared)
+  app.post("/api/lan/setup-dhcp", async (req, res) => {
+    if (process.platform === "win32") {
+      return res.json({
+        success: true,
+        message: "Simulazione: DHCP Server su eth0 configurato (192.168.10.1/24)"
+      });
+    }
+
+    const { iface = "eth0", subnet = "192.168.10.1/24" } = req.body || {};
+    const cmd = `sudo nmcli connection delete Cam-LAN 2>/dev/null || true; sudo nmcli connection add type ethernet ifname ${iface} con-name "Cam-LAN" ipv4.method shared ipv4.addresses ${subnet} && sudo nmcli connection up "Cam-LAN"`;
+
+    exec(cmd, (err, stdout, stderr) => {
+      if (err) {
+        console.error("[DHCP Setup Error]:", stderr || err.message);
+        return res.status(500).json({ success: false, error: stderr || err.message });
+      }
+      console.log("[DHCP Setup Success]:", stdout.trim());
+      res.json({
+        success: true,
+        message: `DHCP Server attivato con successo su ${iface} (${subnet})`,
+        output: stdout.trim()
+      });
+    });
   });
 
   // API per testare lo stream RTSP e generare un'anteprima fotogramma

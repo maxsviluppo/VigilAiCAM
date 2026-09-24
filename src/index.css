@@ -62,13 +62,19 @@
   }
 }
 
-/* Utility to hide scrollbar */
-.no-scrollbar::-webkit-scrollbar {
-  display: none;
+/* Utility to hide scrollbars universally while preserving smooth touch & mouse scrolling */
+*::-webkit-scrollbar,
+.no-scrollbar::-webkit-scrollbar,
+.custom-scrollbar::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
 }
-.no-scrollbar {
-  -ms-overflow-style: none;  /* IE and Edge */
-  scrollbar-width: none;  /* Firefox */
+*,
+.no-scrollbar,
+.custom-scrollbar {
+  -ms-overflow-style: none !important;  /* IE and Edge */
+  scrollbar-width: none !important;  /* Firefox */
 }
 
 /* Breakpoint per Monitor 3.5" (480x320) e schermi piccoli */
