@@ -970,6 +970,9 @@ export default function App() {
       const urlParams = new URLSearchParams(window.location.search);
       const simulateOffline = urlParams.get('simulateOffline') === '1' ? '?simulateOffline=1' : '';
       const res = await fetch(`/api/network/status${simulateOffline}`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const contentType = res.headers.get("content-type") || "";
+      if (!contentType.includes("application/json")) throw new Error("Not JSON");
       const data = await res.json();
       setNetworkStatus({
         online: !!data.online,
@@ -989,11 +992,12 @@ export default function App() {
       }
       return data;
     } catch {
+      const browserOnline = typeof navigator !== 'undefined' ? navigator.onLine : false;
       setNetworkStatus(prev => ({
         ...prev,
-        online: false,
+        online: browserOnline,
         hasLocalNetwork: false,
-        hasInternet: false,
+        hasInternet: browserOnline,
         checking: false
       }));
       return null;
@@ -1009,6 +1013,18 @@ export default function App() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ip: lanIp, gateway: lanGateway, username: lanUsername, password: lanPassword })
       });
+      if (!res.ok) {
+        if (res.status === 404) {
+          setLanStatusMessage({ type: 'info', message: 'Configurazione LAN fisica disponibile solo direttamente sul Raspberry Pi.' });
+          return;
+        }
+        throw new Error(`Errore HTTP ${res.status}`);
+      }
+      const contentType = res.headers.get("content-type") || "";
+      if (!contentType.includes("application/json")) {
+        setLanStatusMessage({ type: 'info', message: 'Configurazione LAN fisica disponibile solo direttamente sul Raspberry Pi.' });
+        return;
+      }
       const data = await res.json();
       if (data.success) {
         setLanStatusMessage({ type: 'success', message: data.message || 'Connessione LAN confermata con successo!' });
@@ -1017,7 +1033,12 @@ export default function App() {
         setLanStatusMessage({ type: 'error', message: data.error || 'Errore configurazione LAN.' });
       }
     } catch (err: any) {
-      setLanStatusMessage({ type: 'error', message: err.message || 'Errore verifica LAN.' });
+      const msg = err?.message || '';
+      if (msg.includes('Unexpected token') || msg.includes('not valid JSON') || msg.includes('Failed to fetch')) {
+        setLanStatusMessage({ type: 'info', message: 'Configurazione LAN fisica disponibile solo direttamente sul Raspberry Pi.' });
+      } else {
+        setLanStatusMessage({ type: 'error', message: msg || 'Errore verifica LAN.' });
+      }
     } finally {
       setLanTesting(false);
     }
@@ -1028,6 +1049,18 @@ export default function App() {
     setWifiStatusMessage(null);
     try {
       const res = await fetch("/api/wifi/scan");
+      if (!res.ok) {
+        if (res.status === 404) {
+          setWifiStatusMessage({ type: 'info', message: 'Scansione Wi-Fi hardware attiva solo sul Raspberry Pi fisico (non disponibile nella versione web remota).' });
+          return;
+        }
+        throw new Error(`Errore HTTP ${res.status}`);
+      }
+      const contentType = res.headers.get("content-type") || "";
+      if (!contentType.includes("application/json")) {
+        setWifiStatusMessage({ type: 'info', message: 'Scansione Wi-Fi hardware attiva solo sul Raspberry Pi fisico (non disponibile nella versione web remota).' });
+        return;
+      }
       const data = await res.json();
       if (data.success && Array.isArray(data.networks)) {
         setWifiNetworks(data.networks);
@@ -1051,7 +1084,12 @@ export default function App() {
         setWifiStatusMessage({ type: 'error', message: data.error || 'Impossibile scansionare le reti Wi-Fi.' });
       }
     } catch (err: any) {
-      setWifiStatusMessage({ type: 'error', message: err.message || 'Errore durante la scansione Wi-Fi.' });
+      const msg = err?.message || '';
+      if (msg.includes('Unexpected token') || msg.includes('not valid JSON') || msg.includes('Failed to fetch')) {
+        setWifiStatusMessage({ type: 'info', message: 'Scansione Wi-Fi hardware attiva solo sul Raspberry Pi fisico (non disponibile nella versione web remota).' });
+      } else {
+        setWifiStatusMessage({ type: 'error', message: msg || 'Errore durante la scansione Wi-Fi.' });
+      }
     } finally {
       setWifiScanning(false);
     }
@@ -1070,6 +1108,18 @@ export default function App() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ssid: selectedWifiSsid, password: wifiPassword })
       });
+      if (!res.ok) {
+        if (res.status === 404) {
+          setWifiStatusMessage({ type: 'info', message: 'Connessione Wi-Fi hardware eseguibile solo direttamente sul Raspberry Pi.' });
+          return;
+        }
+        throw new Error(`Errore HTTP ${res.status}`);
+      }
+      const contentType = res.headers.get("content-type") || "";
+      if (!contentType.includes("application/json")) {
+        setWifiStatusMessage({ type: 'info', message: 'Connessione Wi-Fi hardware eseguibile solo direttamente sul Raspberry Pi.' });
+        return;
+      }
       const data = await res.json();
       if (data.success) {
         setWifiStatusMessage({ type: 'success', message: 'Connesso! Verifica connessione internet...' });
@@ -1086,7 +1136,12 @@ export default function App() {
         setWifiStatusMessage({ type: 'error', message: data.error || 'Connessione Wi-Fi fallita.' });
       }
     } catch (err: any) {
-      setWifiStatusMessage({ type: 'error', message: err.message || 'Errore durante la connessione Wi-Fi.' });
+      const msg = err?.message || '';
+      if (msg.includes('Unexpected token') || msg.includes('not valid JSON') || msg.includes('Failed to fetch')) {
+        setWifiStatusMessage({ type: 'info', message: 'Connessione Wi-Fi hardware eseguibile solo direttamente sul Raspberry Pi.' });
+      } else {
+        setWifiStatusMessage({ type: 'error', message: msg || 'Errore durante la connessione Wi-Fi.' });
+      }
     } finally {
       setWifiConnecting(false);
     }
