@@ -248,6 +248,14 @@ const IPCameraPlayer = ({ url, isAlertActive, isNightMode, imgRefCallback }: {
           return;
         }
 
+        if (response.status === 504) {
+          if (!hasFrameRef.current) {
+            setConnectionError("Camera non raggiungibile (Timeout 504) — verifica IP / Wi-Fi o cerca la camera in Impostazioni > Telecamere");
+          }
+          timeoutId = setTimeout(fetchFrame, 4000);
+          return;
+        }
+
         if (!hasFrameRef.current) {
           setConnectionError(`Errore stream (${response.status})`);
         }
@@ -1305,7 +1313,16 @@ export default function App() {
       return [];
     }
   });
-  const [activeSettingsTab, setActiveSettingsTab] = useState<"cameras" | "ai" | "email" | "telegram" | "sleep" | "test" | "log" | "network">("ai");
+  const [activeSettingsTab, setActiveSettingsTab] = useState<"cameras" | "ai" | "email" | "telegram" | "sleep" | "test" | "log" | "network">("cameras");
+  const settingsTabsRef = useRef<HTMLDivElement>(null);
+  const scrollSettingsTabs = (direction: 'left' | 'right') => {
+    if (settingsTabsRef.current) {
+      settingsTabsRef.current.scrollBy({
+        left: direction === 'left' ? -130 : 130,
+        behavior: 'smooth'
+      });
+    }
+  };
   const [logStartIndex, setLogStartIndex] = useState(0);
 
   const [isImageOptimizationEnabled, setIsImageOptimizationEnabled] = useState<boolean>(() => {
@@ -4990,9 +5007,6 @@ export default function App() {
 
               <button 
                 onClick={() => {
-                  if (activeSettingsTab === "cameras") {
-                    setActiveSettingsTab("ai");
-                  }
                   setShowSettings(true);
                 }}
                 className="p-2 sm:p-3 glass border-white/5 text-slate-500 hover:text-white rounded-lg sm:rounded-xl lg:rounded-2xl transition-all"
@@ -7428,128 +7442,182 @@ export default function App() {
                 </button>
               </div>
               
-              {/* Tab menu 3.5" — 1 riga singola con pulsanti stretti */}
+              {/* Tab menu 3.5" — con frecce laterali per scroll orizzontale */}
               {isMobile35 ? (
-                <div className="vigil-settings-35-tabs flex items-center gap-1 w-full shrink-0 my-0.5">
-                  <button type="button" onClick={() => setActiveSettingsTab("cameras")}
-                    className={`flex-1 h-7.5 py-1 px-0.5 flex items-center justify-center rounded-lg border transition-all active:scale-95 cursor-pointer ${
-                      activeSettingsTab === "cameras"
-                        ? "bg-blue-600 border-blue-400 text-white"
-                        : "bg-white/5 border-white/5 text-slate-400"
-                    }`} title="Telecamere"><Video size={14} /></button>
-                  <button type="button" onClick={() => { setActiveSettingsTab("network"); scanWifiNetworks(); }}
-                    className={`flex-1 h-7.5 py-1 px-0.5 flex items-center justify-center rounded-lg border transition-all active:scale-95 cursor-pointer ${
-                      activeSettingsTab === "network"
-                        ? "bg-amber-600 border-amber-400 text-white"
-                        : !networkStatus.online ? "bg-amber-600/20 border-amber-500/50 text-amber-400 animate-pulse" : "bg-white/5 border-white/5 text-slate-400"
-                    }`} title="Rete (Wi-Fi / LAN)"><Network size={14} /></button>
-                  <button type="button" onClick={() => setActiveSettingsTab("ai")}
-                    className={`flex-1 h-7.5 py-1 px-0.5 flex items-center justify-center rounded-lg border transition-all active:scale-95 cursor-pointer ${
-                      activeSettingsTab === "ai" ? "bg-blue-600 border-blue-400 text-white" : "bg-white/5 border-white/5 text-slate-400"
-                    }`} title="AI"><Cpu size={14} /></button>
-                  <button type="button" onClick={() => setActiveSettingsTab("email")}
-                    className={`flex-1 h-7.5 py-1 px-0.5 flex items-center justify-center rounded-lg border transition-all active:scale-95 cursor-pointer ${
-                      activeSettingsTab === "email" ? "bg-blue-600 border-blue-400 text-white" : "bg-white/5 border-white/5 text-slate-400"
-                    }`} title="Email"><Mail size={14} /></button>
-                  <button type="button" onClick={() => setActiveSettingsTab("telegram")}
-                    className={`flex-1 h-7.5 py-1 px-0.5 flex items-center justify-center rounded-lg border transition-all active:scale-95 cursor-pointer ${
-                      activeSettingsTab === "telegram" ? "bg-blue-600 border-blue-400 text-white" : "bg-white/5 border-white/5 text-slate-400"
-                    }`} title="Telegram"><Send size={14} /></button>
-                  <button type="button" onClick={() => { setActiveSettingsTab("log"); setLogStartIndex(0); }}
-                    className={`flex-1 h-7.5 py-1 px-0.5 flex items-center justify-center rounded-lg border transition-all active:scale-95 cursor-pointer ${
-                      activeSettingsTab === "log" ? "bg-blue-600 border-blue-400 text-white" : "bg-white/5 border-white/5 text-slate-400"
-                    }`} title="Log"><History size={14} /></button>
-                  <button type="button" onClick={() => setActiveSettingsTab("test")}
-                    className={`flex-1 h-7.5 py-1 px-0.5 flex items-center justify-center rounded-lg border transition-all active:scale-95 cursor-pointer ${
-                      activeSettingsTab === "test" ? "bg-blue-600 border-blue-400 text-white" : "bg-white/5 border-white/5 text-slate-400"
-                    }`} title="Test"><Activity size={14} /></button>
+                <div className="flex items-center gap-1 w-full shrink-0 my-0.5">
+                  <button
+                    type="button"
+                    onClick={() => scrollSettingsTabs('left')}
+                    className="h-7.5 w-6 flex items-center justify-center rounded-lg bg-white/5 hover:bg-white/15 border border-white/10 text-slate-300 active:scale-95 shrink-0 cursor-pointer shadow-sm transition-all"
+                    title="Scorri schede a sinistra"
+                  >
+                    <ChevronLeft size={14} />
+                  </button>
+                  <div
+                    ref={settingsTabsRef}
+                    className="vigil-settings-35-tabs flex items-center gap-1 overflow-x-auto no-scrollbar scroll-smooth flex-1 my-0.5"
+                  >
+                    <button type="button" onClick={() => setActiveSettingsTab("cameras")}
+                      className={`h-7.5 py-1 px-2 shrink-0 flex items-center gap-1 justify-center rounded-lg border transition-all active:scale-95 cursor-pointer text-[9px] font-bold whitespace-nowrap ${
+                        activeSettingsTab === "cameras"
+                          ? "bg-blue-600 border-blue-400 text-white"
+                          : "bg-white/5 border-white/5 text-slate-400"
+                      }`} title="Telecamere"><Video size={13} /><span>Cam</span></button>
+                    <button type="button" onClick={() => setActiveSettingsTab("test")}
+                      className={`h-7.5 py-1 px-2 shrink-0 flex items-center gap-1 justify-center rounded-lg border transition-all active:scale-95 cursor-pointer text-[9px] font-bold whitespace-nowrap ${
+                        activeSettingsTab === "test" ? "bg-blue-600 border-blue-400 text-white" : "bg-white/5 border-white/5 text-slate-400"
+                      }`} title="Sistema"><Activity size={13} /><span>Sistema</span></button>
+                    <button type="button" onClick={() => { setActiveSettingsTab("network"); scanWifiNetworks(); }}
+                      className={`h-7.5 py-1 px-2 shrink-0 flex items-center gap-1 justify-center rounded-lg border transition-all active:scale-95 cursor-pointer text-[9px] font-bold whitespace-nowrap ${
+                        activeSettingsTab === "network"
+                          ? "bg-amber-600 border-amber-400 text-white"
+                          : !networkStatus.online ? "bg-amber-600/20 border-amber-500/50 text-amber-400 animate-pulse" : "bg-white/5 border-white/5 text-slate-400"
+                      }`} title="Rete (Wi-Fi / LAN)"><Network size={13} /><span>Rete</span></button>
+                    <button type="button" onClick={() => setActiveSettingsTab("ai")}
+                      className={`h-7.5 py-1 px-2 shrink-0 flex items-center gap-1 justify-center rounded-lg border transition-all active:scale-95 cursor-pointer text-[9px] font-bold whitespace-nowrap ${
+                        activeSettingsTab === "ai" ? "bg-blue-600 border-blue-400 text-white" : "bg-white/5 border-white/5 text-slate-400"
+                      }`} title="AI"><Cpu size={13} /><span>AI</span></button>
+                    <button type="button" onClick={() => setActiveSettingsTab("email")}
+                      className={`h-7.5 py-1 px-2 shrink-0 flex items-center gap-1 justify-center rounded-lg border transition-all active:scale-95 cursor-pointer text-[9px] font-bold whitespace-nowrap ${
+                        activeSettingsTab === "email" ? "bg-blue-600 border-blue-400 text-white" : "bg-white/5 border-white/5 text-slate-400"
+                      }`} title="Email"><Mail size={13} /><span>Email</span></button>
+                    <button type="button" onClick={() => setActiveSettingsTab("telegram")}
+                      className={`h-7.5 py-1 px-2 shrink-0 flex items-center gap-1 justify-center rounded-lg border transition-all active:scale-95 cursor-pointer text-[9px] font-bold whitespace-nowrap ${
+                        activeSettingsTab === "telegram" ? "bg-blue-600 border-blue-400 text-white" : "bg-white/5 border-white/5 text-slate-400"
+                      }`} title="Telegram"><Send size={13} /><span>Telegram</span></button>
+                    <button type="button" onClick={() => { setActiveSettingsTab("log"); setLogStartIndex(0); }}
+                      className={`h-7.5 py-1 px-2 shrink-0 flex items-center gap-1 justify-center rounded-lg border transition-all active:scale-95 cursor-pointer text-[9px] font-bold whitespace-nowrap ${
+                        activeSettingsTab === "log" ? "bg-blue-600 border-blue-400 text-white" : "bg-white/5 border-white/5 text-slate-400"
+                      }`} title="Log"><History size={13} /><span>Log</span></button>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => scrollSettingsTabs('right')}
+                    className="h-7.5 w-6 flex items-center justify-center rounded-lg bg-white/5 hover:bg-white/15 border border-white/10 text-slate-300 active:scale-95 shrink-0 cursor-pointer shadow-sm transition-all"
+                    title="Scorri schede a destra"
+                  >
+                    <ChevronRight size={14} />
+                  </button>
                 </div>
               ) : (
-                /* Tab menu Desktop — 1 riga singola con pulsanti compatti */
-                <div className="flex items-center gap-1.5 mb-2 w-full overflow-x-auto no-scrollbar pb-1">
+                /* Tab menu Desktop — con Telecamere e Sistema come prime schede e frecce di scorrimento orizzontale */
+                <div className="flex items-center gap-1.5 mb-2 w-full">
                   <button
                     type="button"
-                    onClick={() => setActiveSettingsTab("ai")}
-                    className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-2 rounded-xl border text-[10px] font-black uppercase tracking-wider transition-all active:scale-95 cursor-pointer whitespace-nowrap ${
-                      activeSettingsTab === "ai"
-                        ? "bg-blue-600 border-blue-400 text-white shadow-lg shadow-blue-500/25"
-                        : "bg-white/5 border-white/5 text-slate-400 hover:bg-white/10 hover:text-white"
-                    }`}
+                    onClick={() => scrollSettingsTabs('left')}
+                    className="p-2 h-9 w-8 flex items-center justify-center rounded-xl bg-white/5 hover:bg-white/15 border border-white/10 text-slate-300 active:scale-95 shrink-0 cursor-pointer shadow-sm transition-all"
+                    title="Scorri schede a sinistra"
                   >
-                    <Cpu size={14} />
-                    <span>AI & Modelli</span>
+                    <ChevronLeft size={16} />
                   </button>
+                  <div
+                    ref={settingsTabsRef}
+                    className="flex items-center gap-1.5 overflow-x-auto no-scrollbar scroll-smooth flex-1 pb-1"
+                  >
+                    <button
+                      type="button"
+                      onClick={() => setActiveSettingsTab("cameras")}
+                      className={`flex-none flex items-center justify-center gap-1.5 py-2 px-3.5 rounded-xl border text-[10px] font-black uppercase tracking-wider transition-all active:scale-95 cursor-pointer whitespace-nowrap ${
+                        activeSettingsTab === "cameras"
+                          ? "bg-blue-600 border-blue-400 text-white shadow-lg shadow-blue-500/25"
+                          : "bg-white/5 border-white/5 text-slate-400 hover:bg-white/10 hover:text-white"
+                      }`}
+                    >
+                      <Video size={14} />
+                      <span>Telecamere</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setActiveSettingsTab("test")}
+                      className={`flex-none flex items-center justify-center gap-1.5 py-2 px-3.5 rounded-xl border text-[10px] font-black uppercase tracking-wider transition-all active:scale-95 cursor-pointer whitespace-nowrap ${
+                        activeSettingsTab === "test"
+                          ? "bg-blue-600 border-blue-400 text-white shadow-lg shadow-blue-500/25"
+                          : "bg-white/5 border-white/5 text-slate-400 hover:bg-white/10 hover:text-white"
+                      }`}
+                    >
+                      <Activity size={14} />
+                      <span>Sistema</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { setActiveSettingsTab("network"); scanWifiNetworks(); }}
+                      className={`flex-none flex items-center justify-center gap-1.5 py-2 px-3.5 rounded-xl border text-[10px] font-black uppercase tracking-wider transition-all active:scale-95 cursor-pointer whitespace-nowrap ${
+                        activeSettingsTab === "network"
+                          ? "bg-amber-600 border-amber-400 text-white shadow-lg shadow-amber-500/25"
+                          : "bg-white/5 border-white/5 text-slate-400 hover:bg-white/10 hover:text-white"
+                      }`}
+                    >
+                      <Network size={14} />
+                      <span>Rete</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setActiveSettingsTab("ai")}
+                      className={`flex-none flex items-center justify-center gap-1.5 py-2 px-3.5 rounded-xl border text-[10px] font-black uppercase tracking-wider transition-all active:scale-95 cursor-pointer whitespace-nowrap ${
+                        activeSettingsTab === "ai"
+                          ? "bg-blue-600 border-blue-400 text-white shadow-lg shadow-blue-500/25"
+                          : "bg-white/5 border-white/5 text-slate-400 hover:bg-white/10 hover:text-white"
+                      }`}
+                    >
+                      <Cpu size={14} />
+                      <span>AI & Modelli</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setActiveSettingsTab("email")}
+                      className={`flex-none flex items-center justify-center gap-1.5 py-2 px-3.5 rounded-xl border text-[10px] font-black uppercase tracking-wider transition-all active:scale-95 cursor-pointer whitespace-nowrap ${
+                        activeSettingsTab === "email"
+                          ? "bg-blue-600 border-blue-400 text-white shadow-lg shadow-blue-500/25"
+                          : "bg-white/5 border-white/5 text-slate-400 hover:bg-white/10 hover:text-white"
+                      }`}
+                    >
+                      <Mail size={14} />
+                      <span>Email</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setActiveSettingsTab("telegram")}
+                      className={`flex-none flex items-center justify-center gap-1.5 py-2 px-3.5 rounded-xl border text-[10px] font-black uppercase tracking-wider transition-all active:scale-95 cursor-pointer whitespace-nowrap ${
+                        activeSettingsTab === "telegram"
+                          ? "bg-blue-600 border-blue-400 text-white shadow-lg shadow-blue-500/25"
+                          : "bg-white/5 border-white/5 text-slate-400 hover:bg-white/10 hover:text-white"
+                      }`}
+                    >
+                      <Send size={14} />
+                      <span>Telegram</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setActiveSettingsTab("sleep")}
+                      className={`flex-none flex items-center justify-center gap-1.5 py-2 px-3.5 rounded-xl border text-[10px] font-black uppercase tracking-wider transition-all active:scale-95 cursor-pointer whitespace-nowrap ${
+                        activeSettingsTab === "sleep"
+                          ? "bg-blue-600 border-blue-400 text-white shadow-lg shadow-blue-500/25"
+                          : "bg-white/5 border-white/5 text-slate-400 hover:bg-white/10 hover:text-white"
+                      }`}
+                    >
+                      <Lock size={14} />
+                      <span>Anti-sleep</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { setActiveSettingsTab("log"); setLogStartIndex(0); }}
+                      className={`flex-none flex items-center justify-center gap-1.5 py-2 px-3.5 rounded-xl border text-[10px] font-black uppercase tracking-wider transition-all active:scale-95 cursor-pointer whitespace-nowrap ${
+                        activeSettingsTab === "log"
+                          ? "bg-blue-600 border-blue-400 text-white shadow-lg shadow-blue-500/25"
+                          : "bg-white/5 border-white/5 text-slate-400 hover:bg-white/10 hover:text-white"
+                      }`}
+                    >
+                      <History size={14} />
+                      <span>Log</span>
+                    </button>
+                  </div>
                   <button
                     type="button"
-                    onClick={() => { setActiveSettingsTab("network"); scanWifiNetworks(); }}
-                    className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-2 rounded-xl border text-[10px] font-black uppercase tracking-wider transition-all active:scale-95 cursor-pointer whitespace-nowrap ${
-                      activeSettingsTab === "network"
-                        ? "bg-amber-600 border-amber-400 text-white shadow-lg shadow-amber-500/25"
-                        : "bg-white/5 border-white/5 text-slate-400 hover:bg-white/10 hover:text-white"
-                    }`}
+                    onClick={() => scrollSettingsTabs('right')}
+                    className="p-2 h-9 w-8 flex items-center justify-center rounded-xl bg-white/5 hover:bg-white/15 border border-white/10 text-slate-300 active:scale-95 shrink-0 cursor-pointer shadow-sm transition-all"
+                    title="Scorri schede a destra"
                   >
-                    <Network size={14} />
-                    <span>Rete</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setActiveSettingsTab("email")}
-                    className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-2 rounded-xl border text-[10px] font-black uppercase tracking-wider transition-all active:scale-95 cursor-pointer whitespace-nowrap ${
-                      activeSettingsTab === "email"
-                        ? "bg-blue-600 border-blue-400 text-white shadow-lg shadow-blue-500/25"
-                        : "bg-white/5 border-white/5 text-slate-400 hover:bg-white/10 hover:text-white"
-                    }`}
-                  >
-                    <Mail size={14} />
-                    <span>Email</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setActiveSettingsTab("telegram")}
-                    className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-2 rounded-xl border text-[10px] font-black uppercase tracking-wider transition-all active:scale-95 cursor-pointer whitespace-nowrap ${
-                      activeSettingsTab === "telegram"
-                        ? "bg-blue-600 border-blue-400 text-white shadow-lg shadow-blue-500/25"
-                        : "bg-white/5 border-white/5 text-slate-400 hover:bg-white/10 hover:text-white"
-                    }`}
-                  >
-                    <Send size={14} />
-                    <span>Telegram</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setActiveSettingsTab("sleep")}
-                    className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-2 rounded-xl border text-[10px] font-black uppercase tracking-wider transition-all active:scale-95 cursor-pointer whitespace-nowrap ${
-                      activeSettingsTab === "sleep"
-                        ? "bg-blue-600 border-blue-400 text-white shadow-lg shadow-blue-500/25"
-                        : "bg-white/5 border-white/5 text-slate-400 hover:bg-white/10 hover:text-white"
-                    }`}
-                  >
-                    <Lock size={14} />
-                    <span>Anti-sleep</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setActiveSettingsTab("test")}
-                    className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-2 rounded-xl border text-[10px] font-black uppercase tracking-wider transition-all active:scale-95 cursor-pointer whitespace-nowrap ${
-                      activeSettingsTab === "test"
-                        ? "bg-blue-600 border-blue-400 text-white shadow-lg shadow-blue-500/25"
-                        : "bg-white/5 border-white/5 text-slate-400 hover:bg-white/10 hover:text-white"
-                    }`}
-                  >
-                    <RefreshCw size={14} />
-                    <span>Sistema</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setActiveSettingsTab("cameras")}
-                    className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-2 rounded-xl border text-[10px] font-black uppercase tracking-wider transition-all active:scale-95 cursor-pointer whitespace-nowrap ${
-                      activeSettingsTab === "cameras"
-                        ? "bg-blue-600 border-blue-400 text-white shadow-lg shadow-blue-500/25"
-                        : "bg-white/5 border-white/5 text-slate-400 hover:bg-white/10 hover:text-white"
-                    }`}
-                  >
-                    <Video size={14} />
-                    <span>Telecamere</span>
+                    <ChevronRight size={16} />
                   </button>
                 </div>
               )}
