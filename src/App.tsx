@@ -348,6 +348,18 @@ const VirtualKeyboard: React.FC<VirtualKeyboardProps> = ({
 
   if (!activeField) return null;
 
+  // In modalità Desktop (schermo grande o PC senza touch), NON mostrare MAI la tastiera virtuale
+  const urlParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
+  const isExplicitPi = urlParams?.get('mode') === 'pi';
+  const isExplicitPc = urlParams?.get('mode') === 'pc';
+  const ua = typeof navigator !== 'undefined' ? navigator.userAgent.toLowerCase() : '';
+  const isRealRaspberry = ua.includes('linux arm') && !ua.includes('android');
+  const isSquatWindow = typeof window !== 'undefined' && window.innerWidth <= 800 && window.innerHeight <= 450;
+  const isTouchScreen = typeof window !== 'undefined' && ('ontouchstart' in window || navigator.maxTouchPoints > 0) && window.innerWidth <= 820;
+
+  const isDesktop = isExplicitPc || (!isExplicitPi && !isRealRaspberry && !isSquatWindow && !isTouchScreen);
+  if (isDesktop) return null;
+
   const normalRows = [
     ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '-', '_'],
     ['q', 'w', 'e', 'r', 't', 'y', 'u', 'i', 'o', 'p', '.', '/'],
@@ -1293,7 +1305,7 @@ export default function App() {
       return [];
     }
   });
-  const [activeSettingsTab, setActiveSettingsTab] = useState<"cameras" | "ai" | "email" | "telegram" | "sleep" | "test" | "log" | "network">("cameras");
+  const [activeSettingsTab, setActiveSettingsTab] = useState<"cameras" | "ai" | "email" | "telegram" | "sleep" | "test" | "log" | "network">("ai");
   const [logStartIndex, setLogStartIndex] = useState(0);
 
   const [isImageOptimizationEnabled, setIsImageOptimizationEnabled] = useState<boolean>(() => {
@@ -1345,9 +1357,18 @@ export default function App() {
     });
   };
 
-  // State della tastiera virtuale e del rilevamento tastiera fisica
+  // State della tastiera virtuale: disattivata di default in modalità desktop, attiva solo su Raspberry Pi 3.5" o touch
   const [keyboardTarget, setKeyboardTarget] = useState<{ id: string; title: string } | null>(null);
-  const [useVirtualKeyboard, setUseVirtualKeyboard] = useState(true);
+  const [useVirtualKeyboard, setUseVirtualKeyboard] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('mode') === 'pc') return false;
+    if (urlParams.get('mode') === 'pi') return true;
+    const ua = navigator.userAgent.toLowerCase();
+    const isRealRaspberry = ua.includes('linux arm') && !ua.includes('android');
+    const isSquatWindow = window.innerWidth <= 800 && window.innerHeight <= 450;
+    return isRealRaspberry || isSquatWindow;
+  });
   const [showApiKeyModal, setShowApiKeyModal] = useState(false);
   const [modalGeminiKey, setModalGeminiKey] = useState(() => localStorage.getItem("vigilai_gemini_key") || "");
   const [showApiKeyHeaderInput, setShowApiKeyHeaderInput] = useState(false);
@@ -1383,6 +1404,13 @@ export default function App() {
     }
   }, [isMultiView, goToNextCamera, goToPrevCamera]);
 
+  // Disattiva e chiudi la tastiera a schermo automaticamente se siamo in modalità desktop
+  useEffect(() => {
+    if (!isMobile35) {
+      setUseVirtualKeyboard(false);
+      setKeyboardTarget(null);
+    }
+  }, [isMobile35]);
 
   useEffect(() => {
     const handlePhysicalKeyboard = (e: KeyboardEvent) => {
@@ -4929,15 +4957,17 @@ export default function App() {
                 </AnimatePresence>
               </div>
 
-              {/* Pulsante Forza Tastiera Virtuale */}
-              <button 
-                type="button"
-                onClick={() => setUseVirtualKeyboard(!useVirtualKeyboard)}
-                className={`p-2 sm:p-3 rounded-lg sm:rounded-xl lg:rounded-2xl transition-all border ${useVirtualKeyboard ? 'bg-blue-600/20 border-blue-500/30 text-blue-400 shadow-[0_0_15px_rgba(59,130,246,0.2)]' : 'glass border-white/5 text-slate-500 hover:text-white'}`}
-                title={useVirtualKeyboard ? "Tastiera Virtuale Attiva" : "Tastiera Virtuale Disattivata"}
-              >
-                <Keyboard size={14} className="sm:w-[18px] sm:h-[18px]" />
-              </button>
+              {/* Pulsante Tastiera Virtuale (visibile solo su touch / Raspberry Pi 3.5") */}
+              {isMobile35 && (
+                <button 
+                  type="button"
+                  onClick={() => setUseVirtualKeyboard(!useVirtualKeyboard)}
+                  className={`p-2 sm:p-3 rounded-lg sm:rounded-xl lg:rounded-2xl transition-all border ${useVirtualKeyboard ? 'bg-blue-600/20 border-blue-500/30 text-blue-400 shadow-[0_0_15px_rgba(59,130,246,0.2)]' : 'glass border-white/5 text-slate-500 hover:text-white'}`}
+                  title={useVirtualKeyboard ? "Tastiera Virtuale Attiva" : "Tastiera Virtuale Disattivata"}
+                >
+                  <Keyboard size={14} className="sm:w-[18px] sm:h-[18px]" />
+                </button>
+              )}
 
               <button 
                 onClick={() => {
@@ -4959,9 +4989,14 @@ export default function App() {
               </button>
 
               <button 
-                onClick={() => setShowSettings(true)}
+                onClick={() => {
+                  if (activeSettingsTab === "cameras") {
+                    setActiveSettingsTab("ai");
+                  }
+                  setShowSettings(true);
+                }}
                 className="p-2 sm:p-3 glass border-white/5 text-slate-500 hover:text-white rounded-lg sm:rounded-xl lg:rounded-2xl transition-all"
-                title="Impostazioni"
+                title="Impostazioni Generali di Sistema"
               >
                 <Settings size={14} className="sm:w-[18px] sm:h-[18px]" />
               </button>
@@ -7434,15 +7469,15 @@ export default function App() {
                 <div className="flex items-center gap-1.5 mb-2 w-full overflow-x-auto no-scrollbar pb-1">
                   <button
                     type="button"
-                    onClick={() => setActiveSettingsTab("cameras")}
+                    onClick={() => setActiveSettingsTab("ai")}
                     className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-2 rounded-xl border text-[10px] font-black uppercase tracking-wider transition-all active:scale-95 cursor-pointer whitespace-nowrap ${
-                      activeSettingsTab === "cameras"
+                      activeSettingsTab === "ai"
                         ? "bg-blue-600 border-blue-400 text-white shadow-lg shadow-blue-500/25"
                         : "bg-white/5 border-white/5 text-slate-400 hover:bg-white/10 hover:text-white"
                     }`}
                   >
-                    <Video size={14} />
-                    <span>Telecamere</span>
+                    <Cpu size={14} />
+                    <span>AI & Modelli</span>
                   </button>
                   <button
                     type="button"
@@ -7455,18 +7490,6 @@ export default function App() {
                   >
                     <Network size={14} />
                     <span>Rete</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setActiveSettingsTab("ai")}
-                    className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-2 rounded-xl border text-[10px] font-black uppercase tracking-wider transition-all active:scale-95 cursor-pointer whitespace-nowrap ${
-                      activeSettingsTab === "ai"
-                        ? "bg-blue-600 border-blue-400 text-white shadow-lg shadow-blue-500/25"
-                        : "bg-white/5 border-white/5 text-slate-400 hover:bg-white/10 hover:text-white"
-                    }`}
-                  >
-                    <Cpu size={14} />
-                    <span>AI</span>
                   </button>
                   <button
                     type="button"
@@ -7515,6 +7538,18 @@ export default function App() {
                   >
                     <RefreshCw size={14} />
                     <span>Sistema</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setActiveSettingsTab("cameras")}
+                    className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-2 rounded-xl border text-[10px] font-black uppercase tracking-wider transition-all active:scale-95 cursor-pointer whitespace-nowrap ${
+                      activeSettingsTab === "cameras"
+                        ? "bg-blue-600 border-blue-400 text-white shadow-lg shadow-blue-500/25"
+                        : "bg-white/5 border-white/5 text-slate-400 hover:bg-white/10 hover:text-white"
+                    }`}
+                  >
+                    <Video size={14} />
+                    <span>Telecamere</span>
                   </button>
                 </div>
               )}
@@ -9523,9 +9558,9 @@ export default function App() {
         )}
       </AnimatePresence>
 
-      {/* Global Virtual Keyboard */}
+      {/* Global Virtual Keyboard: MAI in modalità desktop, visibile solo su touch / Raspberry Pi 3.5" */}
       <AnimatePresence>
-        {keyboardTarget && (
+        {keyboardTarget && isMobile35 && (
           <VirtualKeyboard
             activeField={keyboardTarget.id}
             value={getKeyboardProps()?.value || ""}

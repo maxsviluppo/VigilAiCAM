@@ -46,8 +46,8 @@ function guessBrandFromMac(mac?: string): string {
   if (['54AF97', '3460F9', '6032B1', 'AC84C6', 'CC32E5', 'B0A7B9', 'E4C32A', '98254A', '704F57', 'F46BEF', '50D4F7', '40313C'].includes(clean)) {
     return 'TP-Link Tapo';
   }
-  if (['C42F90', '1868CB', 'E05349', '4419B6', 'BC8A08', 'D46E0E', '2857BE'].includes(clean)) {
-    return 'Hikvision / EZVIZ';
+  if (['C42F90', '1868CB', 'E05349', '4419B6', 'BC8A08', 'D46E0E', '2857BE', '34C6DD', '20BBBC'].includes(clean)) {
+    return 'EZVIZ / Hikvision';
   }
   if (['3C8CF8', 'E0508B', 'B8A386', 'A0BDCD', '4CE173'].includes(clean)) {
     return 'Dahua / IMOU';
@@ -227,6 +227,29 @@ export async function getArpCameras(excludeIps: Set<string> = new Set()): Promis
   }
 
   if (candidateIps.length === 0) {
+    // Esegui rapido scan di rete (sweep porta 8000/554) per popolare l'ARP cache se vuota
+    try {
+      const nets = networkInterfaces();
+      const localSubnets: string[] = [];
+      for (const name of Object.keys(nets)) {
+        for (const netInfo of nets[name] || []) {
+          if (netInfo.family === 'IPv4' && !netInfo.internal && (netInfo.address.startsWith('192.168.') || netInfo.address.startsWith('10.'))) {
+            const prefix = netInfo.address.split('.').slice(0, 3).join('.');
+            if (!localSubnets.includes(prefix)) localSubnets.push(prefix);
+          }
+        }
+      }
+      for (const prefix of localSubnets) {
+        const sweepHosts: string[] = [];
+        for (let i = 1; i <= 254; i++) sweepHosts.push(`${prefix}.${i}`);
+        for (let i = 0; i < sweepHosts.length; i += 35) {
+          await Promise.all(sweepHosts.slice(i, i + 35).map(ip => checkPort(ip, 8000, 150)));
+        }
+      }
+    } catch {
+      // ignore sweep errors
+    }
+
     await new Promise<void>((resolve) => {
       exec('arp -a', (err, stdout) => {
         if (!err && stdout) {
@@ -252,7 +275,7 @@ export async function getArpCameras(excludeIps: Set<string> = new Set()): Promis
     });
   }
 
-  // Verifica TCP reale: un host in tabella ARP è una telecamera SOLO se risponde su RTSP o ONVIF
+  // Verifica TCP reale: un host in tabella ARP è una telecamera se risponde su RTSP, ONVIF o porta EZVIZ/Hikvision (8000)
   const confirmed: DiscoveredCamera[] = [];
   await Promise.all(
     candidateIps.map(async (c) => {
@@ -276,6 +299,18 @@ export async function getArpCameras(excludeIps: Set<string> = new Set()): Promis
           mac: c.mac,
           hostname: c.hostname,
           brand: 'TP-Link Tapo (ONVIF)',
+          method: 'arp'
+        });
+        return;
+      }
+      const is8000 = await checkPort(c.ip, 8000, 350);
+      if (is8000) {
+        confirmed.push({
+          ip: c.ip,
+          port: 554,
+          mac: c.mac,
+          hostname: c.hostname,
+          brand: guessBrandFromMac(c.mac) !== 'Telecamera IP / ONVIF' ? guessBrandFromMac(c.mac) : 'EZVIZ / Hikvision (Porta 8000)',
           method: 'arp'
         });
       }
@@ -382,9 +417,12 @@ export async function discoverAllCameras(): Promise<DiscoveredCamera[]> {
 
   // Costruisci l'URL RTSP di default per ogni telecamera reale trovata
   const results = Array.from(combinedMap.values()).map(cam => {
+    const isEzviz = cam.brand?.toLowerCase().includes('ezviz') || cam.brand?.toLowerCase().includes('hikvision');
     return {
       ...cam,
-      rtspUrl: `rtsp://${cam.ip}:${cam.port || 554}/stream1`
+      rtspUrl: isEzviz
+        ? `rtsp://admin:VERIFICATION_CODE@${cam.ip}:554/h264/ch1/main`
+        : `rtsp://${cam.ip}:${cam.port || 554}/stream1`
     };
   });
 
