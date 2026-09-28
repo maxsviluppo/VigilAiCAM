@@ -32,7 +32,8 @@ import {
   Check,
   Mail,
   Send,
-  Radio
+  Radio,
+  FileText
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { AdminUserCamerasWorkspace, type AdminManagedUser } from "./AdminUserCamerasWorkspace";
@@ -617,6 +618,7 @@ export const AdminConsole: React.FC<AdminConsoleProps> = ({ onLogout, onBackToAp
                           </td>
                           <td className="py-3.5 px-4 text-right">
                             <div className="flex items-center justify-end gap-1.5">
+                              {/* Pulsante Scheda Utente Dedicata */}
                               <button
                                 type="button"
                                 onClick={() =>
@@ -624,12 +626,18 @@ export const AdminConsole: React.FC<AdminConsoleProps> = ({ onLogout, onBackToAp
                                     id: tenant.id,
                                     email: tenant.email,
                                     companyName: tenant.companyName,
+                                    plan: tenant.plan,
+                                    isBlocked: tenant.isBlocked,
+                                    camerasCount: tenant.camerasCount,
+                                    maxCameras: tenant.maxCameras,
+                                    expiresAt: tenant.expiresAt,
                                   })
                                 }
-                                className="p-1.5 rounded-lg bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 hover:text-blue-300 transition-all"
-                                title="Scheda telecamere utente"
+                                className="px-2.5 py-1.5 rounded-lg bg-blue-600/20 hover:bg-blue-600/30 text-blue-400 hover:text-blue-300 border border-blue-500/30 text-[11px] font-bold inline-flex items-center gap-1.5 transition-all shadow-sm"
+                                title="Apri Scheda Utente dedicata"
                               >
-                                <Camera size={14} />
+                                <FileText size={13} />
+                                <span>Scheda Utente</span>
                               </button>
                               {/* Edit plan modal trigger */}
                               <button

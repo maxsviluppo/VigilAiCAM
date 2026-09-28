@@ -1473,6 +1473,100 @@ async function startServer() {
     });
   });
 
+  // POST /api/cameras/check-status — verifica live stato online/offline della telecamera
+  app.post("/api/cameras/check-status", async (req, res) => {
+    const { ip, port, url, rtspPath, type } = req.body || {};
+
+    if (type === "webcam" || type === "browser") {
+      return res.json({
+        success: true,
+        online: true,
+        streamActive: false,
+        message: "Webcam locale / browser",
+        responseTimeMs: 0
+      });
+    }
+
+    let targetHost = (ip || "").trim();
+    let targetPort = Number(port) || 554;
+
+    if (url) {
+      const match = url.match(/@([^:/]+)(?::(\d+))?/);
+      if (match) {
+        if (!targetHost) targetHost = match[1];
+        if (!port && match[2]) targetPort = Number(match[2]);
+      }
+    }
+
+    if (url || (targetHost && rtspPath)) {
+      const rtspKey = canonicalRtspKey(url || `${targetHost}:${targetPort}${rtspPath || "/stream1"}`);
+      const stream = activeStreams.get(rtspKey);
+      if (stream && stream.process && !stream.process.killed && stream.latestFrame && stream.latestFrame.length > 0) {
+        return res.json({
+          success: true,
+          online: true,
+          streamActive: true,
+          message: "Stream live attivo in memoria",
+          responseTimeMs: 1
+        });
+      }
+    }
+
+    if (!targetHost || !targetHost.includes(".") || targetHost.endsWith(".")) {
+      return res.json({
+        success: true,
+        online: false,
+        streamActive: false,
+        error: "Indirizzo IP non configurato o non valido"
+      });
+    }
+
+    const net = await import("net");
+    const socket = new net.Socket();
+    const startTime = Date.now();
+    let responded = false;
+
+    socket.setTimeout(2500);
+
+    socket.connect(targetPort, targetHost, () => {
+      if (responded) return;
+      responded = true;
+      const responseTimeMs = Date.now() - startTime;
+      socket.destroy();
+      return res.json({
+        success: true,
+        online: true,
+        streamActive: false,
+        responseTimeMs,
+        message: `Raggiungibile in ${responseTimeMs}ms`
+      });
+    });
+
+    socket.on("error", (err) => {
+      if (responded) return;
+      responded = true;
+      socket.destroy();
+      return res.json({
+        success: true,
+        online: false,
+        streamActive: false,
+        error: err.message
+      });
+    });
+
+    socket.on("timeout", () => {
+      if (responded) return;
+      responded = true;
+      socket.destroy();
+      return res.json({
+        success: true,
+        online: false,
+        streamActive: false,
+        error: "Timeout connessione (2.5s)"
+      });
+    });
+  });
+
   // Reindirizza tutte le richieste HTML al Setup Wizard se non configurato o se si accede tramite il backdoor IP
   app.use((req, res, next) => {
     const host = req.headers.host || "";
@@ -2248,6 +2342,41 @@ async function startServer() {
       res.json({ success: true, camera });
     } catch (err: any) {
       console.error("[SaaS Admin] PUT user camera:", err.message);
+      res.json({ success: false, error: err.message });
+    }
+  });
+
+  // GET /api/admin/user/:userId/overview — panoramica profilo, email notifica allarmi e ultimi 5 eventi
+  app.get("/api/admin/user/:userId/overview", async (req, res) => {
+    if (!checkAdminToken(req, res)) return;
+    const { userId } = req.params;
+    if (!userId) {
+      return res.status(400).json({ success: false, error: "userId mancante" });
+    }
+    try {
+      const { getUserOverview } = await import("./lib/adminUserCameras.ts");
+      const overview = await getUserOverview(userId);
+      res.json({ success: true, ...overview });
+    } catch (err: any) {
+      console.error("[SaaS Admin] GET user overview:", err.message);
+      res.json({ success: false, error: err.message });
+    }
+  });
+
+  // PUT /api/admin/user/:userId/notification-emails — aggiorna lista email invio allarme
+  app.put("/api/admin/user/:userId/notification-emails", async (req, res) => {
+    if (!checkAdminToken(req, res)) return;
+    const { userId } = req.params;
+    const emails = req.body?.emails;
+    if (!userId || !Array.isArray(emails)) {
+      return res.status(400).json({ success: false, error: "Parametri non validi (array emails richiesto)" });
+    }
+    try {
+      const { updateUserNotificationEmails } = await import("./lib/adminUserCameras.ts");
+      const updatedEmails = await updateUserNotificationEmails(userId, emails);
+      res.json({ success: true, notificationEmails: updatedEmails });
+    } catch (err: any) {
+      console.error("[SaaS Admin] PUT user notification emails:", err.message);
       res.json({ success: false, error: err.message });
     }
   });
