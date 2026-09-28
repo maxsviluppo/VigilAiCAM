@@ -4844,13 +4844,6 @@ export default function App() {
       {/* Main Content Area */}
       <main className={`flex-1 flex flex-col min-w-0 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 ${isMobile35 ? 'h-screen w-screen overflow-hidden p-0 m-0 pb-0' : 'pb-20 lg:pb-0 overflow-y-auto'}`}>
 
-        {(isVercelHostedApp() || serverInfo?.deployment === "vercel") &&
-          cameras.some((c) => c.type === "ip" || c.type === "onvif") && (
-          <div className="mx-2 md:mx-8 mt-2 md:mt-4 p-3 rounded-xl border border-amber-500/40 bg-amber-500/10 text-amber-100 text-[10px] sm:text-xs font-semibold leading-snug shrink-0 z-[110]">
-            <span className="font-black uppercase tracking-wide text-amber-300">Modalità cloud Vercel — </span>
-            {CLOUD_STREAM_MESSAGE} Per il live Tapo usa l&apos;indirizzo LAN del Raspberry/PC (porta 3088) indicato in Quick Connect.
-          </div>
-        )}
         
         {!isMobile35 && (
           <header className="glass m-0 md:m-4 lg:m-8 p-2.5 md:p-6 rounded-none md:rounded-[32px] lg:rounded-[40px] flex flex-col md:flex-row items-center justify-between gap-2 md:gap-4 sticky top-0 z-[100] border-b md:border border-white/5 bg-slate-950/90 md:bg-transparent backdrop-blur-xl md:backdrop-blur-none shadow-2xl shrink-0">
