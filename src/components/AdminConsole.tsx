@@ -35,6 +35,7 @@ import {
   Radio
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+import { AdminUserCamerasWorkspace, type AdminManagedUser } from "./AdminUserCamerasWorkspace";
 
 interface AdminConsoleProps {
   onLogout: () => void;
@@ -128,6 +129,7 @@ export const AdminConsole: React.FC<AdminConsoleProps> = ({ onLogout, onBackToAp
     broadcastMessage: ""
   });
   const [broadcastSent, setBroadcastSent] = useState(false);
+  const [managedUser, setManagedUser] = useState<AdminManagedUser | null>(null);
 
   const adminToken = sessionStorage.getItem("vigilai_admin_token") || "vigilai-admin-Max1974-123Max456";
 
@@ -265,6 +267,16 @@ export const AdminConsole: React.FC<AdminConsoleProps> = ({ onLogout, onBackToAp
     }
     return true;
   });
+
+  if (managedUser) {
+    return (
+      <AdminUserCamerasWorkspace
+        user={managedUser}
+        adminToken={adminToken}
+        onBack={() => setManagedUser(null)}
+      />
+    );
+  }
 
   return (
     <div className="min-h-screen bg-[#050810] text-slate-100 flex flex-col font-sans select-none">
@@ -605,6 +617,20 @@ export const AdminConsole: React.FC<AdminConsoleProps> = ({ onLogout, onBackToAp
                           </td>
                           <td className="py-3.5 px-4 text-right">
                             <div className="flex items-center justify-end gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setManagedUser({
+                                    id: tenant.id,
+                                    email: tenant.email,
+                                    companyName: tenant.companyName,
+                                  })
+                                }
+                                className="p-1.5 rounded-lg bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 hover:text-blue-300 transition-all"
+                                title="Scheda telecamere utente"
+                              >
+                                <Camera size={14} />
+                              </button>
                               {/* Edit plan modal trigger */}
                               <button
                                 type="button"
