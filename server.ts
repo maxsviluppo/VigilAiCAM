@@ -1634,19 +1634,18 @@ async function startServer() {
   // --- IP CAMERA STREAM MANAGER ---
   const { spawn } = await import("child_process");
   const FFMPEG_BIN = process.platform === "win32" ? (ffmpeg || "ffmpeg.exe") : "ffmpeg";
-  const FRAME_STALE_MS = 2500;
-  const FRAME_CONTENT_STALE_MS = 1800;
-  const activeStreams = new Map<string, {
+  
+  interface ActiveCameraStream {
     latestFrame: Buffer | null;
     latestFrameAt: number;
-    lastUniqueFrameAt: number;
-    lastFrameFingerprint: string;
-    duplicateFrameStreak: number;
+    frameCount: number;
     lastAccessed: number;
     startTime: number;
     process: any;
-  }>();
-  const oneShotLocks = new Map<string, Promise<Buffer | null>>();
+    listeners: Set<(frame: Buffer) => void>;
+  }
+
+  const activeStreams = new Map<string, ActiveCameraStream>();
 
   function canonicalRtspKey(raw: string): string {
     const trimmed = (raw || "").trim();
@@ -1675,145 +1674,36 @@ async function startServer() {
     }
   }
 
-  function frameFingerprint(buf: Buffer): string {
-    return createHash("sha1").update(buf).digest("hex");
-  }
-
-  function noteIncomingFrame(streamData: {
-    latestFrame: Buffer | null;
-    latestFrameAt: number;
-    lastUniqueFrameAt: number;
-    lastFrameFingerprint: string;
-    duplicateFrameStreak: number;
-  }, frame: Buffer) {
-    streamData.latestFrame = frame;
-    streamData.latestFrameAt = Date.now();
-    const fp = frameFingerprint(frame);
-    if (fp === streamData.lastFrameFingerprint) {
-      streamData.duplicateFrameStreak += 1;
-    } else {
-      streamData.lastFrameFingerprint = fp;
-      streamData.lastUniqueFrameAt = Date.now();
-      streamData.duplicateFrameStreak = 0;
-    }
-  }
-
   function isSubstreamRtsp(rtspKey: string): boolean {
     return /\/stream2(\?|$)/i.test(rtspKey) || rtspKey.toLowerCase().includes("/stream2");
   }
 
-  function contentStaleMsForKey(rtspKey: string): number {
-    return isSubstreamRtsp(rtspKey) ? 2800 : FRAME_CONTENT_STALE_MS;
-  }
-
   function ffmpegOutputFilter(rtspKey: string): string {
+    // Tapo C220 stream2 e stream1 nativamente a 15fps
     if (isSubstreamRtsp(rtspKey)) {
-      return "fps=18";
+      return "fps=15";
     }
-    return "fps=20,scale=960:540";
-  }
-
-  function isStreamContentStale(
-    stream: {
-      lastUniqueFrameAt: number;
-      duplicateFrameStreak: number;
-    },
-    rtspKey?: string
-  ): boolean {
-    const uniqueAge = stream.lastUniqueFrameAt
-      ? Date.now() - stream.lastUniqueFrameAt
-      : Infinity;
-    const staleMs = rtspKey ? contentStaleMsForKey(rtspKey) : FRAME_CONTENT_STALE_MS;
-    const dupLimit = rtspKey && isSubstreamRtsp(rtspKey) ? 60 : 36;
-    return uniqueAge > staleMs || stream.duplicateFrameStreak > dupLimit;
+    // stream1 2K scalato a 1280x720 15fps per massima fluidita e qualita HD
+    return "fps=15,scale=1280:720";
   }
 
   function sendJpegSnapshot(
     res: express.Response,
     frame: Buffer,
-    meta?: { uniqueAgeMs?: number; captureMode?: string }
+    meta?: { ageMs?: number; captureMode?: string }
   ) {
     res.setHeader("Content-Type", "image/jpeg");
+    res.setHeader("Content-Length", frame.length);
     res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
     res.setHeader("Pragma", "no-cache");
     res.setHeader("Expires", "0");
-    res.setHeader("X-Frame-Fp", frameFingerprint(frame).slice(0, 12));
-    if (meta?.uniqueAgeMs !== undefined) {
-      res.setHeader("X-Frame-Unique-Age-Ms", String(Math.max(0, meta.uniqueAgeMs)));
+    if (meta?.ageMs !== undefined) {
+      res.setHeader("X-Frame-Age-Ms", String(Math.max(0, meta.ageMs)));
     }
     if (meta?.captureMode) {
       res.setHeader("X-Capture-Mode", meta.captureMode);
     }
     res.end(frame);
-  }
-
-  async function captureOneSnapshotRtsp(rtspUrl: string): Promise<Buffer | null> {
-    const key = canonicalRtspKey(rtspUrl);
-    const pending = oneShotLocks.get(key);
-    if (pending) return pending;
-
-    const job = new Promise<Buffer | null>((resolve) => {
-      const args = [
-        "-hide_banner",
-        "-loglevel",
-        "error",
-        "-rtsp_transport",
-        "tcp",
-        "-timeout",
-        "8000000",
-        "-fflags",
-        "+genpts+discardcorrupt",
-        "-i",
-        key,
-        "-an",
-        "-frames:v",
-        "1",
-        "-f",
-        "mjpeg",
-        "pipe:1",
-      ];
-      const ff = spawn(FFMPEG_BIN, args);
-      const chunks: Buffer[] = [];
-      let stderr = "";
-      const timer = setTimeout(() => {
-        try {
-          ff.kill("SIGKILL");
-        } catch {
-          /* ignore */
-        }
-        resolve(null);
-      }, 12000);
-
-      ff.stdout.on("data", (chunk: Buffer) => chunks.push(chunk));
-      ff.stderr.on("data", (chunk: Buffer) => {
-        stderr += chunk.toString();
-      });
-      ff.on("close", (code) => {
-        clearTimeout(timer);
-        if (code !== 0 || chunks.length === 0) {
-          console.warn(`[Camera OneShot] Failed (${code}): ${stderr.slice(0, 220)}`);
-          resolve(null);
-          return;
-        }
-        const full = Buffer.concat(chunks);
-        const start = full.indexOf(SOI);
-        const end = start === -1 ? -1 : full.indexOf(EOI, start + 2);
-        if (start === -1 || end === -1) {
-          resolve(full.length > 128 ? full : null);
-          return;
-        }
-        resolve(full.slice(start, end + 2));
-      });
-      ff.on("error", () => {
-        clearTimeout(timer);
-        resolve(null);
-      });
-    }).finally(() => {
-      oneShotLocks.delete(key);
-    });
-
-    oneShotLocks.set(key, job);
-    return job;
   }
 
   function stopStream(rtspUrl: string, reason?: string) {
@@ -1822,7 +1712,9 @@ async function startServer() {
     if (!stream) return;
     if (reason) console.log(`[Camera Manager] Stopping stream (${reason}): ${key.split('@')[1] || key}`);
     try {
-      if (stream.process && !stream.process.killed) stream.process.kill('SIGTERM');
+      if (stream.process && !stream.process.killed) {
+        stream.process.kill('SIGTERM');
+      }
     } catch {
       /* ignore */
     }
@@ -1837,18 +1729,15 @@ async function startServer() {
     const existing = activeStreams.get(key);
     if (existing?.process && !existing.process.killed) {
       existing.lastAccessed = Date.now();
-      if (!isStreamContentStale(existing, key)) return;
-      stopStream(key, "duplicate content");
+      return;
     }
 
-    console.log(`[Camera Manager] Starting FFmpeg for: ${key.split('@')[1] || key}`);
+    console.log(`[Camera Manager] Avvio FFmpeg continuo per: ${key.split('@')[1] || key}`);
     const args = [
-      '-loglevel', 'error',
+      '-loglevel', 'warning',
       '-rtsp_transport', 'tcp',
       '-timeout', '10000000',
-      '-probesize', '500000',
-      '-analyzeduration', '500000',
-      '-fflags', '+genpts+discardcorrupt+nobuffer',
+      '-fflags', '+nobuffer+flush_packets+genpts',
       '-flags', 'low_delay',
       '-i', key,
       '-an',
@@ -1861,35 +1750,30 @@ async function startServer() {
     const ff = spawn(FFMPEG_BIN, args);
     let buffer = Buffer.alloc(0);
 
-    const streamData = {
-      latestFrame: null as Buffer | null,
+    const streamData: ActiveCameraStream = {
+      latestFrame: null,
       latestFrameAt: 0,
-      lastUniqueFrameAt: 0,
-      lastFrameFingerprint: "",
-      duplicateFrameStreak: 0,
+      frameCount: 0,
       lastAccessed: Date.now(),
       startTime: Date.now(),
       process: ff,
+      listeners: new Set(),
     };
     activeStreams.set(key, streamData);
 
-    const fs = await import("fs");
-    const logPath = path.join(__dirname, "ffmpeg_error.log");
-    
     ff.stderr.on('data', (data) => {
       const msg = data.toString();
-      fs.appendFile(logPath, `[${new Date().toISOString()}] [${key.split('@')[1]}] ${msg}`, (err) => {
-        if (err) console.error(`[Camera Manager] Error writing to ffmpeg_error.log: ${err.message}`);
-      });
+      // Ignora SEI metadata non standard di TP-Link per prevenire spam e lag I/O
+      if (msg.includes('SEI type') || msg.includes('deprecated pixel format')) return;
       if (msg.includes('error') || msg.includes('failed') || msg.includes('Invalid')) {
-        console.error(`[FFmpeg Error] ${msg.trim()}`);
+        console.error(`[FFmpeg Error ${key.split('@')[1] || key}]:`, msg.trim());
       }
     });
 
     ff.on('error', (err: any) => {
       console.error(`[FFmpeg Spawn Error] Impossibile avviare il processo per la camera:`, err.message);
       if (err.code === 'ENOENT') {
-        console.error(`CRITICAL: ffmpeg non è installato o non è nel PATH del Raspberry Pi! Installa con: sudo apt install ffmpeg`);
+        console.error(`CRITICAL: ffmpeg non e installato o non e nel PATH!`);
       }
     });
 
@@ -1901,17 +1785,23 @@ async function startServer() {
         const end = buffer.indexOf(EOI, start + 2);
         if (end === -1) break;
         const frame = buffer.slice(start, end + 2);
-        noteIncomingFrame(streamData, frame);
         buffer = buffer.slice(end + 2);
+
+        streamData.latestFrame = frame;
+        streamData.latestFrameAt = Date.now();
+        streamData.frameCount++;
+
+        if (streamData.listeners.size > 0) {
+          for (const listener of streamData.listeners) {
+            try {
+              listener(frame);
+            } catch {
+              /* ignore */
+            }
+          }
+        }
       }
       if (buffer.length > 5 * 1024 * 1024) buffer = Buffer.alloc(0);
-    });
-
-    ff.on('error', (err) => {
-      console.error(`[Camera Manager] Failed to start FFmpeg: ${err.message}`);
-      fs.appendFile(logPath, `[${new Date().toISOString()}] [ERROR] ${err.message}\n`, (writeErr) => {
-        if (writeErr) console.error(`[Camera Manager] Error writing to ffmpeg_error.log: ${writeErr.message}`);
-      });
     });
 
     ff.on('close', (code: number) => {
@@ -1919,106 +1809,83 @@ async function startServer() {
       const stillRegistered = activeStreams.get(key)?.process === ff;
       if (stillRegistered) {
         activeStreams.delete(key);
-        setTimeout(() => {
-          if (!activeStreams.has(key)) startStream(key);
-        }, 2000);
+        if (Date.now() - streamData.lastAccessed < 45000) {
+          setTimeout(() => {
+            if (!activeStreams.has(key)) {
+              console.log(`[Camera Manager] Riconnessione automatica per ${key.split('@')[1] || key}...`);
+              startStream(key);
+            }
+          }, 2000);
+        }
       }
     });
   }
 
-  function ensureFreshFrame(rtspUrl: string, forceRestart = false): boolean {
-    const key = canonicalRtspKey(rtspUrl);
-    const stream = activeStreams.get(key);
-    if (!stream) return false;
-    if (forceRestart || isStreamContentStale(stream, key)) {
-      stopStream(key, forceRestart ? "refresh" : "stale content");
-      startStream(key);
-      return false;
-    }
-    return !!stream.latestFrame?.length;
-  }
-
+  // Watchdog: riavvia FFmpeg SOLO se il flusso era attivo ma non riceve frame da oltre 15 secondi
   setInterval(() => {
+    const now = Date.now();
     for (const [key, stream] of activeStreams.entries()) {
-      if (isStreamContentStale(stream, key)) {
-        console.warn(`[Camera Manager] Watchdog restart (contenuto bloccato): ${key.split("@")[1] || key}`);
-        stopStream(key, "watchdog");
+      if (stream.latestFrameAt > 0 && now - stream.latestFrameAt > 15000) {
+        console.warn(`[Camera Manager] Watchdog restart (nessun frame da 15s): ${key.split("@")[1] || key}`);
+        stopStream(key, "watchdog-timeout");
         startStream(key);
       }
     }
-  }, 8000);
+  }, 5000);
 
-  // Auto-cleanup idle streams every 30s
+  // Auto-cleanup idle streams: spegne i processi se nessun client richiede frame da piu di 90s
   setInterval(() => {
     const now = Date.now();
     for (const [url, stream] of activeStreams.entries()) {
-      if (now - stream.lastAccessed > 60000) { // 60s idle timeout
-        stopStream(url, 'idle');
+      if (stream.listeners.size === 0 && now - stream.lastAccessed > 90000) {
+        stopStream(url, 'idle-timeout');
       }
     }
   }, 30000);
 
+  // Snapshot API ultraveloce: restituisce il frame piu recente direttamente dalla memoria (< 1ms)
   app.get("/api/snapshot", async (req, res) => {
     const rtspRaw = req.query.rtsp as string;
-    const clientIp = req.ip || req.socket.remoteAddress;
-    const forceRefresh = req.query.fresh === "1" || req.query.fresh === "true";
-    const oneShot = req.query.oneshot === "1" || req.query.oneshot === "true";
-
     if (!rtspRaw) return res.status(400).json({ error: "Missing rtsp parameter" });
     const rtsp = canonicalRtspKey(rtspRaw);
 
-    const needsHardCapture = oneShot || forceRefresh;
+    let stream = activeStreams.get(rtsp);
+    if (!stream || !stream.process || stream.process.killed) {
+      startStream(rtsp);
+      stream = activeStreams.get(rtsp);
+    }
 
-    if (needsHardCapture) {
-      stopStream(rtsp, oneShot ? "oneshot" : "fresh");
-      const hardFrame = await captureOneSnapshotRtsp(rtsp);
-      if (hardFrame?.length) {
-        sendJpegSnapshot(res, hardFrame, {
-          uniqueAgeMs: 0,
-          captureMode: "oneshot",
+    if (stream) {
+      stream.lastAccessed = Date.now();
+    }
+
+    // Se il frame e gia disponibile in memoria, servilo istantaneamente
+    if (stream?.latestFrame && stream.latestFrame.length > 0) {
+      sendJpegSnapshot(res, stream.latestFrame, {
+        ageMs: Date.now() - stream.latestFrameAt,
+        captureMode: "stream",
+      });
+      return;
+    }
+
+    // Se la camera sta avviando la connessione RTSP, attendi fino a 4000ms l'arrivo del primo frame
+    const startWait = Date.now();
+    while (Date.now() - startWait < 4000) {
+      await new Promise((r) => setTimeout(r, 60));
+      const current = activeStreams.get(rtsp);
+      if (current?.latestFrame && current.latestFrame.length > 0) {
+        sendJpegSnapshot(res, current.latestFrame, {
+          ageMs: Date.now() - current.latestFrameAt,
+          captureMode: "stream-init",
         });
-        startStream(rtsp);
         return;
       }
-      return res.status(504).json({ error: "OneShot capture failed" });
     }
 
-    if (!activeStreams.has(rtsp)) {
-      console.log(`[API] Snapshot init from ${clientIp} for ${rtsp.split("@")[1] || rtsp}`);
-      startStream(rtsp);
-      return res.status(503).json({ error: "Initializing stream..." });
-    }
-
-    const stream = activeStreams.get(rtsp)!;
-    stream.lastAccessed = Date.now();
-
-    if (isStreamContentStale(stream, rtsp)) {
-      stopStream(rtsp, "stale before snapshot");
-      const hardFrame = await captureOneSnapshotRtsp(rtsp);
-      if (hardFrame?.length) {
-        sendJpegSnapshot(res, hardFrame, { uniqueAgeMs: 0, captureMode: "oneshot-recover" });
-        startStream(rtsp);
-        return;
-      }
-      startStream(rtsp);
-      return res.status(503).json({ error: "Recovering stream..." });
-    }
-
-    if (!stream.latestFrame) {
-      if (Date.now() - stream.startTime > 20000) {
-        console.warn(`[API] Stream timeout for ${rtsp.split("@")[1] || rtsp}`);
-        stopStream(rtsp, "timeout");
-        return res.status(504).json({ error: "Stream Timeout" });
-      }
-      return res.status(503).json({ error: "Waiting for first frame..." });
-    }
-
-    sendJpegSnapshot(res, stream.latestFrame, {
-      uniqueAgeMs: stream.lastUniqueFrameAt ? Date.now() - stream.lastUniqueFrameAt : 0,
-      captureMode: "stream",
-    });
+    return res.status(503).json({ error: "Waiting for first camera frame..." });
   });
 
+  // MJPEG Streaming API: push in tempo reale
   app.get("/api/mjpeg", async (req, res) => {
     const rtspRaw = req.query.rtsp as string;
     if (!rtspRaw) return res.status(400).end("Missing rtsp parameter");
@@ -2029,21 +1896,17 @@ async function startServer() {
       startStream(rtsp);
     }
 
-    const deadline = Date.now() + 25000;
+    const deadline = Date.now() + 10000;
     while (Date.now() < deadline) {
       if (req.socket.destroyed) return;
       const stream = activeStreams.get(rtsp);
-      if (stream?.latestFrame && stream.latestFrame.length > 0 && !isStreamContentStale(stream, rtsp)) break;
-      if (stream && isStreamContentStale(stream, rtsp)) {
-        stopStream(rtsp, "mjpeg stale");
-        startStream(rtsp);
-      }
-      await new Promise((resolve) => setTimeout(resolve, 250));
+      if (stream?.latestFrame && stream.latestFrame.length > 0) break;
+      await new Promise((resolve) => setTimeout(resolve, 80));
     }
 
     const initial = activeStreams.get(rtsp);
     if (!initial?.latestFrame?.length) {
-      return res.status(504).end("Stream timeout — camera non raggiungibile");
+      return res.status(504).end("Stream timeout - camera non raggiungibile");
     }
 
     res.writeHead(200, {
@@ -2054,16 +1917,11 @@ async function startServer() {
     });
 
     let closed = false;
-    const pushFrame = () => {
-      if (closed) return;
-      const stream = activeStreams.get(rtsp);
-      if (!stream) {
-        startStream(rtsp);
-        return;
-      }
+    const stream = activeStreams.get(rtsp)!;
+
+    const frameListener = (frame: Buffer) => {
+      if (closed || req.socket.destroyed) return;
       stream.lastAccessed = Date.now();
-      const frame = stream.latestFrame;
-      if (!frame || frame.length === 0) return;
       try {
         res.write(
           `--frame\r\nContent-Type: image/jpeg\r\nContent-Length: ${frame.length}\r\n\r\n`
@@ -2072,16 +1930,16 @@ async function startServer() {
         res.write("\r\n");
       } catch {
         closed = true;
+        stream.listeners.delete(frameListener);
       }
     };
 
-    const mjpegIntervalMs = isSubstreamRtsp(rtsp) ? 50 : 66;
-    pushFrame();
-    const interval = setInterval(pushFrame, mjpegIntervalMs);
+    stream.listeners.add(frameListener);
+    frameListener(initial.latestFrame);
 
     req.on("close", () => {
       closed = true;
-      clearInterval(interval);
+      stream.listeners.delete(frameListener);
     });
   });
 
@@ -2360,6 +2218,36 @@ async function startServer() {
       res.json({ success: true, tenants });
     } catch (err: any) {
       console.error("[SaaS Admin] Errore /api/admin/tenants:", err.message);
+      res.json({ success: false, error: err.message });
+    }
+  });
+
+  // GET/PUT telecamere utente (admin)
+  app.get("/api/admin/user/:userId/cameras", async (req, res) => {
+    if (!checkAdminToken(req, res)) return;
+    try {
+      const { listAdminUserCameras } = await import("./lib/adminUserCameras.ts");
+      const cameras = await listAdminUserCameras(req.params.userId);
+      res.json({ success: true, cameras });
+    } catch (err: any) {
+      console.error("[SaaS Admin] GET user cameras:", err.message);
+      res.json({ success: false, error: err.message });
+    }
+  });
+
+  app.put("/api/admin/user/:userId/cameras/:cameraId", async (req, res) => {
+    if (!checkAdminToken(req, res)) return;
+    const { userId, cameraId } = req.params;
+    if (!userId || !cameraId) {
+      return res.status(400).json({ success: false, error: "Parametri mancanti" });
+    }
+    try {
+      const { updateAdminUserCamera } = await import("./lib/adminUserCameras.ts");
+      const patch = req.body?.camera || req.body || {};
+      const camera = await updateAdminUserCamera(userId, cameraId, patch);
+      res.json({ success: true, camera });
+    } catch (err: any) {
+      console.error("[SaaS Admin] PUT user camera:", err.message);
       res.json({ success: false, error: err.message });
     }
   });

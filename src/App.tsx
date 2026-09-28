@@ -84,6 +84,7 @@ import { User } from "@supabase/supabase-js";
 import { GEMINI_API_KEY_MODAL_PLACEHOLDER, GEMINI_API_KEY_PLACEHOLDER, normalizeGeminiApiKey, pickPreferredGeminiApiKey, resolveVigilAiModel, VIGILAI_DEFAULT_AI_MODEL } from "./utils/geminiApiKey";
 import { AdminLogin } from "./components/AdminLogin";
 import { AdminConsole } from "./components/AdminConsole";
+import { AdminUserCamerasWorkspace, type AdminManagedUser } from "./components/AdminUserCamerasWorkspace";
 
 const LOGGED_IN_EMAIL_KEY = "vigilai_logged_in_email";
 
@@ -96,6 +97,15 @@ const extractAccountEmail = (authUser: User | null | undefined): string => {
     .find(Boolean);
   return identityEmail || "";
 };
+
+const CLOUD_STREAM_MESSAGE =
+  "Il live Tapo/IP funziona solo sul server VigilAI in LAN (Raspberry o PC, porta 3088). Su vigil-ai-cam.vercel.app c'è il pannello cloud, non lo stream RTSP.";
+
+function isVercelHostedApp(): boolean {
+  if (typeof window === "undefined") return false;
+  const host = window.location.hostname.toLowerCase();
+  return host.includes("vercel.app");
+}
 
 const formatScreenshotSrc = (raw?: string | null): string => {
   if (!raw) return "";
@@ -116,27 +126,18 @@ async function fetchFreshIpCameraBitmap(rtspUrl: string): Promise<ImageBitmap | 
   const trimmed = (rtspUrl || "").trim();
   if (!trimmed) return null;
 
-  for (let attempt = 0; attempt < 12; attempt++) {
-    const hardCapture = attempt < 8;
-    const query = hardCapture ? "&oneshot=1" : "&fresh=1";
-    try {
-      const response = await fetch(
-        `/api/snapshot?rtsp=${encodeURIComponent(trimmed)}${query}&t=${Date.now()}`,
-        { cache: "no-store" }
-      );
-      if (response.status === 503 || response.status === 504) {
-        await new Promise((r) => setTimeout(r, 650));
-        continue;
-      }
-      if (!response.ok) return null;
-      const blob = await response.blob();
-      if (!blob.size) continue;
-      return await createImageBitmap(blob);
-    } catch {
-      await new Promise((r) => setTimeout(r, 500));
-    }
+  try {
+    const response = await fetch(
+      `/api/snapshot?rtsp=${encodeURIComponent(trimmed)}&t=${Date.now()}`,
+      { cache: "no-store" }
+    );
+    if (!response.ok) return null;
+    const blob = await response.blob();
+    if (!blob || !blob.size) return null;
+    return await createImageBitmap(blob);
+  } catch {
+    return null;
   }
-  return null;
 }
 
 const AccountEmailLine = ({ email }: { email: string }) => (
@@ -216,211 +217,40 @@ const IPCameraPlayer = ({
   url: string;
   isAlertActive: boolean;
   isNightMode: boolean;
-  /** Stesso pattern della webcam interna: elemento video per preview + analisi */
   videoRefCallback?: (el: HTMLVideoElement | null) => void;
-  /** Solo telecamere in background (hidden): frame per fallback AI */
   imgRefCallback?: (el: HTMLImageElement | null) => void;
-  /** true = video fluido (canvas → captureStream); false = polling leggero in background */
   smoothLive?: boolean;
 }) => {
-  const [src, setSrc] = useState("");
+  const [streamSrc, setStreamSrc] = useState("");
   const [isReady, setIsReady] = useState(false);
   const [connectionError, setConnectionError] = useState<string | null>(null);
   const mountedRef = useRef(true);
-  const hasFrameRef = useRef(false);
-  const blobUrlRef = useRef<string | null>(null);
-  const waitSinceRef = useRef(Date.now());
-  const lastFpRef = useRef("");
-  const sameFpStreakRef = useRef(0);
-  const inFlightRef = useRef(false);
-  const paintCanvasRef = useRef<HTMLCanvasElement | null>(null);
-  const liveVideoRef = useRef<HTMLVideoElement | null>(null);
+  const imgRef = useRef<HTMLImageElement | null>(null);
 
   const trimmedUrl = (url || "").trim();
 
   useEffect(() => {
     mountedRef.current = true;
-    hasFrameRef.current = false;
-    waitSinceRef.current = Date.now();
-    lastFpRef.current = "";
-    sameFpStreakRef.current = 0;
     setIsReady(false);
     setConnectionError(null);
-    setSrc("");
 
     if (!trimmedUrl) {
       setConnectionError("IP/URL non configurato");
-      return () => {
-        mountedRef.current = false;
-      };
+      return;
     }
 
-    let timeoutId: ReturnType<typeof setTimeout>;
-    let watchdogId: ReturnType<typeof setInterval>;
-    let cancelled = false;
-    let pumpTimer: ReturnType<typeof setTimeout>;
-
-    const scheduleNext = (delayMs: number) => {
-      if (cancelled || !mountedRef.current || smoothLive) return;
-      timeoutId = setTimeout(fetchFramePolling, delayMs);
-    };
-
-    const fetchFramePolling = async () => {
-      if (!mountedRef.current || inFlightRef.current) {
-        scheduleNext(1200);
-        return;
-      }
-      inFlightRef.current = true;
-      const forceOneShot = sameFpStreakRef.current >= 6;
-      const query = forceOneShot ? "&oneshot=1" : "";
-
-      try {
-        const response = await fetch(
-          `/api/snapshot?rtsp=${encodeURIComponent(trimmedUrl)}${query}&t=${Date.now()}`,
-          { cache: "no-store" }
-        );
-        if (!mountedRef.current) return;
-
-        if (response.ok) {
-          const fp = response.headers.get("X-Frame-Fp") || "";
-          if (fp && fp === lastFpRef.current) sameFpStreakRef.current += 1;
-          else if (fp) {
-            sameFpStreakRef.current = 0;
-            lastFpRef.current = fp;
-            waitSinceRef.current = Date.now();
-          }
-
-          const blob = await response.blob();
-          const objectUrl = URL.createObjectURL(blob);
-          const img = new Image();
-          img.onload = () => {
-            if (!mountedRef.current) {
-              URL.revokeObjectURL(objectUrl);
-              return;
-            }
-            if (blobUrlRef.current) URL.revokeObjectURL(blobUrlRef.current);
-            blobUrlRef.current = objectUrl;
-            setSrc(objectUrl);
-            hasFrameRef.current = true;
-            setIsReady(true);
-            setConnectionError(null);
-          };
-          img.onerror = () => URL.revokeObjectURL(objectUrl);
-          img.src = objectUrl;
-          scheduleNext(forceOneShot ? 1800 : 1200);
-          return;
-        }
-        scheduleNext(1500);
-      } catch {
-        scheduleNext(2000);
-      } finally {
-        inFlightRef.current = false;
-      }
-    };
-
-    const paintFrameToCanvas = async () => {
-      if (cancelled || !mountedRef.current || inFlightRef.current) return;
-      inFlightRef.current = true;
-      try {
-        const response = await fetch(
-          `/api/snapshot?rtsp=${encodeURIComponent(trimmedUrl)}&t=${Date.now()}`,
-          { cache: "no-store" }
-        );
-        if (!response.ok) return;
-
-        const fp = response.headers.get("X-Frame-Fp") || "";
-        const uniqueAge = Number(response.headers.get("X-Frame-Unique-Age-Ms") || "0");
-        if (fp && fp === lastFpRef.current) sameFpStreakRef.current += 1;
-        else if (fp) {
-          sameFpStreakRef.current = 0;
-          lastFpRef.current = fp;
-          waitSinceRef.current = Date.now();
-        }
-
-        if (uniqueAge > 12000) {
-          await fetch(
-            `/api/snapshot?rtsp=${encodeURIComponent(trimmedUrl)}&fresh=1&t=${Date.now()}`,
-            { cache: "no-store" }
-          );
-          sameFpStreakRef.current = 0;
-          return;
-        }
-
-        const blob = await response.blob();
-        const bitmap = await createImageBitmap(blob);
-        const canvas = paintCanvasRef.current;
-        const ctx = canvas?.getContext("2d");
-        if (canvas && ctx) {
-          if (canvas.width !== bitmap.width || canvas.height !== bitmap.height) {
-            canvas.width = bitmap.width;
-            canvas.height = bitmap.height;
-          }
-          ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
-          const video = liveVideoRef.current;
-          if (video && !video.srcObject) {
-            video.srcObject = canvas.captureStream(24);
-            video.play().catch(() => undefined);
-          }
-          hasFrameRef.current = true;
-          setIsReady(true);
-          setConnectionError(null);
-        }
-        bitmap.close();
-      } catch {
-        if (!hasFrameRef.current && Date.now() - waitSinceRef.current > 22000) {
-          setConnectionError("Errore di rete verso la camera IP");
-        }
-      } finally {
-        inFlightRef.current = false;
-        if (!cancelled && mountedRef.current) {
-          pumpTimer = setTimeout(paintFrameToCanvas, 110);
-        }
-      }
-    };
-
-    if (smoothLive) {
-      paintFrameToCanvas();
-      watchdogId = setInterval(async () => {
-        if (!mountedRef.current || !hasFrameRef.current) return;
-        try {
-          const response = await fetch(
-            `/api/snapshot?rtsp=${encodeURIComponent(trimmedUrl)}&t=${Date.now()}`,
-            { cache: "no-store" }
-          );
-          if (!response.ok) return;
-          const uniqueAge = Number(response.headers.get("X-Frame-Unique-Age-Ms") || "0");
-          if (uniqueAge > 12000) {
-            await fetch(
-              `/api/snapshot?rtsp=${encodeURIComponent(trimmedUrl)}&fresh=1&t=${Date.now()}`,
-              { cache: "no-store" }
-            );
-          }
-        } catch {
-          /* ignore */
-        }
-      }, 10000);
-    } else {
-      fetchFramePolling();
+    if (isVercelHostedApp()) {
+      setConnectionError(CLOUD_STREAM_MESSAGE);
+      return;
     }
+
+    // Connessione diretta allo stream MJPEG push a 15 fps nativi
+    setStreamSrc(`/api/mjpeg?rtsp=${encodeURIComponent(trimmedUrl)}&t=${Date.now()}`);
 
     return () => {
-      cancelled = true;
       mountedRef.current = false;
-      if (timeoutId) clearTimeout(timeoutId);
-      if (watchdogId) clearInterval(watchdogId);
-      if (pumpTimer) clearTimeout(pumpTimer);
-      if (blobUrlRef.current) {
-        URL.revokeObjectURL(blobUrlRef.current);
-        blobUrlRef.current = null;
-      }
-      const video = liveVideoRef.current;
-      if (video?.srcObject) {
-        const ms = video.srcObject as MediaStream;
-        ms.getTracks().forEach((t) => t.stop());
-        video.srcObject = null;
-      }
     };
-  }, [trimmedUrl, smoothLive]);
+  }, [trimmedUrl]);
 
   if (!url || !url.trim()) {
     return (
@@ -443,35 +273,38 @@ const IPCameraPlayer = ({
       {connectionError && !hasFrameRef.current && (
         <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-2 p-4 text-center bg-slate-950/90">
           <AlertTriangle size={24} className="text-red-500 animate-pulse" />
-          <p className="text-[10px] font-black text-red-500 uppercase tracking-widest">{connectionError}</p>
-          <p className="text-[8px] text-slate-500 font-bold uppercase mt-1">Riprovo in background...</p>
+          <p className="text-[10px] font-black text-red-500 uppercase tracking-widest max-w-md">{connectionError}</p>
+          {!isVercelHostedApp() && (
+            <p className="text-[8px] text-slate-500 font-bold uppercase mt-1">Riprovo in background...</p>
+          )}
         </div>
       )}
-      {smoothLive ? (
-        <>
-          <canvas ref={paintCanvasRef} className="hidden" width={960} height={540} />
-          <video
-            ref={(el) => {
-              liveVideoRef.current = el;
-              videoRefCallback?.(el);
-            }}
-            autoPlay
-            muted
-            playsInline
-            className={`w-full h-full object-cover ${isAlertActive ? 'opacity-40 saturate-150' : 'opacity-100'}`}
-            style={isNightMode ? { filter: 'grayscale(1) brightness(1.2) contrast(1.1) sepia(0.2) hue-rotate(180deg)' } : {}}
-          />
-        </>
-      ) : (
-        src ? (
-          <img
-            ref={imgRefCallback}
-            src={src}
-            alt=""
-            className="hidden"
-            aria-hidden
-          />
-        ) : null
+      {streamSrc && (
+        <img
+          ref={(el) => {
+            imgRef.current = el;
+            imgRefCallback?.(el);
+          }}
+          src={streamSrc}
+          alt="IP Camera Live"
+          className={`w-full h-full object-cover ${isAlertActive ? 'opacity-40 saturate-150' : 'opacity-100'}`}
+          style={isNightMode ? { filter: 'grayscale(1) brightness(1.2) contrast(1.1) sepia(0.2) hue-rotate(180deg)' } : {}}
+          onLoad={() => {
+            if (mountedRef.current) {
+              setIsReady(true);
+              setConnectionError(null);
+            }
+          }}
+          onError={() => {
+            if (mountedRef.current) {
+              setTimeout(() => {
+                if (mountedRef.current) {
+                  setStreamSrc(`/api/mjpeg?rtsp=${encodeURIComponent(trimmedUrl)}&t=${Date.now()}`);
+                }
+              }, 2000);
+            }
+          }}
+        />
       )}
     </div>
   );
@@ -969,7 +802,7 @@ export default function App() {
   const [isReordering, setIsReordering] = useState(false);
   const [saveStatus, setSaveStatus] = useState<{ type: 'success' | 'error', message: string } | null>(null);
   const [globalModal, setGlobalModal] = useState<{ type: 'error' | 'success' | 'info', title: string, message: string } | null>(null);
-  const [serverInfo, setServerInfo] = useState<{ ips: string[], port: number } | null>(null);
+  const [serverInfo, setServerInfo] = useState<{ ips: string[]; port: number; deployment?: string } | null>(null);
   const [activeQrTab, setActiveQrTab] = useState<'local' | 'tailscale'>('local');
   const [vpnStatus, setVpnStatus] = useState<{ installed: boolean, state: string, authUrl: string | null, ip: string | null } | null>(null);
   const [loadingVpn, setLoadingVpn] = useState(false);
@@ -993,6 +826,7 @@ export default function App() {
   const [adminUsers, setAdminUsers] = useState<any[]>([]);
   const [adminLoading, setAdminLoading] = useState(false);
   const [adminError, setAdminError] = useState('');
+  const [adminManagedUser, setAdminManagedUser] = useState<AdminManagedUser | null>(null);
   const [adminConfirm, setAdminConfirm] = useState<{
     type: 'block' | 'unblock' | 'delete';
     id: string;
@@ -5005,6 +4839,14 @@ export default function App() {
 
       {/* Main Content Area */}
       <main className={`flex-1 flex flex-col min-w-0 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 ${isMobile35 ? 'h-screen w-screen overflow-hidden p-0 m-0 pb-0' : 'pb-20 lg:pb-0 overflow-y-auto'}`}>
+
+        {(isVercelHostedApp() || serverInfo?.deployment === "vercel") &&
+          cameras.some((c) => c.type === "ip" || c.type === "onvif") && (
+          <div className="mx-2 md:mx-8 mt-2 md:mt-4 p-3 rounded-xl border border-amber-500/40 bg-amber-500/10 text-amber-100 text-[10px] sm:text-xs font-semibold leading-snug shrink-0 z-[110]">
+            <span className="font-black uppercase tracking-wide text-amber-300">Modalità cloud Vercel — </span>
+            {CLOUD_STREAM_MESSAGE} Per il live Tapo usa l&apos;indirizzo LAN del Raspberry/PC (porta 3088) indicato in Quick Connect.
+          </div>
+        )}
         
         {!isMobile35 && (
           <header className="glass m-0 md:m-4 lg:m-8 p-2.5 md:p-6 rounded-none md:rounded-[32px] lg:rounded-[40px] flex flex-col md:flex-row items-center justify-between gap-2 md:gap-4 sticky top-0 z-[100] border-b md:border border-white/5 bg-slate-950/90 md:bg-transparent backdrop-blur-xl md:backdrop-blur-none shadow-2xl shrink-0">
@@ -9997,7 +9839,17 @@ export default function App() {
       {/* ADMIN PANEL MODAL                                          */}
       {/* ═══════════════════════════════════════════════════════════ */}
       <AnimatePresence>
-        {showAdminPanel && (
+        {adminManagedUser && (
+          <AdminUserCamerasWorkspace
+            user={adminManagedUser}
+            adminToken="vigilai-admin-Max1974-123Max456"
+            onBack={() => setAdminManagedUser(null)}
+          />
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {showAdminPanel && !adminManagedUser && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -10133,6 +9985,19 @@ export default function App() {
 
                             {/* Actions */}
                             <div className="flex items-center gap-2 shrink-0">
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setAdminManagedUser({
+                                    id: u.id,
+                                    email: u.email || '',
+                                  })
+                                }
+                                className="p-2 glass border-blue-500/20 text-blue-400 hover:bg-blue-500/10 rounded-xl transition-all"
+                                title="Telecamere e configurazione"
+                              >
+                                <Video size={14} />
+                              </button>
                               {/* Password field (hashed - show info) */}
                               <button
                                 type="button"
