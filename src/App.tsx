@@ -72,6 +72,7 @@ import {
   parseEnabledTriggers,
   persistLocalCameraSettings,
   prepareCameraNetworkFields,
+  resolveCameraStreamUrl,
   parseIpFromRtspUrl,
   buildOnvifRtspUrl,
   requiresStreamUrl,
@@ -109,6 +110,34 @@ const formatScreenshotSrc = (raw?: string | null): string => {
   // Se è una stringa base64 grezza senza schema
   return `data:image/jpeg;base64,${str}`;
 };
+
+/** Frame JPEG aggiornato dal backend (non dall'anteprima MJPEG che può restare ferma). */
+async function fetchFreshIpCameraBitmap(rtspUrl: string): Promise<ImageBitmap | null> {
+  const trimmed = (rtspUrl || "").trim();
+  if (!trimmed) return null;
+
+  for (let attempt = 0; attempt < 12; attempt++) {
+    const hardCapture = attempt < 8;
+    const query = hardCapture ? "&oneshot=1" : "&fresh=1";
+    try {
+      const response = await fetch(
+        `/api/snapshot?rtsp=${encodeURIComponent(trimmed)}${query}&t=${Date.now()}`,
+        { cache: "no-store" }
+      );
+      if (response.status === 503 || response.status === 504) {
+        await new Promise((r) => setTimeout(r, 650));
+        continue;
+      }
+      if (!response.ok) return null;
+      const blob = await response.blob();
+      if (!blob.size) continue;
+      return await createImageBitmap(blob);
+    } catch {
+      await new Promise((r) => setTimeout(r, 500));
+    }
+  }
+  return null;
+}
 
 const AccountEmailLine = ({ email }: { email: string }) => (
   <span className="text-[11px] sm:text-xs text-blue-400 font-semibold normal-case tracking-normal truncate max-w-[180px] sm:max-w-[260px] lg:max-w-[360px] mt-0.5 drop-shadow-[0_0_8px_rgba(96,165,250,0.45)]">
@@ -176,11 +205,23 @@ const TailscaleIcon = ({ size = 16, className = "" }: { size?: number; className
   </svg>
 );
 
-const IPCameraPlayer = ({ url, isAlertActive, isNightMode, imgRefCallback }: { 
-  url: string; 
-  isAlertActive: boolean; 
+const IPCameraPlayer = ({
+  url,
+  isAlertActive,
+  isNightMode,
+  videoRefCallback,
+  imgRefCallback,
+  smoothLive = true,
+}: {
+  url: string;
+  isAlertActive: boolean;
   isNightMode: boolean;
+  /** Stesso pattern della webcam interna: elemento video per preview + analisi */
+  videoRefCallback?: (el: HTMLVideoElement | null) => void;
+  /** Solo telecamere in background (hidden): frame per fallback AI */
   imgRefCallback?: (el: HTMLImageElement | null) => void;
+  /** true = video fluido (canvas → captureStream); false = polling leggero in background */
+  smoothLive?: boolean;
 }) => {
   const [src, setSrc] = useState("");
   const [isReady, setIsReady] = useState(false);
@@ -189,16 +230,25 @@ const IPCameraPlayer = ({ url, isAlertActive, isNightMode, imgRefCallback }: {
   const hasFrameRef = useRef(false);
   const blobUrlRef = useRef<string | null>(null);
   const waitSinceRef = useRef(Date.now());
+  const lastFpRef = useRef("");
+  const sameFpStreakRef = useRef(0);
+  const inFlightRef = useRef(false);
+  const paintCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const liveVideoRef = useRef<HTMLVideoElement | null>(null);
+
+  const trimmedUrl = (url || "").trim();
 
   useEffect(() => {
     mountedRef.current = true;
     hasFrameRef.current = false;
     waitSinceRef.current = Date.now();
+    lastFpRef.current = "";
+    sameFpStreakRef.current = 0;
     setIsReady(false);
     setConnectionError(null);
     setSrc("");
 
-    if (!url || !url.trim()) {
+    if (!trimmedUrl) {
       setConnectionError("IP/URL non configurato");
       return () => {
         mountedRef.current = false;
@@ -206,18 +256,40 @@ const IPCameraPlayer = ({ url, isAlertActive, isNightMode, imgRefCallback }: {
     }
 
     let timeoutId: ReturnType<typeof setTimeout>;
+    let watchdogId: ReturnType<typeof setInterval>;
+    let cancelled = false;
+    let pumpTimer: ReturnType<typeof setTimeout>;
 
-    const fetchFrame = async () => {
-      if (!mountedRef.current) return;
+    const scheduleNext = (delayMs: number) => {
+      if (cancelled || !mountedRef.current || smoothLive) return;
+      timeoutId = setTimeout(fetchFramePolling, delayMs);
+    };
+
+    const fetchFramePolling = async () => {
+      if (!mountedRef.current || inFlightRef.current) {
+        scheduleNext(1200);
+        return;
+      }
+      inFlightRef.current = true;
+      const forceOneShot = sameFpStreakRef.current >= 6;
+      const query = forceOneShot ? "&oneshot=1" : "";
 
       try {
         const response = await fetch(
-          `/api/snapshot?rtsp=${encodeURIComponent(url.trim())}&t=${Date.now()}`
+          `/api/snapshot?rtsp=${encodeURIComponent(trimmedUrl)}${query}&t=${Date.now()}`,
+          { cache: "no-store" }
         );
-
         if (!mountedRef.current) return;
 
         if (response.ok) {
+          const fp = response.headers.get("X-Frame-Fp") || "";
+          if (fp && fp === lastFpRef.current) sameFpStreakRef.current += 1;
+          else if (fp) {
+            sameFpStreakRef.current = 0;
+            lastFpRef.current = fp;
+            waitSinceRef.current = Date.now();
+          }
+
           const blob = await response.blob();
           const objectUrl = URL.createObjectURL(blob);
           const img = new Image();
@@ -230,56 +302,125 @@ const IPCameraPlayer = ({ url, isAlertActive, isNightMode, imgRefCallback }: {
             blobUrlRef.current = objectUrl;
             setSrc(objectUrl);
             hasFrameRef.current = true;
-            waitSinceRef.current = Date.now();
             setIsReady(true);
             setConnectionError(null);
           };
           img.onerror = () => URL.revokeObjectURL(objectUrl);
           img.src = objectUrl;
-          timeoutId = setTimeout(fetchFrame, 400);
+          scheduleNext(forceOneShot ? 1800 : 1200);
           return;
         }
-
-        if (response.status === 503) {
-          if (!hasFrameRef.current && Date.now() - waitSinceRef.current > 25000) {
-            setConnectionError("Camera in avvio — verifica IP e credenziali Tapo");
-          }
-          timeoutId = setTimeout(fetchFrame, 900);
-          return;
-        }
-
-        if (response.status === 504) {
-          if (!hasFrameRef.current) {
-            setConnectionError("Camera non raggiungibile (Timeout 504) — verifica IP / Wi-Fi o cerca la camera in Impostazioni > Telecamere");
-          }
-          timeoutId = setTimeout(fetchFrame, 4000);
-          return;
-        }
-
-        if (!hasFrameRef.current) {
-          setConnectionError(`Errore stream (${response.status})`);
-        }
-        timeoutId = setTimeout(fetchFrame, 3000);
+        scheduleNext(1500);
       } catch {
-        if (!mountedRef.current) return;
-        if (!hasFrameRef.current && Date.now() - waitSinceRef.current > 20000) {
-          setConnectionError("Errore di rete verso la camera");
-        }
-        timeoutId = setTimeout(fetchFrame, 3000);
+        scheduleNext(2000);
+      } finally {
+        inFlightRef.current = false;
       }
     };
 
-    fetchFrame();
+    const paintFrameToCanvas = async () => {
+      if (cancelled || !mountedRef.current || inFlightRef.current) return;
+      inFlightRef.current = true;
+      try {
+        const response = await fetch(
+          `/api/snapshot?rtsp=${encodeURIComponent(trimmedUrl)}&t=${Date.now()}`,
+          { cache: "no-store" }
+        );
+        if (!response.ok) return;
+
+        const fp = response.headers.get("X-Frame-Fp") || "";
+        const uniqueAge = Number(response.headers.get("X-Frame-Unique-Age-Ms") || "0");
+        if (fp && fp === lastFpRef.current) sameFpStreakRef.current += 1;
+        else if (fp) {
+          sameFpStreakRef.current = 0;
+          lastFpRef.current = fp;
+          waitSinceRef.current = Date.now();
+        }
+
+        if (uniqueAge > 12000) {
+          await fetch(
+            `/api/snapshot?rtsp=${encodeURIComponent(trimmedUrl)}&fresh=1&t=${Date.now()}`,
+            { cache: "no-store" }
+          );
+          sameFpStreakRef.current = 0;
+          return;
+        }
+
+        const blob = await response.blob();
+        const bitmap = await createImageBitmap(blob);
+        const canvas = paintCanvasRef.current;
+        const ctx = canvas?.getContext("2d");
+        if (canvas && ctx) {
+          if (canvas.width !== bitmap.width || canvas.height !== bitmap.height) {
+            canvas.width = bitmap.width;
+            canvas.height = bitmap.height;
+          }
+          ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+          const video = liveVideoRef.current;
+          if (video && !video.srcObject) {
+            video.srcObject = canvas.captureStream(24);
+            video.play().catch(() => undefined);
+          }
+          hasFrameRef.current = true;
+          setIsReady(true);
+          setConnectionError(null);
+        }
+        bitmap.close();
+      } catch {
+        if (!hasFrameRef.current && Date.now() - waitSinceRef.current > 22000) {
+          setConnectionError("Errore di rete verso la camera IP");
+        }
+      } finally {
+        inFlightRef.current = false;
+        if (!cancelled && mountedRef.current) {
+          pumpTimer = setTimeout(paintFrameToCanvas, 110);
+        }
+      }
+    };
+
+    if (smoothLive) {
+      paintFrameToCanvas();
+      watchdogId = setInterval(async () => {
+        if (!mountedRef.current || !hasFrameRef.current) return;
+        try {
+          const response = await fetch(
+            `/api/snapshot?rtsp=${encodeURIComponent(trimmedUrl)}&t=${Date.now()}`,
+            { cache: "no-store" }
+          );
+          if (!response.ok) return;
+          const uniqueAge = Number(response.headers.get("X-Frame-Unique-Age-Ms") || "0");
+          if (uniqueAge > 12000) {
+            await fetch(
+              `/api/snapshot?rtsp=${encodeURIComponent(trimmedUrl)}&fresh=1&t=${Date.now()}`,
+              { cache: "no-store" }
+            );
+          }
+        } catch {
+          /* ignore */
+        }
+      }, 10000);
+    } else {
+      fetchFramePolling();
+    }
 
     return () => {
+      cancelled = true;
       mountedRef.current = false;
       if (timeoutId) clearTimeout(timeoutId);
+      if (watchdogId) clearInterval(watchdogId);
+      if (pumpTimer) clearTimeout(pumpTimer);
       if (blobUrlRef.current) {
         URL.revokeObjectURL(blobUrlRef.current);
         blobUrlRef.current = null;
       }
+      const video = liveVideoRef.current;
+      if (video?.srcObject) {
+        const ms = video.srcObject as MediaStream;
+        ms.getTracks().forEach((t) => t.stop());
+        video.srcObject = null;
+      }
     };
-  }, [url]);
+  }, [trimmedUrl, smoothLive]);
 
   if (!url || !url.trim()) {
     return (
@@ -306,14 +447,31 @@ const IPCameraPlayer = ({ url, isAlertActive, isNightMode, imgRefCallback }: {
           <p className="text-[8px] text-slate-500 font-bold uppercase mt-1">Riprovo in background...</p>
         </div>
       )}
-      {src && (
-        <img 
-          ref={imgRefCallback}
-          src={src}
-          alt=""
-          className={`w-full h-full object-cover ${isAlertActive ? 'opacity-40 saturate-150' : 'opacity-100'}`}
-          style={isNightMode ? { filter: 'grayscale(1) brightness(1.2) contrast(1.1) sepia(0.2) hue-rotate(180deg)' } : {}}
-        />
+      {smoothLive ? (
+        <>
+          <canvas ref={paintCanvasRef} className="hidden" width={960} height={540} />
+          <video
+            ref={(el) => {
+              liveVideoRef.current = el;
+              videoRefCallback?.(el);
+            }}
+            autoPlay
+            muted
+            playsInline
+            className={`w-full h-full object-cover ${isAlertActive ? 'opacity-40 saturate-150' : 'opacity-100'}`}
+            style={isNightMode ? { filter: 'grayscale(1) brightness(1.2) contrast(1.1) sepia(0.2) hue-rotate(180deg)' } : {}}
+          />
+        </>
+      ) : (
+        src ? (
+          <img
+            ref={imgRefCallback}
+            src={src}
+            alt=""
+            className="hidden"
+            aria-hidden
+          />
+        ) : null
       )}
     </div>
   );
@@ -522,8 +680,9 @@ const Auth = () => {
             window.dispatchEvent(new PopStateEvent('popstate'));
             return;
           }
-        } catch (adminErr) {
-          console.warn("Superadmin direct login fallback:", adminErr);
+          throw new Error(adminData.error || "Credenziali SuperAdmin non corrette");
+        } catch (adminErr: any) {
+          throw new Error(adminErr?.message || "Impossibile contattare il server admin");
         }
       }
 
@@ -828,7 +987,7 @@ export default function App() {
   // Admin Panel State
   const [showAdminLogin, setShowAdminLogin] = useState(false);
   const [showAdminPanel, setShowAdminPanel] = useState(false);
-  const [adminLoginUser, setAdminLoginUser] = useState('');
+  const [adminLoginUser, setAdminLoginUser] = useState('castromassimo@gmail.com');
   const [adminLoginPass, setAdminLoginPass] = useState('');
   const [adminLoginError, setAdminLoginError] = useState('');
   const [adminUsers, setAdminUsers] = useState<any[]>([]);
@@ -2941,10 +3100,19 @@ export default function App() {
       context.fillRect(0, 0, canvas.width, canvas.height);
 
       // Prova a catturare il frame dalla sorgente migliore disponibile
-      if ((cam.type === 'ip' || cam.type === 'onvif') && img && img.naturalWidth > 0) {
-        canvas.width = img.naturalWidth;
-        canvas.height = img.naturalHeight;
-        context.drawImage(img, 0, 0, canvas.width, canvas.height);
+      const rtspForCapture = resolveCameraStreamUrl(cam, getPrimaryNetworkIp());
+      if (cam.type === 'ip' || cam.type === 'onvif') {
+        const freshBitmap = await fetchFreshIpCameraBitmap(rtspForCapture);
+        if (freshBitmap) {
+          canvas.width = freshBitmap.width;
+          canvas.height = freshBitmap.height;
+          context.drawImage(freshBitmap, 0, 0, canvas.width, canvas.height);
+          freshBitmap.close();
+        } else if (img && img.naturalWidth > 0) {
+          canvas.width = img.naturalWidth;
+          canvas.height = img.naturalHeight;
+          context.drawImage(img, 0, 0, canvas.width, canvas.height);
+        }
       } else if (cam.type === 'webcam' || cam.type === 'browser') {
         // Prova a catturare dalla webcam (con fallback a frame nero se non pronta)
         const readyVideo = await captureFromWebcam(cam.id);
@@ -3135,14 +3303,34 @@ export default function App() {
       return { w, h };
     };
 
-    if ((cam.type === 'ip' || cam.type === 'onvif') && img) {
-      const { w, h } = computeTargetDims(img.naturalWidth || 1280, img.naturalHeight || 720);
-      canvas.width = w;
-      canvas.height = h;
-      if (canvas.width > 0 && canvas.height > 0) {
-        context.drawImage(img, 0, 0, canvas.width, canvas.height);
+    if (cam.type === 'ip' || cam.type === 'onvif') {
+      const rtspUrl = resolveCameraStreamUrl(cam, getPrimaryNetworkIp());
+      const freshBitmap = await fetchFreshIpCameraBitmap(rtspUrl);
+      if (freshBitmap) {
+        const { w, h } = computeTargetDims(freshBitmap.width, freshBitmap.height);
+        canvas.width = w;
+        canvas.height = h;
+        context.drawImage(freshBitmap, 0, 0, canvas.width, canvas.height);
+        freshBitmap.close();
         base64Image = canvas.toDataURL("image/jpeg", isImageOptimizationEnabled ? 0.55 : 0.6).split(",")[1];
         success = true;
+      } else {
+        const ipVideo = videoRefs.current.get(cam.id);
+        if (ipVideo && ipVideo.readyState >= 2 && ipVideo.videoWidth > 0) {
+          const { w, h } = computeTargetDims(ipVideo.videoWidth, ipVideo.videoHeight);
+          canvas.width = w;
+          canvas.height = h;
+          context.drawImage(ipVideo, 0, 0, canvas.width, canvas.height);
+          base64Image = canvas.toDataURL("image/jpeg", isImageOptimizationEnabled ? 0.55 : 0.6).split(",")[1];
+          success = true;
+        } else if (img && img.naturalWidth > 0) {
+          const { w, h } = computeTargetDims(img.naturalWidth, img.naturalHeight);
+          canvas.width = w;
+          canvas.height = h;
+          context.drawImage(img, 0, 0, canvas.width, canvas.height);
+          base64Image = canvas.toDataURL("image/jpeg", isImageOptimizationEnabled ? 0.55 : 0.6).split(",")[1];
+          success = true;
+        }
       }
     } else if (cam.type === 'webcam' || cam.type === 'browser') {
       const readyVideo = await captureFromWebcam(cam.id);
@@ -3815,7 +4003,7 @@ export default function App() {
       port: 554,
       username: "Testcamera",
       password: "12345678",
-      rtspPath: "/stream1",
+      rtspPath: "/stream2",
       status: "online",
       analysisInterval: 5,
       enabledTriggers: availableTriggers.slice(0, 3).map(t => t.id)
@@ -3862,25 +4050,66 @@ export default function App() {
     setShowCameraModal(true);
   };
 
+  const parseApiJson = async (res: Response): Promise<any> => {
+    const contentType = res.headers.get("content-type") || "";
+    if (!contentType.includes("application/json")) {
+      const text = (await res.text()).trim();
+      const snippet = text.slice(0, 80);
+      throw new Error(
+        snippet.startsWith("<") || snippet.toLowerCase().includes("the page")
+          ? "Questa funzione richiede il server VigilAI locale (Raspberry o PC con npm run dev), non la versione web su Vercel."
+          : snippet || `Risposta non JSON (${res.status})`
+      );
+    }
+    return res.json();
+  };
+
   const handleDiscoverCamerasInApp = async () => {
     setIsDiscoveringCams(true);
     try {
-      const res = await fetch('/api/cameras/discover');
-      const data = await res.json();
-      const list = data.devices || (data.cameras || []).map((ip: string) => ({ ip, port: 554, brand: 'Telecamera IP' }));
+      if (serverInfo?.deployment === "vercel") {
+        setGlobalModal({
+          type: "info",
+          title: "Scansione solo in locale",
+          message:
+            "Su Vercel non si può scansionare la LAN. Apri VigilAI dal Raspberry o da http://IP-del-PC:3088 (stessa rete delle Tapo), poi usa «Cerca sulla Rete».",
+        });
+        return;
+      }
+
+      const res = await fetch("/api/cameras/discover");
+      const data = await parseApiJson(res);
+
+      if (data.localOnly || data.deployment === "vercel") {
+        setGlobalModal({
+          type: "info",
+          title: "Scansione solo in locale",
+          message: data.error || "Usa il server VigilAI sulla rete locale (porta 3088).",
+        });
+        return;
+      }
+
+      if (!res.ok || data.success === false) {
+        throw new Error(data.error || `Errore server (${res.status})`);
+      }
+
+      const list =
+        data.devices ||
+        (data.cameras || []).map((ip: string) => ({ ip, port: 554, brand: "Telecamera IP" }));
       setDiscoveredCams(list);
       if (list.length === 0) {
         setGlobalModal({
-          type: 'info',
-          title: 'Nessuna camera rilevata',
-          message: 'Nessuna telecamera trovata con WS-Discovery o LAN. Verifica che siano accese e collegate allo switch.'
+          type: "info",
+          title: "Nessuna camera rilevata",
+          message:
+            "Nessuna telecamera trovata con WS-Discovery o LAN. Verifica che siano accese e collegate allo switch.",
         });
       }
     } catch (err: any) {
       setGlobalModal({
-        type: 'error',
-        title: 'Errore scansione',
-        message: err.message || 'Impossibile completare la scansione.'
+        type: "error",
+        title: "Errore scansione",
+        message: err.message || "Impossibile completare la scansione.",
       });
     } finally {
       setIsDiscoveringCams(false);
@@ -5242,10 +5471,10 @@ export default function App() {
                           {isMonitoring && activeCamStatuses[activeCamera.id] ? (
                             (activeCamera.type === 'ip' || activeCamera.type === 'onvif') ? (
                               <IPCameraPlayer 
-                                url={activeCamera.url || ''} 
+                                url={resolveCameraStreamUrl(activeCamera, getPrimaryNetworkIp())} 
                                 isAlertActive={alertingCameraIds.includes(activeCamera.id)} 
                                 isNightMode={isNightMode} 
-                                imgRefCallback={(el) => { if (el) imgRefs.current.set(activeCamera.id, el); else imgRefs.current.delete(activeCamera.id); }} 
+                                videoRefCallback={(el) => { if (el) videoRefs.current.set(activeCamera.id, el); else videoRefs.current.delete(activeCamera.id); }} 
                               />
                             ) : (
                               <video 
@@ -5275,10 +5504,11 @@ export default function App() {
                               bgCam.type === 'ip' || bgCam.type === 'onvif' ? (
                                 <IPCameraPlayer 
                                   key={bgCam.id}
-                                  url={bgCam.url || ''} 
+                                  url={resolveCameraStreamUrl(bgCam, getPrimaryNetworkIp())} 
                                   isAlertActive={alertingCameraIds.includes(bgCam.id)} 
-                                  isNightMode={isNightMode} 
-                                  imgRefCallback={(el) => { if (el) imgRefs.current.set(bgCam.id, el); else imgRefs.current.delete(bgCam.id); }} 
+                                  isNightMode={isNightMode}
+                                  smoothLive={false}
+                                  imgRefCallback={(el) => { if (el) imgRefs.current.set(bgCam.id, el); else imgRefs.current.delete(bgCam.id); }}
                                 />
                               ) : (
                                 <video 
@@ -5744,10 +5974,10 @@ export default function App() {
                     {isMonitoring && activeCamStatuses[cam.id] ? (
                       (cam.type === 'ip' || cam.type === 'onvif') ? (
                         <IPCameraPlayer 
-                          url={cam.url || ''} 
+                          url={resolveCameraStreamUrl(cam, getPrimaryNetworkIp())} 
                           isAlertActive={alertingCameraIds.includes(cam.id)} 
                           isNightMode={isNightMode} 
-                          imgRefCallback={(el) => { if (el) imgRefs.current.set(cam.id, el); else imgRefs.current.delete(cam.id); }} 
+                          videoRefCallback={(el) => { if (el) videoRefs.current.set(cam.id, el); else videoRefs.current.delete(cam.id); }} 
                         />
                       ) : (
                         <video 
@@ -9675,41 +9905,50 @@ export default function App() {
 
               {/* Form */}
               <form
-                onSubmit={(e) => {
+                onSubmit={async (e) => {
                   e.preventDefault();
-                  if (adminLoginUser === 'Max1974' && adminLoginPass === '123Max456') {
-                    setAdminLoginError('');
+                  setAdminLoginError('');
+                  setAdminLoading(true);
+                  try {
+                    const res = await fetch('/api/admin/auth/login', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                        email: adminLoginUser.trim(),
+                        password: adminLoginPass,
+                      }),
+                    });
+                    const data = await res.json().catch(() => ({}));
+                    if (!res.ok || !data.success || !data.token) {
+                      throw new Error(data.error || 'Credenziali non valide. Riprova.');
+                    }
+                    sessionStorage.setItem('vigilai_admin_token', data.token);
                     setShowAdminLogin(false);
                     setShowAdminPanel(true);
-                    setAdminLoginUser('');
                     setAdminLoginPass('');
-                    // Load users
-                    setAdminLoading(true);
                     setAdminError('');
-                    fetch('/api/admin/users', {
-                      headers: { 'x-admin-token': 'vigilai-admin-Max1974-123Max456' }
-                    })
-                      .then(async (r) => {
-                        const d = await r.json().catch(() => null);
-                        if (!d) throw new Error('Risposta non valida dal server');
-                        if (d.success) setAdminUsers(d.users || []);
-                        else setAdminError(d.error || `Errore server (${r.status})`);
-                      })
-                      .catch((err) => setAdminError(err?.message || 'Impossibile connettersi al server'))
-                      .finally(() => setAdminLoading(false));
-                  } else {
-                    setAdminLoginError('Credenziali non valide. Riprova.');
+                    const usersRes = await fetch('/api/admin/users', {
+                      headers: { 'x-admin-token': data.token },
+                    });
+                    const usersData = await usersRes.json().catch(() => null);
+                    if (!usersData) throw new Error('Risposta non valida dal server');
+                    if (usersData.success) setAdminUsers(usersData.users || []);
+                    else setAdminError(usersData.error || `Errore server (${usersRes.status})`);
+                  } catch (err: any) {
+                    setAdminLoginError(err?.message || 'Impossibile connettersi al server');
+                  } finally {
+                    setAdminLoading(false);
                   }
                 }}
                 className="space-y-4"
               >
                 <div className="space-y-1">
-                  <label className="text-[9px] font-black uppercase tracking-widest text-slate-500 px-1">Username</label>
+                  <label className="text-[9px] font-black uppercase tracking-widest text-slate-500 px-1">Email SuperAdmin</label>
                   <input
-                    type="text"
+                    type="email"
                     value={adminLoginUser}
                     onChange={(e) => setAdminLoginUser(e.target.value)}
-                    placeholder="Username"
+                    placeholder="nome@dominio.com"
                     autoComplete="off"
                     className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-amber-500/50 transition-all"
                   />
@@ -9742,9 +9981,10 @@ export default function App() {
                   </button>
                   <button
                     type="submit"
-                    className="flex-1 py-3 bg-amber-600 hover:bg-amber-500 rounded-xl text-[10px] font-black uppercase tracking-widest text-white shadow-lg shadow-amber-500/25 transition-all"
+                    disabled={adminLoading}
+                    className="flex-1 py-3 bg-amber-600 hover:bg-amber-500 rounded-xl text-[10px] font-black uppercase tracking-widest text-white shadow-lg shadow-amber-500/25 transition-all disabled:opacity-50"
                   >
-                    Accedi
+                    {adminLoading ? 'Verifica...' : 'Accedi'}
                   </button>
                 </div>
               </form>

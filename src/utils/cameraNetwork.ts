@@ -176,12 +176,28 @@ export function buildOnvifRtspUrl(cam: {
   password?: string;
   rtspPath?: string;
 }): string {
-  const user = cam.username || '';
-  const pass = cam.password || '';
+  const user = encodeURIComponent(cam.username || '');
+  const pass = encodeURIComponent(cam.password || '');
   const port = cam.port || 554;
   const path = cam.rtspPath || '/stream1';
   const normalizedPath = path.startsWith('/') ? path : `/${path}`;
   return `rtsp://${user}:${pass}@${cam.ip}:${port}${normalizedPath}`;
+}
+
+/** URL RTSP canonico per streaming (ricostruisce da IP/credenziali se tipo ONVIF/IP). */
+export function resolveCameraStreamUrl(
+  cam: {
+    ip?: string;
+    url?: string;
+    type?: string;
+    port?: number;
+    username?: string;
+    password?: string;
+    rtspPath?: string;
+  },
+  subnetHint?: string | null
+): string {
+  return prepareCameraNetworkFields(cam, subnetHint).url;
 }
 
 export function getDefaultCameraIpPrefix(subnetHint?: string | null): string {
