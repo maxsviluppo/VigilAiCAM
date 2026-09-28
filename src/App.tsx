@@ -225,12 +225,14 @@ const IPCameraPlayer = ({
   const [isReady, setIsReady] = useState(false);
   const [connectionError, setConnectionError] = useState<string | null>(null);
   const mountedRef = useRef(true);
+  const hasFrameRef = useRef(false);
   const imgRef = useRef<HTMLImageElement | null>(null);
 
   const trimmedUrl = (url || "").trim();
 
   useEffect(() => {
     mountedRef.current = true;
+    hasFrameRef.current = false;
     setIsReady(false);
     setConnectionError(null);
 
@@ -291,12 +293,14 @@ const IPCameraPlayer = ({
           style={isNightMode ? { filter: 'grayscale(1) brightness(1.2) contrast(1.1) sepia(0.2) hue-rotate(180deg)' } : {}}
           onLoad={() => {
             if (mountedRef.current) {
+              hasFrameRef.current = true;
               setIsReady(true);
               setConnectionError(null);
             }
           }}
           onError={() => {
             if (mountedRef.current) {
+              hasFrameRef.current = false;
               setTimeout(() => {
                 if (mountedRef.current) {
                   setStreamSrc(`/api/mjpeg?rtsp=${encodeURIComponent(trimmedUrl)}&t=${Date.now()}`);
